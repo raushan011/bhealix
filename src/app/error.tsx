@@ -1,0 +1,2 @@
+"use client";
+export default function ErrorPage({reset}:{reset:()=>void}){return <main className="grid min-h-screen place-items-center px-4 text-center"><div><h1 className="text-xl font-semibold">Something went wrong</h1><p className="mt-1 text-sm text-[#697572]">Check your connection and try again.</p><button onClick={reset} className="tap mt-5 rounded-xl bg-[#173f3a] px-5 text-sm font-semibold text-white">Try again</button></div></main>}

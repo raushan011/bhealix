@@ -1,0 +1,2 @@
+import Link from "next/link";import { Inbox } from "lucide-react";
+export function EmptyState({title,action,href}:{title:string;action?:string;href?:string}){return <div className="surface py-14 text-center"><Inbox className="mx-auto text-[#7e928d]"/><h3 className="mt-3 font-semibold">{title}</h3><p className="mt-1 text-sm text-[#697572]">New entries will appear here.</p>{action&&href&&<Link href={href} className="tap mt-5 inline-flex items-center rounded-xl bg-[#173f3a] px-4 text-sm font-semibold text-white">{action}</Link>}</div>}

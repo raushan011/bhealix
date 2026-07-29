@@ -1,0 +1,7 @@
+import { z } from "zod";
+import { connectDb } from "@/lib/db/mongoose";
+import { Assignment } from "@/models/CRM";
+import { fail,ok,pageParams } from "@/lib/api";
+const schema=z.object({doctor:z.string().regex(/^[a-f\d]{24}$/i),employee:z.string().regex(/^[a-f\d]{24}$/i),date:z.coerce.date(),scheduledTime:z.string().min(1),recurrence:z.enum(["None","Weekly","Monthly"]).default("None"),overrideReason:z.string().default("")});
+export async function GET(req:Request){try{await connectDb();const {limit,skip,page}=pageParams(req.url);const [items,total]=await Promise.all([Assignment.find().populate("doctor","name clinicName").populate("employee","name employeeId").sort({date:1}).skip(skip).limit(limit).lean(),Assignment.countDocuments()]);return ok({items,total,page})}catch(e){return fail(e)}}
+export async function POST(req:Request){try{await connectDb();const value=schema.parse(await req.json());const start=new Date(value.date);start.setHours(0,0,0,0);const end=new Date(start);end.setDate(end.getDate()+1);const conflict=await Assignment.findOne({doctor:value.doctor,date:{$gte:start,$lt:end},scheduledTime:value.scheduledTime,status:{$nin:["Cancelled"]}}).populate("employee","name").lean();if(conflict&&!value.overrideReason)return Response.json({error:"Doctor already assigned for this time slot",conflict},{status:409});if(conflict&&value.overrideReason.trim().length<5)return Response.json({error:"Override reason must be at least 5 characters"},{status:400});return ok(await Assignment.create({...value,status:"Scheduled"}),201)}catch(e){return fail(e)}}

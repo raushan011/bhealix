@@ -1,0 +1,1 @@
+export function CompactStat({label,value,tone}:{label:string;value:string;tone?:string}) { return <div className="min-w-0 border-r border-[#e2e7e4] px-4 first:pl-0 last:border-0 last:pr-0"><div className="truncate text-xs text-[#697572]">{label}</div><div className={`mt-1 text-2xl font-semibold ${tone??""}`}>{value}</div></div>; }
