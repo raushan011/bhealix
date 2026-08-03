@@ -28,7 +28,7 @@ export function PlanAssignment({ planId, currentAssignee, team }: {
       const json = await response.json() as { error?: string };
       if (!response.ok) throw new Error(json.error ?? "Could not assign this plan");
       const person = team.find(member => member._id === selected);
-      setResult({ tone: "success", text: `Assigned to ${person?.name ?? "the selected employee"}. Their day is now scheduled.` });
+      setResult({ tone: "success", text: `Assigned to ${person?.name ?? "the selected employee"}. It is on their phone now, under Plans.` });
       router.refresh();
     } catch (problem) {
       setResult({ tone: "error", text: problem instanceof Error ? problem.message : "Could not assign this plan" });
@@ -36,6 +36,7 @@ export function PlanAssignment({ planId, currentAssignee, team }: {
   }
 
   const changed = selected !== (currentAssignee?._id ?? "");
+  const label = !changed && currentAssignee ? "Resend" : currentAssignee ? "Reassign" : "Assign";
 
   return <Card className="p-5">
     <div className="flex items-center gap-2">
@@ -43,7 +44,8 @@ export function PlanAssignment({ planId, currentAssignee, team }: {
       <h2 className="text-[15px] font-semibold">Assignment</h2>
     </div>
     <p className="mt-1 text-sm text-[var(--muted)]">
-      {currentAssignee ? `Currently with ${currentAssignee.name}.` : "Not assigned yet."} Assigning creates each stop as a visit for that person.
+      {currentAssignee ? `Currently with ${currentAssignee.name}.` : "Not assigned yet."} Assigning creates each stop as a visit for that
+      person, and the plan appears on their phone straight away. Resend if their day ever looks empty.
     </p>
 
     <div className="mt-4 flex flex-col gap-2 sm:flex-row">
@@ -51,9 +53,7 @@ export function PlanAssignment({ planId, currentAssignee, team }: {
         <option value="">Choose an employee…</option>
         {team.map(person => <option key={person._id} value={person._id}>{person.name} ({person.employeeId}) · {person.role}</option>)}
       </select>
-      <Button onClick={assign} busy={saving} disabled={!selected || !changed}>
-        {currentAssignee ? "Reassign" : "Assign"}
-      </Button>
+      <Button onClick={assign} busy={saving} disabled={!selected}>{label}</Button>
     </div>
 
     {result && <div className="mt-3"><Notice tone={result.tone}>{result.text}</Notice></div>}

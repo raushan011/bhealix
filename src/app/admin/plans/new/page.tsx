@@ -7,6 +7,7 @@ import { ArrowLeft, CalendarDays, Check, Clock, ExternalLink, MapPin, Navigation
 import { Button, Card, Field, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
 import { DoctorPicker, callTimeOn, placeOf, type PickableDoctor } from "@/components/doctors/doctor-picker";
 import { fromExcelRow } from "@/lib/doctors/discovery";
+import { directionsUrl, routeUrl } from "@/lib/maps";
 import { WEEKDAYS, formatDuration, toDateInput, todayIso, toDisplayTime, weekdayOf } from "@/lib/time";
 
 type Stop = {
@@ -36,13 +37,6 @@ function Step({ n, title, hint, done }: { n: number; title: string; hint?: strin
       {hint && <p className="mt-0.5 text-sm text-[var(--muted)]">{hint}</p>}
     </div>
   </div>;
-}
-
-function mapsUrl(stops: Stop[]) {
-  const points = stops.map(s => s.doctor.location?.coordinates).filter((c): c is number[] => c?.length === 2).map(c => `${c[1]},${c[0]}`);
-  if (points.length < 2) return null;
-  const waypoints = points.slice(1, -1).slice(0, 9).join("|");
-  return `https://www.google.com/maps/dir/?api=1&origin=${points[0]}&destination=${points.at(-1)}${waypoints ? `&waypoints=${encodeURIComponent(waypoints)}` : ""}&travelmode=driving`;
 }
 
 function PlanBuilder() {
@@ -189,7 +183,7 @@ function PlanBuilder() {
     }
   }
 
-  const link = preview ? mapsUrl(preview.stops) : null;
+  const link = preview ? routeUrl(preview.stops.map(stop => stop.doctor)) : null;
 
   if (loadingExisting) return <Spinner label="Opening that plan…" />;
 
@@ -326,6 +320,12 @@ function PlanBuilder() {
                 <p className="text-xs font-bold text-[var(--brand)]">{toDisplayTime(stop.plannedStart)}</p>
                 <p className="text-[11px] text-[var(--muted)]">{stop.sequence === 1 ? "start" : `${stop.distanceFromPreviousKm} km`}</p>
               </div>
+              {directionsUrl(stop.doctor) ? (
+                <a href={directionsUrl(stop.doctor)!} target="_blank" rel="noreferrer" aria-label={`Open ${stop.doctor.name} in Google Maps`}
+                  className="tap grid shrink-0 place-items-center rounded-[10px] text-[var(--brand)] hover:bg-[var(--brand-soft)]"><Navigation size={15} /></a>
+              ) : (
+                <span title="No location recorded" className="grid size-11 shrink-0 place-items-center text-[var(--line-2)]"><Navigation size={15} /></span>
+              )}
             </li>
           ))}
         </ol>

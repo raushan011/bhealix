@@ -4,7 +4,7 @@ import { requireFieldPanel } from "@/lib/auth/guard";
 import { connectDb } from "@/lib/db/mongoose";
 import { Visit } from "@/models/Visit";
 import { RoutePlan } from "@/models/RoutePlan";
-import { Badge, Card, EmptyState, PageTitle, statusTone } from "@/components/ui/kit";
+import { Badge, Card, EmptyState, LinkButton, PageTitle, statusTone } from "@/components/ui/kit";
 import { formatDate, toDisplayTime, WEEKDAYS } from "@/lib/time";
 import { callTimeOn } from "@/components/doctors/doctor-picker";
 import type { EditableWindow } from "@/components/doctors/call-schedule-editor";
@@ -19,6 +19,7 @@ type VisitDoc = {
   };
 };
 type PlanDoc = { _id: unknown; name: string; totalDistanceKm: number; stops: unknown[] };
+type UpcomingPlan = { _id: unknown; name: string; date: Date; totalDistanceKm?: number; stops?: unknown[] };
 
 export default async function TodayPage() {
   const session = await requireFieldPanel();
@@ -28,12 +29,17 @@ export default async function TodayPage() {
   const end = new Date(); end.setHours(23, 59, 59, 999);
   const weekday = new Date().getDay();
 
-  const [visits, plan] = await Promise.all([
+  const [visits, plan, upcoming] = await Promise.all([
     Visit.find({ employee: session.userId, plannedDate: { $gte: start, $lte: end } })
       .populate("doctor", "name clinicName area city phones fullAddress location callSchedule")
       .sort({ plannedStart: 1 }).lean() as unknown as Promise<VisitDoc[]>,
     RoutePlan.findOne({ assignedTo: session.userId, date: { $gte: start, $lte: end } })
-      .select("name totalDistanceKm stops").lean() as Promise<PlanDoc | null>
+      .select("name totalDistanceKm stops").lean() as Promise<PlanDoc | null>,
+    // Plans for later days are shown here too, so a route assigned today for
+    // tomorrow is visible straight away instead of only on the morning it runs.
+    RoutePlan.find({ assignedTo: session.userId, date: { $gt: end } })
+      .select("name date totalDistanceKm stops").sort({ date: 1 }).limit(3)
+      .lean() as unknown as Promise<UpcomingPlan[]>
   ]);
 
   const done = visits.filter(visit => visit.status === "Completed" || visit.status === "Missed").length;
@@ -119,9 +125,31 @@ export default async function TodayPage() {
         </div>
       ) : (
         <EmptyState icon={CalendarCheck} title="Nothing scheduled today"
-          description="When your administrator assigns you a route plan, your day appears here in visiting order." />
+          description="When your administrator assigns you a route plan, your day appears here in visiting order."
+          action={<LinkButton tone="secondary" href="/employee/plans"><Route size={16} />See my plans</LinkButton>} />
       )}
     </section>
+
+    {upcoming.length > 0 && (
+      <section>
+        <h2 className="mb-2 text-[15px] font-semibold">Coming up</h2>
+        <div className="space-y-2">
+          {upcoming.map(next => (
+            <Link key={String(next._id)} href={`/employee/plans/${next._id}`}
+              className="card flex items-center gap-3 p-3.5 active:bg-[var(--surface-2)]">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--brand-soft)] text-[var(--brand)]"><Route size={16} /></span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold">{next.name}</p>
+                <p className="mt-0.5 truncate text-xs text-[var(--muted)]">
+                  {formatDate(next.date)} · {next.stops?.length ?? 0} stops · {next.totalDistanceKm ?? 0} km
+                </p>
+              </div>
+              <ChevronRight size={16} className="shrink-0 text-[var(--muted)]" />
+            </Link>
+          ))}
+        </div>
+      </section>
+    )}
 
     {plan && (
       <Link href="/employee/history" className="card tap flex items-center justify-center gap-2 text-sm font-semibold">

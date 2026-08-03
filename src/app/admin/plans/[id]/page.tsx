@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Pencil, Phone, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ExternalLink, Navigation, Pencil, Phone, TriangleAlert } from "lucide-react";
 import { requireAdminPanel } from "@/lib/auth/guard";
 import { connectDb } from "@/lib/db/mongoose";
 import { RoutePlan } from "@/models/RoutePlan";
@@ -11,13 +11,17 @@ import { PlanAssignment } from "@/components/plans/plan-assignment";
 import { DeletePlanButton } from "@/components/plans/delete-plan-button";
 import { OBJECT_ID } from "@/lib/api";
 import { formatDate, formatDuration, toDisplayTime, WEEKDAYS } from "@/lib/time";
+import { directionsUrl, routeUrl } from "@/lib/maps";
 
 export const dynamic = "force-dynamic";
 
 type Stop = {
   sequence: number; distanceFromPreviousKm: number; plannedStart: string; plannedEnd: string;
   withinCallTime: boolean; timingUnknown: boolean;
-  doctor?: { _id: unknown; name?: string; clinicName?: string; area?: string; city?: string; phones?: string[] };
+  doctor?: {
+    _id: unknown; name?: string; clinicName?: string; area?: string; city?: string;
+    phones?: string[]; location?: { coordinates?: number[] };
+  };
 };
 // weekday/startTime are optional so plans written before those fields existed
 // still open instead of erroring.
@@ -35,7 +39,7 @@ export default async function PlanDetail({ params }: { params: Promise<{ id: str
   await connectDb();
   const [plan, visits, team] = await Promise.all([
     RoutePlan.findById(id).populate("assignedTo", "name employeeId")
-      .populate("stops.doctor", "name clinicName area city phones").lean() as Promise<PlanDoc | null>,
+      .populate("stops.doctor", "name clinicName area city phones location").lean() as Promise<PlanDoc | null>,
     Visit.find({ routePlan: id }).select("doctor status outcome interest samples").lean(),
     User.find({ active: true, role: { $in: ["MR", "SALES"] } }).select("name employeeId role").sort({ name: 1 }).lean()
   ]);
@@ -44,6 +48,8 @@ export default async function PlanDetail({ params }: { params: Promise<{ id: str
   const visitRows = visits as unknown as Array<{ doctor: unknown; status: string; outcome?: string; interest?: string }>;
   const visitByDoctor = new Map(visitRows.map(visit => [String(visit.doctor), visit]));
   const conflicts = plan.stops.filter(stop => !stop.withinCallTime).length;
+  const isDraft = plan.status === "Draft";
+  const routeLink = routeUrl([...plan.stops].sort((a, b) => a.sequence - b.sequence).map(stop => stop.doctor));
 
   return <div className="space-y-5">
     <Link href="/admin/plans" className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--brand)]">
@@ -54,8 +60,14 @@ export default async function PlanDetail({ params }: { params: Promise<{ id: str
       subtitle={`${formatDate(plan.date)}${plan.weekday !== undefined && plan.startTime ? ` · ${WEEKDAYS[plan.weekday]} from ${toDisplayTime(plan.startTime)}` : ""}`}
       actions={<>
         <Badge tone={statusTone(plan.status)}>{plan.status}</Badge>
+        {routeLink && (
+          <a href={routeLink} target="_blank" rel="noreferrer"
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-white px-4 text-sm font-semibold transition-colors hover:bg-[var(--surface-2)]">
+            <ExternalLink size={15} />Open in Maps
+          </a>
+        )}
         <LinkButton tone="secondary" href={`/admin/plans/new?from=${plan._id}`}>
-          <Pencil size={15} />Rework
+          <Pencil size={15} />{isDraft ? "Edit draft" : "Edit plan"}
         </LinkButton>
         <DeletePlanButton planId={String(plan._id)} planName={plan.name} redirectTo="/admin/plans" />
       </>} />
@@ -104,6 +116,10 @@ export default async function PlanDetail({ params }: { params: Promise<{ id: str
               <p className="text-[11px] text-[var(--muted)]">{stop.sequence === 1 ? "start" : `${stop.distanceFromPreviousKm} km`}</p>
               {visit && <div className="mt-1"><Badge tone={statusTone(visit.status)}>{visit.status}</Badge></div>}
             </div>
+            {directionsUrl(stop.doctor) && (
+              <a href={directionsUrl(stop.doctor)!} target="_blank" rel="noreferrer" aria-label={`Open ${stop.doctor?.name ?? "this stop"} in Google Maps`}
+                className="grid size-9 shrink-0 place-items-center rounded-lg text-[var(--brand)] hover:bg-[var(--brand-soft)]"><Navigation size={15} /></a>
+            )}
           </li>;
         })}
       </ol>

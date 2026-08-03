@@ -132,8 +132,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!plan.startTime) plan.startTime = "09:30";
     if (!plan.visitMinutes) plan.visitMinutes = 45;
 
-    const reassigning = Boolean(value.assignedTo) && String(plan.assignedTo ?? "") !== value.assignedTo;
-    if (reassigning) {
+    if (value.assignedTo) {
       plan.assignedTo = value.assignedTo;
       if (plan.status === "Draft") plan.status = "Assigned";
     }
@@ -143,16 +142,26 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // order left freshly created visits behind pointing at an unassigned plan.
     await plan.save();
 
-    if (reassigning) {
+    // Assigning always rebuilds the rep's outstanding visits, even when the plan
+    // already named that person. A plan can say "assigned" while its visits were
+    // removed by a rework or a delete, and reassigning is the only way an admin
+    // can repair that — making it a no-op left the rep with an empty day.
+    if (value.assignedTo) {
       await Visit.deleteMany({ routePlan: plan._id, status: "Planned" });
-      await Visit.insertMany(plan.stops.map((stop: { doctor: unknown; plannedStart?: string }) => ({
-        doctor: stop.doctor,
-        employee: value.assignedTo,
-        routePlan: plan._id,
-        plannedDate: plan.date,
-        plannedStart: stop.plannedStart,
-        status: "Planned"
-      })));
+      const settled = await Visit.find({ routePlan: plan._id }).select("doctor").lean() as unknown as Array<{ doctor: unknown }>;
+      const alreadyVisited = new Set(settled.map(visit => String(visit.doctor)));
+      const fresh = plan.stops.filter((stop: { doctor: unknown }) => !alreadyVisited.has(String(stop.doctor)));
+
+      if (fresh.length) {
+        await Visit.insertMany(fresh.map((stop: { doctor: unknown; plannedStart?: string }) => ({
+          doctor: stop.doctor,
+          employee: value.assignedTo,
+          routePlan: plan._id,
+          plannedDate: plan.date,
+          plannedStart: stop.plannedStart,
+          status: "Planned"
+        })));
+      }
     }
 
     return ok(plan);

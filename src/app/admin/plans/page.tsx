@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarRange, Clock, Plus, TriangleAlert } from "lucide-react";
+import { CalendarRange, Clock, Pencil, Plus, TriangleAlert } from "lucide-react";
 import { requireAdminPanel } from "@/lib/auth/guard";
 import { connectDb } from "@/lib/db/mongoose";
 import { RoutePlan } from "@/models/RoutePlan";
@@ -55,6 +55,10 @@ export default async function PlansPage() {
               </p>
             </div>
             <div className="pointer-events-none relative"><Badge tone={statusTone(plan.status)}>{plan.status}</Badge></div>
+            <Link href={`/admin/plans/new?from=${plan._id}`} aria-label={`Edit ${plan.name}`}
+              className="relative grid size-9 shrink-0 place-items-center rounded-lg text-[var(--ink-2)] hover:bg-[var(--brand-soft)]">
+              <Pencil size={15} />
+            </Link>
             <div className="relative"><DeletePlanButton planId={String(plan._id)} planName={plan.name} /></div>
           </div>;
         })}
