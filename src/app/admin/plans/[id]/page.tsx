@@ -8,6 +8,7 @@ import { Visit } from "@/models/Visit";
 import { User } from "@/models/User";
 import { Badge, Card, PageTitle, Stat, statusTone } from "@/components/ui/kit";
 import { PlanAssignment } from "@/components/plans/plan-assignment";
+import { DeletePlanButton } from "@/components/plans/delete-plan-button";
 import { OBJECT_ID } from "@/lib/api";
 import { formatDate, formatDuration, toDisplayTime, WEEKDAYS } from "@/lib/time";
 
@@ -18,9 +19,11 @@ type Stop = {
   withinCallTime: boolean; timingUnknown: boolean;
   doctor?: { _id: unknown; name?: string; clinicName?: string; area?: string; city?: string; phones?: string[] };
 };
+// weekday/startTime are optional so plans written before those fields existed
+// still open instead of erroring.
 type PlanDoc = {
-  _id: unknown; name: string; date: Date; weekday: number; status: string; startTime: string;
-  visitMinutes: number; totalDistanceKm: number; totalTravelMinutes: number; stops: Stop[];
+  _id: unknown; name: string; date: Date; weekday?: number; status: string; startTime?: string;
+  visitMinutes?: number; totalDistanceKm?: number; totalTravelMinutes?: number; stops: Stop[];
   assignedTo?: { _id: unknown; name?: string; employeeId?: string };
 };
 
@@ -48,14 +51,17 @@ export default async function PlanDetail({ params }: { params: Promise<{ id: str
     </Link>
 
     <PageTitle title={plan.name}
-      subtitle={`${formatDate(plan.date)} · ${WEEKDAYS[plan.weekday]} from ${toDisplayTime(plan.startTime)}`}
-      actions={<Badge tone={statusTone(plan.status)}>{plan.status}</Badge>} />
+      subtitle={`${formatDate(plan.date)}${plan.weekday !== undefined && plan.startTime ? ` · ${WEEKDAYS[plan.weekday]} from ${toDisplayTime(plan.startTime)}` : ""}`}
+      actions={<>
+        <Badge tone={statusTone(plan.status)}>{plan.status}</Badge>
+        <DeletePlanButton planId={String(plan._id)} planName={plan.name} redirectTo="/admin/plans" />
+      </>} />
 
     <Card className="grid grid-cols-2 gap-5 p-5 sm:grid-cols-4">
       <Stat label="Stops" value={plan.stops.length} />
-      <Stat label="Distance" value={`${plan.totalDistanceKm} km`} />
-      <Stat label="On the road" value={formatDuration(plan.totalTravelMinutes)} />
-      <Stat label="Per doctor" value={`${plan.visitMinutes} min`} />
+      <Stat label="Distance" value={`${plan.totalDistanceKm ?? 0} km`} />
+      <Stat label="On the road" value={plan.totalTravelMinutes ? formatDuration(plan.totalTravelMinutes) : "—"} />
+      <Stat label="Per doctor" value={plan.visitMinutes ? `${plan.visitMinutes} min` : "—"} />
     </Card>
 
     {conflicts > 0 && (

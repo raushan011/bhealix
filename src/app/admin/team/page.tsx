@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { KeyRound, Plus, UserRound } from "lucide-react";
+import { KeyRound, Plus, Trash2, UserRound } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Field, Notice, PageTitle, Spinner } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import { ROLES, ROLE_LABEL, type Role } from "@/constants/access";
@@ -37,6 +37,16 @@ export default function TeamPage() {
     return true;
   }
 
+  async function remove(member: Member) {
+    if (!window.confirm(`Permanently delete ${member.name}? Their scheduled visits are removed and any route plan of theirs returns to draft.`)) return;
+    const response = await fetch(`/api/team/${member._id}`, { method: "DELETE" });
+    const json = await response.json() as { error?: string };
+    // The server refuses when recorded visits would be orphaned, and says why.
+    if (!response.ok) { setNotice({ tone: "error", text: json.error ?? "Could not delete this employee" }); return; }
+    setNotice({ tone: "success", text: `${member.name} deleted.` });
+    load();
+  }
+
   return <div className="space-y-5">
     <PageTitle title="Team" subtitle={`${members.filter(m => m.active).length} active`}
       actions={<Button onClick={() => setAdding(true)}><Plus size={16} />Add employee</Button>} />
@@ -70,10 +80,12 @@ export default function TeamPage() {
               </select>
               <button onClick={() => setResetting(member)} aria-label={`Reset password for ${member.name}`}
                 className="tap grid place-items-center rounded-[10px] text-[var(--muted)] hover:bg-[var(--surface-2)]"><KeyRound size={16} /></button>
-              <Button tone={member.active ? "danger" : "secondary"} className="!min-h-[38px] !px-3 text-xs"
+              <Button tone="secondary" className="!min-h-[38px] !px-3 text-xs"
                 onClick={() => patch(member._id, { active: !member.active }, `${member.name} ${member.active ? "deactivated" : "reactivated"}.`)}>
                 {member.active ? "Deactivate" : "Activate"}
               </Button>
+              <button onClick={() => remove(member)} aria-label={`Delete ${member.name}`}
+                className="tap grid place-items-center rounded-[10px] text-rose-600 hover:bg-rose-50"><Trash2 size={16} /></button>
             </div>
           </div>
         ))}

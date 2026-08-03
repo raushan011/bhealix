@@ -46,10 +46,24 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const plan = await RoutePlan.findById(id);
     if (!plan) return badRequest("Plan not found", 404);
 
-    // Reassigning moves the whole day's visits with the plan.
-    if (value.assignedTo && String(plan.assignedTo ?? "") !== value.assignedTo) {
+    // Plans written before weekday/startTime existed cannot pass validation on
+    // save. Backfill from what the record does have so they stay reassignable.
+    if (plan.weekday === undefined || plan.weekday === null) plan.weekday = new Date(plan.date).getDay();
+    if (!plan.startTime) plan.startTime = "09:30";
+    if (!plan.visitMinutes) plan.visitMinutes = 45;
+
+    const reassigning = Boolean(value.assignedTo) && String(plan.assignedTo ?? "") !== value.assignedTo;
+    if (reassigning) {
       plan.assignedTo = value.assignedTo;
       if (plan.status === "Draft") plan.status = "Assigned";
+    }
+    if (value.status) plan.status = value.status;
+
+    // Save before touching visits: if the plan cannot be saved, the previous
+    // order left freshly created visits behind pointing at an unassigned plan.
+    await plan.save();
+
+    if (reassigning) {
       await Visit.deleteMany({ routePlan: plan._id, status: "Planned" });
       await Visit.insertMany(plan.stops.map((stop: { doctor: unknown; plannedStart?: string }) => ({
         doctor: stop.doctor,
@@ -60,9 +74,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         status: "Planned"
       })));
     }
-    if (value.status) plan.status = value.status;
 
-    await plan.save();
     return ok(plan);
   } catch (error) {
     return fail(error);

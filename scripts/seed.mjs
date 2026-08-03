@@ -30,13 +30,20 @@ console.log(`Connected to ${db.name}`);
 const password = process.env.SEED_PASSWORD ?? "Bhealix@123";
 const passwordHash = await bcrypt.hash(password, 12);
 
+// Only the administrator is created by default. Real representatives are added
+// from the Team screen; seeding fake staff would put them back after cleanup.
+// Set SEED_DEMO_STAFF=1 if you want throwaway accounts for a demo.
 const accounts = [
-  { employeeId: "BHX-ADMIN", name: "Ananya Mehta", email: "admin@bhealix.test", role: "ADMIN" },
-  { employeeId: "BHX-HR01", name: "Neha Singh", email: "hr@bhealix.test", role: "HR" },
-  { employeeId: "BHX-MR01", name: "Rohan Shah", email: "mr@bhealix.test", role: "MR" },
-  { employeeId: "BHX-MR02", name: "Nisha Jain", email: "mr2@bhealix.test", role: "MR" },
-  { employeeId: "BHX-SL01", name: "Vikram Rao", email: "sales@bhealix.test", role: "SALES" }
+  { employeeId: "BHX-ADMIN", name: "BHEALIX Admin", email: "admin@bhealix.com", role: "ADMIN" }
 ];
+
+if (process.env.SEED_DEMO_STAFF === "1") {
+  accounts.push(
+    { employeeId: "BHX-HR01", name: "Demo HR", email: "hr@bhealix.test", role: "HR" },
+    { employeeId: "BHX-MR01", name: "Demo MR", email: "mr@bhealix.test", role: "MR" },
+    { employeeId: "BHX-SL01", name: "Demo Sales", email: "sales@bhealix.test", role: "SALES" }
+  );
+}
 
 for (const account of accounts) {
   await db.collection("users").updateOne(
@@ -142,7 +149,7 @@ const totals = {
 
 console.log("\nReady.");
 console.log(`  Doctors: ${totals.doctors} (${totals.withCallTime} with call time, ${totals.withLocation} with coordinates)`);
-console.log(`  Sign in: admin@bhealix.test / ${password}`);
+console.log(`  Sign in: admin@bhealix.com / ${password}`);
 console.log("  Change these credentials before going live.\n");
 
 await mongoose.disconnect();
