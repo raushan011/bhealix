@@ -5,6 +5,7 @@ import { User } from "@/models/User";
 import { Visit } from "@/models/Visit";
 import { RoutePlan } from "@/models/RoutePlan";
 import { Doctor } from "@/models/Doctor";
+import { SampleMovement } from "@/models/Sample";
 import { apiSession } from "@/lib/auth/guard";
 import { can, ROLES } from "@/constants/access";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
@@ -70,6 +71,11 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
     const completed = await Visit.countDocuments({ employee: id, status: { $in: ["Completed", "Missed"] } });
     if (completed) {
       return badRequest(`${user.name} has ${completed} recorded visit${completed === 1 ? "" : "s"}. Deactivate instead so that history is kept.`);
+    }
+
+    const movements = await SampleMovement.countDocuments({ employee: id });
+    if (movements) {
+      return badRequest(`${user.name} has sample stock on record. Deactivate instead so the stock history is kept.`);
     }
 
     // Nothing worth keeping is attached, so clear the scheduling links too.

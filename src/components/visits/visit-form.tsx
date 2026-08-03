@@ -20,7 +20,8 @@ type DoctorState = {
   fullAddress?: string; phone?: string; coordinates?: number[]; callSchedule: EditableWindow[];
 };
 
-export function VisitForm({ visit, doctor, products }: { visit: VisitState; doctor: DoctorState; products: string[] }) {
+export function VisitForm({ visit, doctor, products, stock = {} }:
+  { visit: VisitState; doctor: DoctorState; products: string[]; stock?: Record<string, number> }) {
   const router = useRouter();
   const [status, setStatus] = useState(visit.status);
   const [outcome, setOutcome] = useState(visit.outcome ?? "");
@@ -199,18 +200,29 @@ export function VisitForm({ visit, doctor, products }: { visit: VisitState; doct
           </div>
           {samples.length ? (
             <div className="space-y-2">
-              {samples.map((sample, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <select value={sample.product} onChange={e => updateSample(index, { product: e.target.value })} className="select flex-1">
-                    {products.length ? products.map(product => <option key={product}>{product}</option>) : <option value="">No products configured</option>}
-                  </select>
-                  <input type="number" min={1} max={999} value={sample.quantity}
-                    onChange={e => updateSample(index, { quantity: Number(e.target.value) || 1 })}
-                    aria-label="Quantity" className="input w-20 shrink-0" />
-                  <button type="button" onClick={() => removeSample(index)} aria-label="Remove sample"
-                    className="tap grid shrink-0 place-items-center rounded-[10px] text-rose-600"><X size={16} /></button>
-                </div>
-              ))}
+              {samples.map((sample, index) => {
+                const inHand = stock[sample.product];
+                return <div key={index}>
+                  <div className="flex items-center gap-2">
+                    <select value={sample.product} onChange={e => updateSample(index, { product: e.target.value })} className="select flex-1">
+                      {products.length ? products.map(product => <option key={product}>{product}</option>) : <option value="">No products configured</option>}
+                    </select>
+                    <input type="number" min={1} max={999} value={sample.quantity}
+                      onChange={e => updateSample(index, { quantity: Number(e.target.value) || 1 })}
+                      aria-label="Quantity" className="input w-20 shrink-0" />
+                    <button type="button" onClick={() => removeSample(index)} aria-label="Remove sample"
+                      className="tap grid shrink-0 place-items-center rounded-[10px] text-rose-600"><X size={16} /></button>
+                  </div>
+                  {/* A count that is behind reality must not stop a rep mid-clinic, so this warns and lets them carry on. */}
+                  {inHand !== undefined && (
+                    <p className={`mt-1 text-xs ${sample.quantity > inHand ? "font-semibold text-amber-700" : "text-[var(--muted)]"}`}>
+                      {sample.quantity > inHand
+                        ? `You are recording more than the ${inHand} shown in hand — save it anyway and tell your administrator.`
+                        : `${inHand} in hand`}
+                    </p>
+                  )}
+                </div>;
+              })}
             </div>
           ) : <p className="text-sm text-[var(--muted)]">None recorded.</p>}
         </div>

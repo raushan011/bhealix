@@ -7,6 +7,7 @@ import { RoutePlan } from "@/models/RoutePlan";
 import { apiSession } from "@/lib/auth/guard";
 import { usesFieldPanel } from "@/constants/access";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
+import { syncDispenseLedger } from "@/lib/samples/ledger";
 
 const checkInSchema = z.object({
   action: z.literal("check-in"),
@@ -62,6 +63,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       visit.notes = input.notes;
       visit.checkOutAt = new Date();
       await visit.save();
+      // Nothing changed hands after all, so give the stock back to the rep.
+      await syncDispenseLedger(visit);
       return ok(visit);
     }
 
@@ -76,6 +79,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     visit.notes = input.notes;
     visit.followUpDate = input.followUpDate ? new Date(`${input.followUpDate}T00:00:00`) : undefined;
     await visit.save();
+
+    // The samples the rep just logged are the only record of stock leaving their
+    // hands, so the ledger is written from the visit rather than counted twice.
+    await syncDispenseLedger(visit);
 
     // Keep the doctor record in step with what actually happened in the field.
     const doctorUpdate: Record<string, unknown> = { lastVisitedAt: visit.checkOutAt };

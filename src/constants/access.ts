@@ -20,5 +20,9 @@ export const can = {
   viewAllReports: (role: Role) => role === "ADMIN",
   logVisits: (role: Role) => usesFieldPanel(role),
   /** Field staff learn the real call timing from the doctor, so they may correct it. */
-  updateCallTime: (role: Role) => role === "ADMIN" || usesFieldPanel(role)
+  updateCallTime: (role: Role) => role === "ADMIN" || usesFieldPanel(role),
+  /** Handing stock to a rep, and correcting the count, is the administrator's call. */
+  issueSamples: (role: Role) => role === "ADMIN",
+  /** HR reads the stock position but does not move any. */
+  viewAllStock: (role: Role) => role === "ADMIN" || role === "HR"
 };

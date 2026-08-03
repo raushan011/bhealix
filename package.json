@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "seed": "node scripts/seed.mjs"
+    "seed": "node scripts/seed.mjs",
+    "backfill:samples": "node scripts/backfill-sample-ledger.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.1",

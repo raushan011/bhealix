@@ -6,6 +6,7 @@ import { connectDb } from "@/lib/db/mongoose";
 import { Visit } from "@/models/Visit";
 import { Product } from "@/models/Catalog";
 import { VisitForm } from "@/components/visits/visit-form";
+import { stockFor } from "@/lib/samples/ledger";
 import { OBJECT_ID } from "@/lib/api";
 import type { EditableWindow } from "@/components/doctors/call-schedule-editor";
 
@@ -27,9 +28,10 @@ export default async function VisitPage({ params }: { params: Promise<{ id: stri
   if (!OBJECT_ID.test(id)) notFound();
 
   await connectDb();
-  const [visit, products] = await Promise.all([
+  const [visit, products, stock] = await Promise.all([
     Visit.findById(id).populate("doctor", "name clinicName area city fullAddress phones location callSchedule").lean() as Promise<VisitDoc | null>,
-    Product.find({ active: true }).select("name").sort({ name: 1 }).lean()
+    Product.find({ active: true }).select("name").sort({ name: 1 }).lean(),
+    stockFor(session.userId)
   ]);
 
   if (!visit) notFound();
@@ -65,6 +67,7 @@ export default async function VisitPage({ params }: { params: Promise<{ id: stri
         callSchedule: visit.doctor?.callSchedule ?? []
       }}
       products={products.map(product => (product as unknown as { name: string }).name)}
+      stock={Object.fromEntries(stock.map(row => [row.product, row.balance]))}
     />
   </div>;
 }

@@ -4,6 +4,8 @@ import { connectDb } from "@/lib/db/mongoose";
 import { Visit } from "@/models/Visit";
 import { Card, EmptyState, PageTitle, Stat } from "@/components/ui/kit";
 import { formatDate } from "@/lib/time";
+import { movementTotalsByEmployee } from "@/lib/samples/ledger";
+import { utilisation } from "@/lib/samples/movements";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +29,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const from = new Date(Date.now() - (days - 1) * 86400000); from.setHours(0, 0, 0, 0);
   const range = { $gte: from, $lte: to };
 
-  const [totalsRows, byEmployee, byOutcome, samples, byInterest] = await Promise.all([
+  const [totalsRows, byEmployee, byOutcome, samples, byInterest, stockTotals] = await Promise.all([
     Visit.aggregate<Totals>([
       { $match: { plannedDate: range } },
       { $group: { _id: null,
@@ -62,7 +64,8 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
     Visit.aggregate<Counted>([
       { $match: { plannedDate: range, status: "Completed", interest: { $ne: null } } },
       { $group: { _id: "$interest", count: { $sum: 1 } } }
-    ])
+    ]),
+    movementTotalsByEmployee(range)
   ]);
 
   const totals = totalsRows[0] ?? { planned: 0, completed: 0, missed: 0, orderValue: 0 };
@@ -98,8 +101,14 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
       <Card className="overflow-hidden">
         <div className="border-b border-[var(--line)] px-5 py-3.5"><h2 className="text-[15px] font-semibold">By representative</h2></div>
         <div className="divide-y divide-[var(--line)]">
-          {byEmployee.map(row => (
-            <div key={String(row._id)} className="px-5 py-4">
+          {byEmployee.map(row => {
+            const stock = stockTotals.get(String(row._id));
+            const issued = stock?.issued ?? 0;
+            const dispensed = stock?.dispensed ?? 0;
+            // What was issued but has neither reached a doctor nor come back.
+            const unaccounted = issued - dispensed - (stock?.returned ?? 0);
+
+            return <div key={String(row._id)} className="px-5 py-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold">{row.name}</p>
@@ -111,8 +120,19 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
                 </div>
               </div>
               <div className="mt-2"><Bar value={row.completed} max={row.planned} /></div>
-            </div>
-          ))}
+
+              {issued > 0 && (
+                <p className="mt-2 text-xs text-[var(--muted)]">
+                  {issued} samples issued · {dispensed} reached doctors ({utilisation(issued, dispensed)}%)
+                  {unaccounted !== 0 && (
+                    <span className={unaccounted > 0 ? "" : "font-semibold text-rose-700"}>
+                      {" "}· {Math.abs(unaccounted)} {unaccounted > 0 ? "still in hand" : "over-recorded"}
+                    </span>
+                  )}
+                </p>
+              )}
+            </div>;
+          })}
         </div>
       </Card>
 

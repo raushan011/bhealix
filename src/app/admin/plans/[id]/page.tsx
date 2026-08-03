@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Phone, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Pencil, Phone, TriangleAlert } from "lucide-react";
 import { requireAdminPanel } from "@/lib/auth/guard";
 import { connectDb } from "@/lib/db/mongoose";
 import { RoutePlan } from "@/models/RoutePlan";
 import { Visit } from "@/models/Visit";
 import { User } from "@/models/User";
-import { Badge, Card, PageTitle, Stat, statusTone } from "@/components/ui/kit";
+import { Badge, Card, LinkButton, PageTitle, Stat, statusTone } from "@/components/ui/kit";
 import { PlanAssignment } from "@/components/plans/plan-assignment";
 import { DeletePlanButton } from "@/components/plans/delete-plan-button";
 import { OBJECT_ID } from "@/lib/api";
@@ -54,6 +54,9 @@ export default async function PlanDetail({ params }: { params: Promise<{ id: str
       subtitle={`${formatDate(plan.date)}${plan.weekday !== undefined && plan.startTime ? ` · ${WEEKDAYS[plan.weekday]} from ${toDisplayTime(plan.startTime)}` : ""}`}
       actions={<>
         <Badge tone={statusTone(plan.status)}>{plan.status}</Badge>
+        <LinkButton tone="secondary" href={`/admin/plans/new?from=${plan._id}`}>
+          <Pencil size={15} />Rework
+        </LinkButton>
         <DeletePlanButton planId={String(plan._id)} planName={plan.name} redirectTo="/admin/plans" />
       </>} />
 

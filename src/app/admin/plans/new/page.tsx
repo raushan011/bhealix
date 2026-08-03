@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, CalendarDays, Check, Clock, ExternalLink, MapPin, Navigation, Route, Save, TriangleAlert, Trash2, Upload, X } from "lucide-react";
-import { Button, Card, Field, Notice, PageTitle, Stat } from "@/components/ui/kit";
+import { Button, Card, Field, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
 import { DoctorPicker, callTimeOn, placeOf, type PickableDoctor } from "@/components/doctors/doctor-picker";
 import { fromExcelRow } from "@/lib/doctors/discovery";
 import { WEEKDAYS, formatDuration, todayIso, toDisplayTime, weekdayOf } from "@/lib/time";
@@ -19,6 +19,12 @@ type Preview = {
   finishTime: string; outsideCallTimeCount: number; unknownTimingCount: number;
 };
 type FieldStaff = { _id: string; name: string; employeeId: string; role: string };
+/** An existing plan being reworked. Stop one is the starting doctor. */
+type LoadedPlan = {
+  name: string; date: string; startTime?: string; visitMinutes?: number;
+  assignedTo?: { _id?: unknown } | null;
+  stops: Array<{ sequence: number; doctor?: PickableDoctor }>;
+};
 
 function Step({ n, title, hint, done }: { n: number; title: string; hint?: string; done?: boolean }) {
   return <div className="flex items-start gap-2.5">
@@ -39,8 +45,10 @@ function mapsUrl(stops: Stop[]) {
   return `https://www.google.com/maps/dir/?api=1&origin=${points[0]}&destination=${points.at(-1)}${waypoints ? `&waypoints=${encodeURIComponent(waypoints)}` : ""}&travelmode=driving`;
 }
 
-export default function NewPlan() {
+function PlanBuilder() {
   const router = useRouter();
+  const editingId = useSearchParams().get("from");
+  const [loadingExisting, setLoadingExisting] = useState(Boolean(editingId));
   const [date, setDate] = useState(todayIso());
   const [name, setName] = useState("");
   const [startTime, setStartTime] = useState("09:30");
@@ -64,6 +72,38 @@ export default function NewPlan() {
   }, []);
 
   useEffect(() => { setName(current => current || `${WEEKDAYS[weekday]} route – ${date}`); }, [date, weekday]);
+
+  // Reworking an existing plan: load it back into the builder. The first stop
+  // is the starting doctor, so the original route can be reproduced exactly.
+  useEffect(() => {
+    if (!editingId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch(`/api/plans/${editingId}`);
+        const json = await response.json() as { error?: string; data?: LoadedPlan };
+        if (!response.ok || !json.data) throw new Error(json.error ?? "Could not open that plan");
+        if (cancelled) return;
+
+        const plan = json.data;
+        const ordered = [...plan.stops].sort((a, b) => a.sequence - b.sequence);
+        const doctors = ordered.map(stop => stop.doctor).filter((d): d is PickableDoctor => Boolean(d?._id));
+
+        setName(plan.name);
+        setDate(new Date(plan.date).toISOString().slice(0, 10));
+        setStartTime(plan.startTime ?? "09:30");
+        setVisitMinutes(plan.visitMinutes ?? 45);
+        setAssignedTo(plan.assignedTo?._id ? String(plan.assignedTo._id) : "");
+        setReference(doctors[0] ?? null);
+        setSelected(doctors.slice(1));
+      } catch (problem) {
+        if (!cancelled) setError(problem instanceof Error ? problem.message : "Could not open that plan");
+      } finally {
+        if (!cancelled) setLoadingExisting(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [editingId]);
 
   const excludeIds = new Set([reference?._id, ...selected.map(d => d._id)].filter((id): id is string => Boolean(id)));
   const reset = () => { setPreview(null); setError(""); };
@@ -128,17 +168,20 @@ export default function NewPlan() {
     if (!preview || !reference) return;
     setSaving(true); setError("");
     try {
-      const response = await fetch("/api/plans", {
-        method: "POST", headers: { "content-type": "application/json" },
+      // Reworking an existing plan replaces it rather than leaving a duplicate.
+      const response = await fetch(editingId ? `/api/plans/${editingId}` : "/api/plans", {
+        method: editingId ? "PUT" : "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           name, date, referenceDoctorId: reference._id,
           doctorIds: [reference._id, ...selected.map(d => d._id)],
-          startTime, visitMinutes, assignedTo: assignedTo || undefined
+          startTime, visitMinutes,
+          assignedTo: assignedTo || (editingId ? null : undefined)
         })
       });
       const json = await response.json() as { error?: string; data?: { _id: string } };
       if (!response.ok) throw new Error(json.error ?? "Could not save the plan");
-      router.push(`/admin/plans/${json.data?._id}`);
+      router.push(`/admin/plans/${editingId ?? json.data?._id}`);
       router.refresh();
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Could not save the plan");
@@ -148,11 +191,17 @@ export default function NewPlan() {
 
   const link = preview ? mapsUrl(preview.stops) : null;
 
+  if (loadingExisting) return <Spinner label="Opening that plan…" />;
+
   return <div className="space-y-4 pb-10">
-    <Link href="/admin/plans" className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--brand)]">
-      <ArrowLeft size={15} />Back to plans
+    <Link href={editingId ? `/admin/plans/${editingId}` : "/admin/plans"} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--brand)]">
+      <ArrowLeft size={15} />{editingId ? "Back to the plan" : "Back to plans"}
     </Link>
-    <PageTitle title="Plan a route" subtitle="Visits are ordered by each doctor's call time first, then by travel distance" />
+    <PageTitle
+      title={editingId ? "Rework this plan" : "Plan a route"}
+      subtitle={editingId
+        ? "Change the day, doctors or timing and rebuild. Visits already completed are kept."
+        : "Visits are ordered by each doctor's call time first, then by travel distance"} />
 
     <Card className="p-5">
       <Step n={1} title="Day and timing" done={Boolean(date)} />
@@ -299,4 +348,8 @@ export default function NewPlan() {
       </div>
     </Card>}
   </div>;
+}
+
+export default function NewPlan() {
+  return <Suspense fallback={<Spinner label="Loading the planner…" />}><PlanBuilder /></Suspense>;
 }

@@ -3,6 +3,7 @@ import { Visit } from "@/models/Visit";
 import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
 import { fail, ok } from "@/lib/api";
+import { movementTotalsByEmployee } from "@/lib/samples/ledger";
 
 /**
  * One query pass over a date range, returning the four things an administrator
@@ -20,7 +21,7 @@ export async function GET(request: Request) {
     const from = params.get("from") ?? new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
     const range = { $gte: new Date(`${from}T00:00:00`), $lte: new Date(`${to}T23:59:59`) };
 
-    const [totals, byEmployee, byOutcome, samples, byInterest] = await Promise.all([
+    const [totals, byEmployee, byOutcome, samples, byInterest, stockTotals] = await Promise.all([
       Visit.aggregate([
         { $match: { plannedDate: range } },
         { $group: {
@@ -60,13 +61,26 @@ export async function GET(request: Request) {
       Visit.aggregate([
         { $match: { plannedDate: range, status: "Completed", interest: { $ne: null } } },
         { $group: { _id: "$interest", count: { $sum: 1 } } }
-      ])
+      ]),
+      movementTotalsByEmployee(range)
     ]);
+
+    // Each rep's row carries both halves: what they were issued and what reached a doctor.
+    const withStock = byEmployee.map(row => {
+      const stock = stockTotals.get(String(row._id));
+      return {
+        ...row,
+        samplesIssued: stock?.issued ?? 0,
+        samplesDispensed: stock?.dispensed ?? 0,
+        samplesReturned: stock?.returned ?? 0,
+        samplesInHand: (stock?.issued ?? 0) - (stock?.dispensed ?? 0) - (stock?.returned ?? 0)
+      };
+    });
 
     return ok({
       from, to,
       totals: totals[0] ?? { planned: 0, completed: 0, missed: 0, orderValue: 0 },
-      byEmployee, byOutcome, samples, byInterest
+      byEmployee: withStock, byOutcome, samples, byInterest
     });
   } catch (error) {
     return fail(error);

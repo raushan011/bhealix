@@ -2,6 +2,7 @@ import { z } from "zod";
 import { connectDb } from "@/lib/db/mongoose";
 import { Product } from "@/models/Catalog";
 import { Visit } from "@/models/Visit";
+import { SampleMovement } from "@/models/Sample";
 import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
@@ -29,9 +30,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 /**
- * Visits record the product name as text, so past sample records survive a
- * deletion. A product still in use is retired instead, keeping reports honest
- * while removing it from the rep's picker.
+ * Visits and the sample ledger record the product name as text, so past records
+ * survive a deletion. A product still in use is retired instead, keeping reports
+ * and stock balances honest while removing it from the rep's picker.
  */
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -44,9 +45,11 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
     const product = await Product.findById(id);
     if (!product) return badRequest("Product not found", 404);
 
-    const used = await Visit.countDocuments({
-      $or: [{ "samples.product": product.name }, { productsDiscussed: product.name }]
-    });
+    const [inVisits, inLedger] = await Promise.all([
+      Visit.countDocuments({ $or: [{ "samples.product": product.name }, { productsDiscussed: product.name }] }),
+      SampleMovement.countDocuments({ productName: product.name })
+    ]);
+    const used = inVisits + inLedger;
 
     if (used) {
       product.active = false;

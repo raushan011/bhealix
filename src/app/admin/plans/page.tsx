@@ -33,10 +33,12 @@ export default async function PlansPage() {
           const when = plan.weekday !== undefined && plan.startTime
             ? `${WEEKDAYS[plan.weekday]} from ${toDisplayTime(plan.startTime)}`
             : "";
-          // The delete control sits beside the link rather than inside it —
-          // a button nested in an anchor is invalid and swallows the click.
-          return <div key={String(plan._id)} className="flex items-start gap-2 px-5 py-4 hover:bg-[var(--surface-2)]">
-            <Link href={`/admin/plans/${plan._id}`} className="min-w-0 flex-1">
+          // The link is stretched across the whole row so anywhere in it opens
+          // the plan, while the delete button sits above it and keeps its click.
+          // Nesting the button inside the anchor would be invalid markup.
+          return <div key={String(plan._id)} className="relative flex items-start gap-2 px-5 py-4 hover:bg-[var(--surface-2)]">
+            <Link href={`/admin/plans/${plan._id}`} aria-label={`Open ${plan.name}`} className="absolute inset-0" />
+            <div className="pointer-events-none min-w-0 flex-1">
               <p className="truncate text-sm font-semibold">{plan.name}</p>
               <p className="mt-0.5 text-xs text-[var(--muted)]">
                 {formatDate(plan.date)}{when ? ` · ${when}` : ""}
@@ -51,9 +53,9 @@ export default async function PlansPage() {
                   </span>
                 )}
               </p>
-            </Link>
-            <Badge tone={statusTone(plan.status)}>{plan.status}</Badge>
-            <DeletePlanButton planId={String(plan._id)} planName={plan.name} />
+            </div>
+            <div className="pointer-events-none relative"><Badge tone={statusTone(plan.status)}>{plan.status}</Badge></div>
+            <div className="relative"><DeletePlanButton planId={String(plan._id)} planName={plan.name} /></div>
           </div>;
         })}
       </Card>
