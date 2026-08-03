@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, CalendarRange, ClipboardList, LayoutDashboard, LogOut, Menu, Search, Stethoscope, Users, X } from "lucide-react";
+import { BarChart3, CalendarRange, ClipboardList, LayoutDashboard, LogOut, Menu, Package, Search, Stethoscope, Users, X } from "lucide-react";
 import { Brand, BrandMark } from "@/components/ui/brand";
 import { ROLE_LABEL, type Role } from "@/constants/access";
 
@@ -14,6 +14,7 @@ const NAV = [
   { href: "/admin/plans", label: "Route plans", icon: CalendarRange, roles: ["ADMIN"] },
   { href: "/admin/visits", label: "Visits", icon: ClipboardList, roles: ["ADMIN"] },
   { href: "/admin/reports", label: "Reports", icon: BarChart3, roles: ["ADMIN"] },
+  { href: "/admin/products", label: "Products", icon: Package, roles: ["ADMIN"] },
   { href: "/admin/team", label: "Team", icon: Users, roles: ["ADMIN", "HR"] }
 ] as const;
 

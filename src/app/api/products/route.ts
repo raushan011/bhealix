@@ -11,12 +11,16 @@ const schema = z.object({
   sampleAvailable: z.boolean().default(true)
 });
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const auth = await apiSession();
     if ("response" in auth) return auth.response;
     await connectDb();
-    const items = await Product.find({ active: true }).select("name category sampleAvailable").sort({ name: 1 }).lean();
+    // Reps only ever see what is currently on offer; the admin catalogue
+    // asks for everything so retired items can be restored.
+    const showAll = new URL(request.url).searchParams.get("all") === "1";
+    const items = await Product.find(showAll ? {} : { active: true })
+      .select("name category sampleAvailable active").sort({ name: 1 }).lean();
     return ok({ items });
   } catch (error) {
     return fail(error);

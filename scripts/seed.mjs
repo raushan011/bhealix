@@ -60,24 +60,10 @@ for (const account of accounts) {
 console.log(`${accounts.length} accounts ready`);
 
 // ---------------------------------------------------------------- products
-const products = [
-  { name: "BHEALIX Gentle Face Wash", category: "Cleanser" },
-  { name: "BHEALIX Vitamin C Serum", category: "Serum" },
-  { name: "BHEALIX Hydrating Moisturiser", category: "Moisturiser" },
-  { name: "BHEALIX Mineral Sunscreen SPF 50", category: "Sun care" },
-  { name: "BHEALIX Acne Control Gel", category: "Treatment" },
-  { name: "BHEALIX Anti-Pigmentation Cream", category: "Treatment" },
-  { name: "BHEALIX Hair Fall Tonic", category: "Hair care" }
-];
-
-for (const product of products) {
-  await db.collection("products").updateOne(
-    { name: product.name },
-    { $set: { ...product, sampleAvailable: true, active: true, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
-    { upsert: true }
-  );
-}
-console.log(`${products.length} products ready`);
+// Deliberately empty. Product names end up in sample-distribution reports, so
+// inventing a range would put fabricated figures in front of the business.
+// Add the real catalogue from Admin -> Products.
+console.log(`Products in catalogue: ${await db.collection("products").countDocuments()} (add real ones from Admin → Products)`);
 
 // ------------------------------------------------- migrate old call timings
 const collections = await db.db.listCollections({ name: "mrcallschedules" }).toArray();

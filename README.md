@@ -50,6 +50,8 @@ Admin and HR use the desktop panel at `/admin`; MR and Sales use the mobile pane
 
 The seed creates one administrator: `admin@bhealix.com` / `Bhealix@123`. **Change the password before going live.** Representatives are added from the Team screen; pass `SEED_DEMO_STAFF=1` if you want throwaway MR/HR/Sales accounts for a demo.
 
+No sample doctors or products are created. Product names appear in sample-distribution reports, so the catalogue starts empty and is filled from **Admin → Products** with the real range.
+
 `npm run seed` is safe to re-run against real data: it never deletes doctors, never resets an existing password, and migrates call timings from the older `mrcallschedules` collection into each doctor record.
 
 ## Removing records
@@ -57,6 +59,7 @@ The seed creates one administrator: `admin@bhealix.com` / `Bhealix@123`. **Chang
 - **Doctors** are archived rather than deleted, so past visits still make sense.
 - **Route plans** can be deleted from the plans list or a plan's page. Completed visits are kept; visits still waiting to happen go with the plan.
 - **Employees** can be deactivated (keeps their history, blocks sign-in) or deleted. Deletion is refused for anyone with recorded visits, and for the last remaining administrator.
+- **Products** are deleted outright if never used, and retired instead once a visit references them, so past sample figures stay accurate.
 
 ## Google Maps setup
 
