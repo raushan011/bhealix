@@ -99,43 +99,52 @@ function DirectoryContent() {
         {doctors.map(doctor => {
           const hasCallTime = Boolean(doctor.callSchedule?.length);
           const hasCoordinates = Boolean(doctor.location?.coordinates?.length);
-          return <Card key={doctor._id} className="flex flex-col p-4">
-            <div className="flex items-start gap-2 border-b border-[var(--line)] pb-3">
-              <MapPin size={15} className="mt-0.5 shrink-0 text-[var(--brand)]" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold">{[doctor.area, doctor.city].filter(Boolean).join(", ") || "Location not set"}</p>
-                {doctor.fullAddress && <p className="truncate text-xs text-[var(--muted)]">{doctor.fullAddress}</p>}
-                {!hasCoordinates && <p className="text-xs text-amber-700">No map coordinates</p>}
-              </div>
+          // Google often fills the full address but leaves area/city blank, so
+          // prefer whichever is actually present instead of claiming no location.
+          const address = doctor.fullAddress
+            || [doctor.area, doctor.city].filter(Boolean).join(", ")
+            || "Address not recorded";
+          const subtitle = [doctor.clinicName, doctor.specialties?.join(", ")]
+            .filter(Boolean).filter((value, index, all) => all.indexOf(value) === index).join(" · ");
+
+          return <Card key={doctor._id} className="flex flex-col p-3.5">
+            <div className="flex items-start justify-between gap-2">
+              <Link href={`/admin/doctors/${doctor._id}`} className="min-w-0 text-[15px] font-semibold leading-snug hover:text-[var(--brand)]">
+                <span className="line-clamp-2">{doctor.name}</span>
+              </Link>
+              <Badge tone={statusTone(doctor.priority)}>{doctor.priority}</Badge>
+            </div>
+            {subtitle && <p className="mt-0.5 truncate text-xs text-[var(--muted)]">{subtitle}</p>}
+
+            <p className="mt-2.5 flex items-start gap-1.5 text-xs leading-relaxed text-[var(--ink-2)]">
+              <MapPin size={13} className="mt-[3px] shrink-0 text-[var(--muted)]" />
+              <span className="line-clamp-2">{address}</span>
+            </p>
+
+            <div className={`mt-2.5 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
+              hasCallTime ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "bg-amber-100 text-amber-900"
+            }`}>
+              <Clock size={13} className="shrink-0" />
+              <span className="truncate">{summariseCallSchedule(doctor.callSchedule)}</span>
             </div>
 
-            <div className="flex-1 pt-3">
-              <div className="flex items-start justify-between gap-2">
-                <Link href={`/admin/doctors/${doctor._id}`} className="min-w-0 truncate text-sm font-semibold hover:text-[var(--brand)]">{doctor.name}</Link>
-                <Badge tone={statusTone(doctor.priority)}>{doctor.priority}</Badge>
-              </div>
-              <p className="mt-0.5 truncate text-xs text-[var(--muted)]">{doctor.specialties?.join(", ") || doctor.clinicName || "—"}</p>
-
-              <div className={`mt-3 flex items-start gap-2 rounded-[10px] px-2.5 py-2 text-xs ${hasCallTime ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "bg-amber-50 text-amber-800"}`}>
-                <Clock size={13} className="mt-0.5 shrink-0" />
-                <span className="font-semibold">{summariseCallSchedule(doctor.callSchedule)}</span>
-              </div>
-
-              <div className="mt-2.5 space-y-1 text-xs text-[var(--ink-2)]">
-                <p className="flex items-center gap-2"><Phone size={12} className="shrink-0 text-[var(--muted)]" />{doctor.phones?.[0] ?? "Not available"}</p>
-                <p className="flex items-center gap-2"><Mail size={12} className="shrink-0 text-[var(--muted)]" /><span className="truncate">{doctor.email ?? "Not available"}</span></p>
-              </div>
+            <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--ink-2)]">
+              <span className="flex items-center gap-1.5"><Phone size={12} className="shrink-0 text-[var(--muted)]" />{doctor.phones?.[0] ?? "No phone"}</span>
+              {doctor.email && <span className="flex min-w-0 items-center gap-1.5"><Mail size={12} className="shrink-0 text-[var(--muted)]" /><span className="truncate">{doctor.email}</span></span>}
+              {!hasCoordinates && <span className="text-amber-800">No map pin</span>}
             </div>
 
-            <div className="mt-3 flex items-center gap-2 border-t border-[var(--line)] pt-3">
-              <button onClick={() => setEditing(doctor)} className="tap flex flex-1 items-center justify-center gap-1.5 rounded-[10px] border border-[var(--line-2)] bg-white text-xs font-semibold hover:bg-[var(--surface-2)]">
-                <Clock size={13} />{hasCallTime ? "Edit call time" : "Add call time"}
+            <div className="mt-3 flex items-center gap-1.5 border-t border-[var(--line)] pt-3">
+              <button onClick={() => setEditing(doctor)}
+                className="flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-[var(--line-2)] bg-white px-2 text-xs font-semibold hover:bg-[var(--surface-2)]">
+                <Clock size={13} />{hasCallTime ? "Call time" : "Add time"}
               </button>
-              <Link href={`/admin/doctors/${doctor._id}`} className="tap flex flex-1 items-center justify-center rounded-[10px] border border-[var(--line-2)] bg-white text-xs font-semibold hover:bg-[var(--surface-2)]">
+              <Link href={`/admin/doctors/${doctor._id}`}
+                className="flex min-h-9 flex-1 items-center justify-center rounded-lg border border-[var(--line-2)] bg-white px-2 text-xs font-semibold hover:bg-[var(--surface-2)]">
                 Details
               </Link>
               <button onClick={() => archive(doctor)} aria-label={`Remove ${doctor.name}`}
-                className="tap grid shrink-0 place-items-center rounded-[10px] text-rose-600 hover:bg-rose-50"><Trash2 size={15} /></button>
+                className="grid size-9 shrink-0 place-items-center rounded-lg text-rose-600 hover:bg-rose-50"><Trash2 size={14} /></button>
             </div>
           </Card>;
         })}

@@ -106,7 +106,7 @@ export default async function AdminDashboard() {
         </Card>
       ) : (
         <Card className="px-5 py-10 text-center">
-          <Users size={24} className="mx-auto text-[#93a29e]" />
+          <Users size={24} className="mx-auto text-[var(--line-2)]" />
           <p className="mt-2 text-sm text-[var(--muted)]">No upcoming plans. Build one to give your team their day.</p>
           <div className="mt-4 flex justify-center"><LinkButton tone="secondary" href="/admin/plans/new">Plan a route</LinkButton></div>
         </Card>

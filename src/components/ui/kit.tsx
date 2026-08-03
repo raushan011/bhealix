@@ -39,12 +39,12 @@ export function PageTitle({ title, subtitle, actions }:
 
 type BadgeTone = "neutral" | "brand" | "success" | "warn" | "danger" | "info";
 const badgeTone: Record<BadgeTone, string> = {
-  neutral: "bg-slate-100 text-slate-700",
-  brand: "bg-[var(--brand-soft)] text-[var(--brand)]",
-  success: "bg-emerald-50 text-emerald-700",
-  warn: "bg-amber-50 text-amber-700",
+  neutral: "bg-[var(--brand-soft)] text-[var(--ink-2)]",
+  brand: "bg-[var(--brand)] text-white",
+  success: "bg-emerald-50 text-emerald-800",
+  warn: "bg-amber-100 text-amber-900",
   danger: "bg-rose-50 text-rose-700",
-  info: "bg-sky-50 text-sky-700"
+  info: "bg-sky-50 text-sky-800"
 };
 export function Badge({ tone = "neutral", children }: { tone?: BadgeTone; children: React.ReactNode }) {
   return <span className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${badgeTone[tone]}`}>{children}</span>;
@@ -89,7 +89,7 @@ export function Notice({ tone = "info", children }: { tone?: "info" | "success" 
 export function EmptyState({ icon: Icon, title, description, action }:
   { icon: React.ComponentType<{ size?: number; className?: string }>; title: string; description?: string; action?: React.ReactNode }) {
   return <div className="card px-6 py-12 text-center">
-    <Icon size={26} className="mx-auto text-[#93a29e]" />
+    <Icon size={26} className="mx-auto text-[var(--line-2)]" />
     <h3 className="mt-3 text-[15px] font-semibold">{title}</h3>
     {description && <p className="mx-auto mt-1 max-w-sm text-sm text-[var(--muted)]">{description}</p>}
     {action && <div className="mt-5 flex justify-center">{action}</div>}
@@ -98,7 +98,7 @@ export function EmptyState({ icon: Icon, title, description, action }:
 
 export function Spinner({ label = "Loading" }: { label?: string }) {
   return <div className="py-16 text-center text-sm text-[var(--muted)]">
-    <Loader2 size={24} className="mx-auto animate-spin text-[#93a29e]" />
+    <Loader2 size={24} className="mx-auto animate-spin text-[var(--line-2)]" />
     <p className="mt-2">{label}</p>
   </div>;
 }

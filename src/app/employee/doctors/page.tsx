@@ -9,7 +9,7 @@ import type { EditableWindow } from "@/components/doctors/call-schedule-editor";
 
 type DoctorRow = {
   _id: string; name: string; clinicName?: string; area?: string; city?: string;
-  phones?: string[]; callSchedule?: EditableWindow[];
+  fullAddress?: string; phones?: string[]; callSchedule?: EditableWindow[];
 };
 
 export default function FieldDoctors() {
@@ -51,7 +51,7 @@ export default function FieldDoctors() {
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold">{doctor.name}</p>
               <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-[var(--muted)]">
-                <MapPin size={11} className="shrink-0" />{[doctor.clinicName, doctor.area, doctor.city].filter(Boolean).join(" · ") || "—"}
+                <MapPin size={11} className="shrink-0" />{[doctor.clinicName, doctor.area, doctor.city].filter(Boolean).join(" · ") || doctor.fullAddress || "Address not recorded"}
               </p>
               <p className={`mt-0.5 flex items-center gap-1 truncate text-xs font-medium ${doctor.callSchedule?.length ? "text-[var(--brand)]" : "text-amber-700"}`}>
                 <Clock size={11} className="shrink-0" />{summariseCallSchedule(doctor.callSchedule)}

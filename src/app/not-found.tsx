@@ -1,3 +1,13 @@
-import Link from "next/link";
 import { SearchX } from "lucide-react";
-export default function NotFound(){return <main className="grid min-h-screen place-items-center px-4 text-center"><div><SearchX className="mx-auto text-[#52716b]" size={36}/><h1 className="mt-4 text-xl font-semibold">Page not found</h1><p className="mt-1 text-sm text-[#697572]">The page may have moved.</p><Link href="/" className="tap mt-5 inline-flex items-center rounded-xl bg-[#173f3a] px-5 text-sm font-semibold text-white">Back home</Link></div></main>}
+import { LinkButton } from "@/components/ui/kit";
+
+export default function NotFound() {
+  return <main className="grid min-h-[100dvh] place-items-center px-5 text-center">
+    <div>
+      <SearchX size={34} className="mx-auto text-[var(--line-2)]" />
+      <h1 className="mt-4 text-xl">Page not found</h1>
+      <p className="mt-1 text-sm text-[var(--muted)]">This page may have moved or never existed.</p>
+      <div className="mt-6 flex justify-center"><LinkButton href="/">Back to the app</LinkButton></div>
+    </div>
+  </main>;
+}
