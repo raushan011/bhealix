@@ -46,12 +46,17 @@ export default function FieldDoctors() {
 
     {!loading && doctors.length > 0 && (
       <div className="space-y-2">
-        {doctors.map(doctor => (
+        {doctors.map(doctor => {
+          // Imported records repeat the doctor name as the clinic name.
+          const clinic = doctor.clinicName && doctor.clinicName !== doctor.name ? doctor.clinicName : null;
+          const place = [clinic, doctor.area, doctor.city].filter(Boolean).join(" · ")
+            || doctor.fullAddress || "Address not recorded";
+          return (
           <Link key={doctor._id} href={`/employee/doctors/${doctor._id}`} className="card flex items-center gap-3 p-3.5 active:bg-[var(--surface-2)]">
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold">{doctor.name}</p>
               <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-[var(--muted)]">
-                <MapPin size={11} className="shrink-0" />{[doctor.clinicName, doctor.area, doctor.city].filter(Boolean).join(" · ") || doctor.fullAddress || "Address not recorded"}
+                <MapPin size={11} className="shrink-0" />{place}
               </p>
               <p className={`mt-0.5 flex items-center gap-1 truncate text-xs font-medium ${doctor.callSchedule?.length ? "text-[var(--brand)]" : "text-amber-700"}`}>
                 <Clock size={11} className="shrink-0" />{summariseCallSchedule(doctor.callSchedule)}
@@ -62,7 +67,8 @@ export default function FieldDoctors() {
             </div>
             <ChevronRight size={16} className="shrink-0 text-[var(--muted)]" />
           </Link>
-        ))}
+          );
+        })}
       </div>
     )}
   </div>;

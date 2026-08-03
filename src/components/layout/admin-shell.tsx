@@ -56,10 +56,11 @@ export function AdminShell({ user, children }: { user: { name: string; role: Rol
     </div>
   );
 
-  return <div className="min-h-[100dvh] lg:grid lg:grid-cols-[248px_1fr]">
-    <aside className="hidden border-r border-[var(--line)] bg-white px-4 py-5 lg:flex lg:flex-col">
+  return <div className="min-h-[100dvh] lg:grid lg:grid-cols-[248px_1fr] lg:items-start">
+    {/* Pinned to the viewport so navigation stays reachable however far the page scrolls. */}
+    <aside className="hidden border-r border-[var(--line)] bg-white px-4 py-5 lg:sticky lg:top-0 lg:flex lg:h-[100dvh] lg:flex-col">
       <div className="px-2"><Brand subtitle="Doctor CRM" /></div>
-      <div className="mt-8 flex-1">{navList}</div>
+      <div className="mt-8 min-h-0 flex-1 overflow-y-auto">{navList}</div>
       {account}
     </aside>
 

@@ -104,8 +104,10 @@ function DirectoryContent() {
           const address = doctor.fullAddress
             || [doctor.area, doctor.city].filter(Boolean).join(", ")
             || "Address not recorded";
-          const subtitle = [doctor.clinicName, doctor.specialties?.join(", ")]
-            .filter(Boolean).filter((value, index, all) => all.indexOf(value) === index).join(" · ");
+          // Imported records often set clinicName to the doctor name; showing it
+          // again under the title just repeats the heading.
+          const clinic = doctor.clinicName && doctor.clinicName !== doctor.name ? doctor.clinicName : null;
+          const subtitle = [clinic, doctor.specialties?.join(", ")].filter(Boolean).join(" · ");
 
           return <Card key={doctor._id} className="flex flex-col p-3.5">
             <div className="flex items-start justify-between gap-2">
