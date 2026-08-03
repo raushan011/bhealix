@@ -1,4 +1,22 @@
 import mongoose from "mongoose";
+
+/**
+ * Registering every schema here means `populate()` always resolves, wherever it
+ * is called from.
+ *
+ * A route that populates a reference it does not itself import otherwise throws
+ * MissingSchemaError — but only on a cold server, because visiting some other
+ * page first happens to register the model. That makes it look like an
+ * intermittent fault rather than a missing import. Every caller already awaits
+ * connectDb(), so this is the one place that fixes it for all of them.
+ */
+import "@/models/User";
+import "@/models/Doctor";
+import "@/models/Visit";
+import "@/models/RoutePlan";
+import "@/models/Catalog";
+import "@/models/Sample";
+
 type Cache = { conn: typeof mongoose | null; promise: Promise<typeof mongoose> | null };
 const globalWithMongoose = globalThis as typeof globalThis & { mongooseCache?: Cache };
 const cache = globalWithMongoose.mongooseCache ?? { conn: null, promise: null };

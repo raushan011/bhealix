@@ -7,7 +7,7 @@ import { ArrowLeft, CalendarDays, Check, Clock, ExternalLink, MapPin, Navigation
 import { Button, Card, Field, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
 import { DoctorPicker, callTimeOn, placeOf, type PickableDoctor } from "@/components/doctors/doctor-picker";
 import { fromExcelRow } from "@/lib/doctors/discovery";
-import { WEEKDAYS, formatDuration, todayIso, toDisplayTime, weekdayOf } from "@/lib/time";
+import { WEEKDAYS, formatDuration, toDateInput, todayIso, toDisplayTime, weekdayOf } from "@/lib/time";
 
 type Stop = {
   sequence: number; doctor: PickableDoctor; distanceFromPreviousKm: number;
@@ -90,7 +90,7 @@ function PlanBuilder() {
         const doctors = ordered.map(stop => stop.doctor).filter((d): d is PickableDoctor => Boolean(d?._id));
 
         setName(plan.name);
-        setDate(new Date(plan.date).toISOString().slice(0, 10));
+        setDate(toDateInput(plan.date));
         setStartTime(plan.startTime ?? "09:30");
         setVisitMinutes(plan.visitMinutes ?? 45);
         setAssignedTo(plan.assignedTo?._id ? String(plan.assignedTo._id) : "");

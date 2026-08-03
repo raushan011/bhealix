@@ -44,6 +44,17 @@ export function weekdayOf(isoDate: string): number {
   return new Date(year, month - 1, day).getDay();
 }
 
+/**
+ * A stored date as "yyyy-mm-dd" in local time.
+ *
+ * Plans are saved at local midnight, so east of UTC `toISOString()` reports the
+ * previous day — reopening a plan would silently walk its date backwards.
+ */
+export function toDateInput(value: string | Date): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 export function todayIso(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
