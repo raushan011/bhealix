@@ -1,15 +1,5 @@
 import { Schema, model, models } from "mongoose";
-
-export const VISIT_OUTCOMES = [
-  "Met doctor",
-  "Met assistant only",
-  "Doctor unavailable",
-  "Clinic closed",
-  "Asked to come later",
-  "Wrong address"
-] as const;
-
-export const INTEREST_LEVELS = ["High", "Medium", "Low", "Not interested"] as const;
+import { INTEREST_LEVELS, VISIT_OUTCOMES } from "@/lib/visits";
 
 const SampleSchema = new Schema({
   product: { type: String, required: true },

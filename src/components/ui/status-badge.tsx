@@ -1,2 +1,0 @@
-const styles: Record<string,string>={Completed:"bg-emerald-50 text-emerald-700",Scheduled:"bg-blue-50 text-blue-700",Pending:"bg-amber-50 text-amber-700",Cancelled:"bg-red-50 text-red-700",Hot:"bg-rose-50 text-rose-700",High:"bg-orange-50 text-orange-700",Medium:"bg-slate-100 text-slate-700",Low:"bg-stone-100 text-stone-600"};
-export function StatusBadge({value}:{value:string}) { return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${styles[value]??"bg-slate-100 text-slate-700"}`}>{value}</span>; }

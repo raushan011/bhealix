@@ -1,18 +1,150 @@
-import { z } from "zod";
-import { fail,ok } from "@/lib/api";
+import { apiSession } from "@/lib/auth/guard";
+import { can } from "@/constants/access";
+import { badRequest, fail, ok } from "@/lib/api";
+import { discoverySchema, type DiscoveredDoctor } from "@/lib/doctors/discovery";
+import { haversineKm } from "@/lib/routing";
 
-const input=z.object({location:z.string().min(2).optional(),latitude:z.number().min(-90).max(90).optional(),longitude:z.number().min(-180).max(180).optional(),radiusKm:z.number().positive().max(100),resultLimit:z.union([z.literal(100),z.literal(200),z.literal(500)]).default(100),terms:z.array(z.string()).min(1).max(5).default(["dermatologist"])}).refine(value=>value.location||(value.latitude!==undefined&&value.longitude!==undefined),"Location is required");
-type Place={id:string;displayName?:{text?:string};formattedAddress?:string;location?:{latitude:number;longitude:number};rating?:number;userRatingCount?:number;nationalPhoneNumber?:string;websiteUri?:string;googleMapsUri?:string;businessStatus?:string;primaryTypeDisplayName?:{text?:string}};
-type SearchResponse={places?:Place[];nextPageToken?:string};
-type SearchResult=Place&{distanceKm:number;category:string};
-type CacheEntry={expires:number;data:{origin:{lat:number;lng:number};items:SearchResult[];searchedZones:number;apiRequests:number;source:string}};
-const globalCache=globalThis as typeof globalThis&{doctorSearchCache?:Map<string,CacheEntry>};
-globalCache.doctorSearchCache??=new Map();
+type Place = {
+  id: string;
+  displayName?: { text?: string };
+  formattedAddress?: string;
+  shortFormattedAddress?: string;
+  location?: { latitude: number; longitude: number };
+  rating?: number;
+  userRatingCount?: number;
+  nationalPhoneNumber?: string;
+  websiteUri?: string;
+  googleMapsUri?: string;
+  addressComponents?: Array<{ longText?: string; types?: string[] }>;
+};
 
-async function resolveCentre(value:z.infer<typeof input>,key:string){if(value.latitude!==undefined&&value.longitude!==undefined)return {lat:value.latitude,lng:value.longitude};const url=new URL("https://maps.googleapis.com/maps/api/geocode/json");url.searchParams.set("address",value.location??"");url.searchParams.set("key",key);const data=await fetch(url,{cache:"no-store"}).then(response=>response.json()) as {status:string;results:Array<{geometry:{location:{lat:number;lng:number}}}>};if(data.status!=="OK"||!data.results[0])throw new Error("Google could not resolve this location");return data.results[0].geometry.location}
-function distanceKm(origin:{lat:number;lng:number},place:{latitude:number;longitude:number}){const earth=6371,dLat=(place.latitude-origin.lat)*Math.PI/180,dLon=(place.longitude-origin.lng)*Math.PI/180;const value=Math.sin(dLat/2)**2+Math.cos(origin.lat*Math.PI/180)*Math.cos(place.latitude*Math.PI/180)*Math.sin(dLon/2)**2;return 2*earth*Math.asin(Math.sqrt(value))}
-function searchPoints(origin:{lat:number;lng:number},radiusKm:number,resultLimit:number){const desiredZones=Math.min(16,Math.max(4,Math.ceil(resultLimit/35)));const points:Array<{lat:number;lng:number}>=[origin];for(let index=1;index<desiredZones;index++){const angle=2*Math.PI*(index-1)/(desiredZones-1);const ringRadius=radiusKm*(index%2===0?.62:.38);const north=Math.cos(angle)*ringRadius;const east=Math.sin(angle)*ringRadius;points.push({lat:origin.lat+north/111,lng:origin.lng+east/(111*Math.max(.2,Math.cos(origin.lat*Math.PI/180)))})}return points}
+const FIELD_MASK = [
+  "places.id", "places.displayName", "places.formattedAddress", "places.shortFormattedAddress",
+  "places.location", "places.rating", "places.userRatingCount", "places.nationalPhoneNumber",
+  "places.websiteUri", "places.googleMapsUri", "places.addressComponents", "nextPageToken"
+].join(",");
 
-async function fetchZone(term:string,point:{lat:number;lng:number},zoneRadiusM:number,key:string,onRequest:()=>void){const collected:Place[]=[];let pageToken:string|undefined;for(let page=0;page<3;page++){const body:Record<string,unknown>={textQuery:term,pageSize:20,locationBias:{circle:{center:{latitude:point.lat,longitude:point.lng},radius:zoneRadiusM}}};if(pageToken)body.pageToken=pageToken;onRequest();const response=await fetch("https://places.googleapis.com/v1/places:searchText",{method:"POST",headers:{"content-type":"application/json","X-Goog-Api-Key":key,"X-Goog-FieldMask":"places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.websiteUri,places.googleMapsUri,places.businessStatus,places.primaryTypeDisplayName,nextPageToken"},body:JSON.stringify(body),cache:"no-store"});if(!response.ok){const detail=await response.text();throw new Error(`Google Places request failed (${response.status}): ${detail.slice(0,180)}`)}const data=await response.json() as SearchResponse;collected.push(...(data.places??[]));pageToken=data.nextPageToken;if(!pageToken)break}return collected}
+type Centre = { lat: number; lng: number };
+type Cached = { expires: number; payload: unknown };
+const cache = globalThis as typeof globalThis & { discoveryCache?: Map<string, Cached> };
+cache.discoveryCache ??= new Map();
 
-export async function POST(req:Request){try{const key=process.env.GOOGLE_MAPS_SERVER_API_KEY;if(!key)return Response.json({error:"Google Maps server API key is not configured"},{status:503});const value=input.parse(await req.json());const cacheKey=JSON.stringify({location:value.location?.toLowerCase(),latitude:value.latitude,longitude:value.longitude,radiusKm:value.radiusKm,resultLimit:value.resultLimit,terms:value.terms});const cached=globalCache.doctorSearchCache?.get(cacheKey);if(cached&&cached.expires>Date.now())return ok({...cached.data,cached:true});const origin=await resolveCentre(value,key);const points=searchPoints(origin,value.radiusKm,value.resultLimit);const zoneRadiusM=Math.min(50000,Math.max(1000,value.radiusKm*1000/Math.max(1,Math.sqrt(points.length))*.9));const results=new Map<string,SearchResult>();let apiRequests=0;outer:for(const term of value.terms){for(const point of points){const places=await fetchZone(term,point,zoneRadiusM,key,()=>apiRequests++);for(const place of places){if(!place.location)continue;const distance=distanceKm(origin,place.location);if(distance<=value.radiusKm&&!results.has(place.id))results.set(place.id,{...place,distanceKm:Number(distance.toFixed(1)),category:term})}if(results.size>=value.resultLimit)break outer}}const data={origin,items:[...results.values()].sort((a,b)=>a.distanceKm-b.distanceKm).slice(0,value.resultLimit),searchedZones:points.length,apiRequests,source:"Google Places API"};globalCache.doctorSearchCache?.set(cacheKey,{expires:Date.now()+10*60*1000,data});return ok({...data,cached:false})}catch(error){return fail(error)}}
+async function geocode(location: string, key: string): Promise<Centre> {
+  const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
+  url.searchParams.set("address", location);
+  url.searchParams.set("key", key);
+  const data = await fetch(url, { cache: "no-store" }).then(r => r.json()) as
+    { status: string; results?: Array<{ geometry: { location: Centre } }> };
+  if (data.status !== "OK" || !data.results?.[0]) throw new Error(`Google could not find "${location}"`);
+  return data.results[0].geometry.location;
+}
+
+/**
+ * One Places call only returns ~20 results near a single point, so a wide radius
+ * is covered by searching a ring of sub-centres and merging by Place ID.
+ */
+function searchCentres(origin: Centre, radiusKm: number, target: number): Centre[] {
+  const zones = Math.min(13, Math.max(1, Math.ceil(target / 40)));
+  if (zones === 1 || radiusKm <= 3) return [origin];
+  const centres: Centre[] = [origin];
+  const kmPerLng = 111 * Math.max(0.2, Math.cos(origin.lat * Math.PI / 180));
+  for (let i = 0; i < zones - 1; i++) {
+    const angle = (2 * Math.PI * i) / (zones - 1);
+    const ring = radiusKm * (i % 2 === 0 ? 0.65 : 0.35);
+    centres.push({ lat: origin.lat + (Math.cos(angle) * ring) / 111, lng: origin.lng + (Math.sin(angle) * ring) / kmPerLng });
+  }
+  return centres;
+}
+
+async function searchZone(term: string, centre: Centre, radiusM: number, key: string) {
+  const places: Place[] = [];
+  let pageToken: string | undefined;
+  for (let page = 0; page < 2; page++) {
+    const body: Record<string, unknown> = {
+      textQuery: term,
+      pageSize: 20,
+      locationBias: { circle: { center: { latitude: centre.lat, longitude: centre.lng }, radius: radiusM } }
+    };
+    if (pageToken) body.pageToken = pageToken;
+    const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Goog-Api-Key": key, "X-Goog-FieldMask": FIELD_MASK },
+      body: JSON.stringify(body),
+      cache: "no-store"
+    });
+    if (!response.ok) throw new Error(`Google Places rejected the request (${response.status})`);
+    const data = await response.json() as { places?: Place[]; nextPageToken?: string };
+    places.push(...(data.places ?? []));
+    pageToken = data.nextPageToken;
+    if (!pageToken) break;
+  }
+  return places;
+}
+
+const component = (place: Place, type: string) =>
+  place.addressComponents?.find(c => c.types?.includes(type))?.longText ?? "";
+
+export async function POST(request: Request) {
+  try {
+    const auth = await apiSession(can.manageDoctors);
+    if ("response" in auth) return auth.response;
+
+    const key = process.env.GOOGLE_MAPS_SERVER_API_KEY;
+    if (!key) return badRequest("Google Maps server API key is not configured", 503);
+
+    const input = discoverySchema.parse(await request.json());
+    const cacheKey = JSON.stringify(input).toLowerCase();
+    const hit = cache.discoveryCache?.get(cacheKey);
+    if (hit && hit.expires > Date.now()) return ok({ ...(hit.payload as object), cached: true });
+
+    const origin = await geocode(input.location, key);
+    const centres = searchCentres(origin, input.radiusKm, input.resultLimit);
+    const zoneRadiusM = Math.min(50000, Math.max(1000, (input.radiusKm * 1000) / Math.sqrt(centres.length)));
+
+    const found = new Map<string, DiscoveredDoctor>();
+    let apiCalls = 0;
+
+    outer: for (const term of input.doctorTypes) {
+      for (const centre of centres) {
+        const places = await searchZone(`${term} in ${input.location}`, centre, zoneRadiusM, key);
+        apiCalls++;
+        for (const place of places) {
+          if (!place.location || found.has(place.id)) continue;
+          const distanceKm = haversineKm(
+            { latitude: origin.lat, longitude: origin.lng },
+            { latitude: place.location.latitude, longitude: place.location.longitude }
+          );
+          if (distanceKm > input.radiusKm) continue;
+          found.set(place.id, {
+            placeId: place.id,
+            name: place.displayName?.text ?? "Unnamed clinic",
+            doctorType: term,
+            address: place.formattedAddress ?? place.shortFormattedAddress ?? "",
+            area: component(place, "sublocality_level_1") || component(place, "sublocality") || component(place, "neighborhood"),
+            city: component(place, "locality") || component(place, "administrative_area_level_2"),
+            phone: place.nationalPhoneNumber ?? "",
+            website: place.websiteUri ?? "",
+            mapsUrl: place.googleMapsUri ?? "",
+            rating: place.rating,
+            reviewCount: place.userRatingCount,
+            latitude: place.location.latitude,
+            longitude: place.location.longitude,
+            distanceKm: Number(distanceKm.toFixed(1))
+          });
+          if (found.size >= input.resultLimit) break outer;
+        }
+      }
+    }
+
+    const payload = {
+      items: [...found.values()].sort((a, b) => a.distanceKm - b.distanceKm),
+      searchedZones: centres.length,
+      apiCalls
+    };
+    cache.discoveryCache?.set(cacheKey, { expires: Date.now() + 10 * 60 * 1000, payload });
+    return ok({ ...payload, cached: false });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Google")) return badRequest(error.message);
+    return fail(error);
+  }
+}

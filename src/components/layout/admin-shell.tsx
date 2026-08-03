@@ -1,14 +1,87 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Bell, CalendarDays, ClipboardCheck, FileBarChart, LayoutDashboard, Route, Search, Settings, Stethoscope, Users, UserRoundCheck, WalletCards } from "lucide-react";
-import { Brand } from "@/components/ui/brand";
-const nav=[["Dashboard",LayoutDashboard,"/admin"],["Doctor search",Search,"/admin/doctors/search"],["Doctor directory",Stethoscope,"/admin/doctors"],["Route planner",Route,"/admin/route-planner"],["Assignments",UserRoundCheck,"/admin/assignments"],["Employees",Users,"/admin/employees"],["Visits",ClipboardCheck,"/admin/visits"],["Follow-ups",CalendarDays,"/admin/follow-ups"],["Orders",WalletCards,"/admin/orders"],["Reports",FileBarChart,"/admin/reports"],["Settings",Settings,"/admin/settings"]] as const;
+import { usePathname, useRouter } from "next/navigation";
+import { BarChart3, CalendarRange, ClipboardList, LayoutDashboard, LogOut, Menu, Search, Stethoscope, Users, X } from "lucide-react";
+import { Brand, BrandMark } from "@/components/ui/brand";
+import { ROLE_LABEL, type Role } from "@/constants/access";
 
-function isActive(pathname:string,href:string){return href==="/admin"?pathname==="/admin":pathname.startsWith(href)}
-function initials(name:string){return name.trim().split(/\s+/).map(part=>part[0]).slice(0,2).join("").toUpperCase()||"?"}
+const NAV = [
+  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, roles: ["ADMIN", "HR"] },
+  { href: "/admin/discover", label: "Find doctors", icon: Search, roles: ["ADMIN"] },
+  { href: "/admin/doctors", label: "Doctors", icon: Stethoscope, roles: ["ADMIN"] },
+  { href: "/admin/plans", label: "Route plans", icon: CalendarRange, roles: ["ADMIN"] },
+  { href: "/admin/visits", label: "Visits", icon: ClipboardList, roles: ["ADMIN"] },
+  { href: "/admin/reports", label: "Reports", icon: BarChart3, roles: ["ADMIN"] },
+  { href: "/admin/team", label: "Team", icon: Users, roles: ["ADMIN", "HR"] }
+] as const;
 
-export function AdminShell({children,user}:{children:React.ReactNode;user:{name:string;role:string}}) {
-  const pathname=usePathname();
-  return <div className="min-h-screen lg:grid lg:grid-cols-[232px_1fr]"><aside className="hidden border-r border-[#dfe5e2] bg-white px-4 py-6 lg:flex lg:flex-col"><div className="px-2"><Brand/></div><nav className="mt-10 space-y-1">{nav.map(([label,Icon,href])=><Link key={label} href={href} className={`tap flex items-center gap-3 rounded-xl px-3 text-sm font-medium ${isActive(pathname,href)?"bg-[#eaf1ef] text-[#173f3a]":"text-[#62706c] hover:bg-[#f4f6f5]"}`}><Icon size={18}/>{label}</Link>)}</nav><div className="mt-auto border-t border-[#e2e7e4] pt-4"><div className="flex items-center gap-3 px-2"><span className="grid size-9 place-items-center rounded-full bg-[#173f3a] text-xs font-bold text-white">{initials(user.name)}</span><div className="min-w-0"><p className="truncate text-sm font-semibold">{user.name}</p><p className="text-xs text-[#73807c]">{user.role[0]+user.role.slice(1).toLowerCase()}</p></div></div></div></aside><div><header className="flex h-16 items-center justify-between border-b border-[#dfe5e2] bg-white px-4 lg:justify-end lg:px-8"><div className="lg:hidden"><Brand/></div><button aria-label="Notifications" className="tap grid place-items-center rounded-xl text-[#60706c] hover:bg-[#f4f6f5]"><Bell size={20}/></button></header><main className="mx-auto max-w-[1240px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main></div></div>; }
+const isActive = (pathname: string, href: string) => href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
+const initials = (name: string) => name.trim().split(/\s+/).map(part => part[0]).slice(0, 2).join("").toUpperCase() || "?";
+
+export function AdminShell({ user, children }: { user: { name: string; role: Role }; children: React.ReactNode }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const items = NAV.filter(item => (item.roles as readonly string[]).includes(user.role));
+
+  async function signOut() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.replace("/login");
+    router.refresh();
+  }
+
+  const navList = (
+    <nav className="space-y-0.5">
+      {items.map(({ href, label, icon: Icon }) => (
+        <Link key={href} href={href} onClick={() => setMenuOpen(false)}
+          className={`tap flex items-center gap-3 rounded-[10px] px-3 text-sm font-medium transition-colors ${
+            isActive(pathname, href) ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "text-[var(--ink-2)] hover:bg-[var(--surface-2)]"
+          }`}>
+          <Icon size={18} className="shrink-0" />{label}
+        </Link>
+      ))}
+    </nav>
+  );
+
+  const account = (
+    <div className="flex items-center gap-3 border-t border-[var(--line)] px-2 pt-4">
+      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-xs font-bold text-white">{initials(user.name)}</span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold">{user.name}</p>
+        <p className="truncate text-xs text-[var(--muted)]">{ROLE_LABEL[user.role]}</p>
+      </div>
+      <button onClick={signOut} aria-label="Sign out" className="tap grid shrink-0 place-items-center rounded-[10px] text-[var(--muted)] hover:bg-[var(--surface-2)]"><LogOut size={17} /></button>
+    </div>
+  );
+
+  return <div className="min-h-[100dvh] lg:grid lg:grid-cols-[248px_1fr]">
+    <aside className="hidden border-r border-[var(--line)] bg-white px-4 py-5 lg:flex lg:flex-col">
+      <div className="px-2"><Brand subtitle="Doctor CRM" /></div>
+      <div className="mt-8 flex-1">{navList}</div>
+      {account}
+    </aside>
+
+    <div className="min-w-0">
+      <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-[var(--line)] bg-white/95 px-3 backdrop-blur lg:hidden">
+        <div className="flex items-center gap-2"><BrandMark size={30} /><span className="text-sm font-bold tracking-[0.14em] text-[var(--brand)]">BHEALIX</span></div>
+        <button onClick={() => setMenuOpen(true)} aria-label="Open menu" className="tap grid place-items-center rounded-[10px] text-[var(--ink-2)]"><Menu size={20} /></button>
+      </header>
+
+      {menuOpen && <div className="fixed inset-0 z-40 lg:hidden">
+        <button aria-label="Close menu" tabIndex={-1} onClick={() => setMenuOpen(false)} className="absolute inset-0 cursor-default bg-black/40" />
+        <div className="relative ml-auto flex h-full w-[80%] max-w-[300px] flex-col bg-white px-4 py-5">
+          <div className="flex items-center justify-between">
+            <Brand subtitle="Doctor CRM" />
+            <button onClick={() => setMenuOpen(false)} aria-label="Close menu" className="tap grid place-items-center rounded-[10px] text-[var(--muted)]"><X size={19} /></button>
+          </div>
+          <div className="mt-7 flex-1 overflow-y-auto">{navList}</div>
+          {account}
+        </div>
+      </div>}
+
+      <main className="mx-auto w-full max-w-[1180px] px-4 py-5 sm:px-6 lg:px-8 lg:py-8">{children}</main>
+    </div>
+  </div>;
+}

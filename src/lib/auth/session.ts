@@ -1,18 +1,31 @@
 import { cookies } from "next/headers";
 import { jwtVerify, SignJWT } from "jose";
-import type { Role, Permission } from "@/constants/access";
-export type Session = { userId: string; role: Role; permissions: Permission[] };
-const key = () => new TextEncoder().encode(process.env.AUTH_SECRET);
+import type { Role } from "@/constants/access";
+
+export const SESSION_COOKIE = "bhealix_session";
+export type Session = { userId: string; name: string; role: Role };
+
+const secret = () => {
+  const value = process.env.AUTH_SECRET;
+  if (!value) throw new Error("AUTH_SECRET is not configured");
+  return new TextEncoder().encode(value);
+};
+
 export async function createSessionToken(session: Session) {
-  const payload = {
-    userId: String(session.userId),
-    role: String(session.role),
-    permissions: Array.from(session.permissions ?? [], permission => String(permission))
-  };
-  return new SignJWT(payload).setProtectedHeader({ alg:"HS256" }).setIssuedAt().setExpirationTime("8h").sign(key());
+  return new SignJWT({ userId: session.userId, name: session.name, role: session.role })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("12h")
+    .sign(secret());
 }
+
 export async function getSession(): Promise<Session | null> {
-  const token = (await cookies()).get("bhealix_session")?.value;
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token || !process.env.AUTH_SECRET) return null;
-  try { const { payload } = await jwtVerify(token, key()); return payload as unknown as Session; } catch { return null; }
+  try {
+    const { payload } = await jwtVerify(token, secret());
+    return { userId: String(payload.userId), name: String(payload.name), role: payload.role as Role };
+  } catch {
+    return null;
+  }
 }

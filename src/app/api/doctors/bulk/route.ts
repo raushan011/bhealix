@@ -1,9 +1,87 @@
 import { z } from "zod";
 import { connectDb } from "@/lib/db/mongoose";
 import { Doctor } from "@/models/Doctor";
-import { fail,ok } from "@/lib/api";
+import { apiSession } from "@/lib/auth/guard";
+import { can } from "@/constants/access";
+import { fail, ok } from "@/lib/api";
 
-const itemSchema=z.object({googlePlaceId:z.string().min(2).optional(),name:z.string().min(2),doctorType:z.string().min(2),fullAddress:z.string().default(""),phone:z.string().default(""),email:z.string().default(""),website:z.string().default(""),googleMapsUrl:z.string().default(""),latitude:z.number().min(-90).max(90).optional(),longitude:z.number().min(-180).max(180).optional(),rating:z.number().min(0).max(5).optional(),reviewCount:z.number().int().min(0).optional(),distanceKm:z.number().min(0).max(100).optional()});
-const schema=z.object({doctors:z.array(itemSchema).min(1).max(500)});
+const itemSchema = z.object({
+  googlePlaceId: z.string().optional(),
+  name: z.string().min(2),
+  specialty: z.string().default(""),
+  clinicName: z.string().default(""),
+  phone: z.string().default(""),
+  email: z.string().default(""),
+  fullAddress: z.string().default(""),
+  area: z.string().default(""),
+  city: z.string().default(""),
+  googleMapsUrl: z.string().default(""),
+  rating: z.number().min(0).max(5).optional(),
+  reviewCount: z.number().int().min(0).optional(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  source: z.enum(["Google", "Excel", "Manual"]).default("Google")
+});
 
-export async function POST(req:Request){try{const {doctors}=schema.parse(await req.json());await connectDb();let created=0,updated=0;const ids:string[]=[];for(const value of doctors){const existing=value.googlePlaceId?await Doctor.findOne({googlePlaceId:value.googlePlaceId}):await Doctor.findOne({name:value.name,fullAddress:value.fullAddress});const set:Record<string,unknown>={name:value.name,doctorTypes:[value.doctorType],specialties:[value.doctorType],clinicName:value.name,fullAddress:value.fullAddress,phones:value.phone?[value.phone]:[],email:value.email||undefined,website:value.website,googleMapsUrl:value.googleMapsUrl,googlePlaceId:value.googlePlaceId,rating:value.rating,reviewCount:value.reviewCount,dataSource:value.googlePlaceId?"Google Places API":"Excel upload",lastSyncedAt:new Date()};if(value.latitude!==undefined&&value.longitude!==undefined)set.location={type:"Point",coordinates:[value.longitude,value.latitude]};if(existing){existing.set(set);await existing.save();updated++;ids.push(String(existing._id));continue}const count=await Doctor.countDocuments();const code=value.googlePlaceId?`BHG-${value.googlePlaceId.replace(/[^a-zA-Z0-9]/g,"").slice(-14)}`:`BHX-${String(count+1).padStart(5,"0")}`;const doctor=await Doctor.create({...set,code,priority:"Medium",stage:"New",status:"Active"});created++;ids.push(String(doctor._id))}return ok({created,updated,total:doctors.length,ids},201)}catch(e){return fail(e)}}
+const schema = z.object({ doctors: z.array(itemSchema).min(1).max(500) });
+
+/**
+ * Saves a batch of discovered doctors. Existing records are updated rather than
+ * duplicated — matched on Google Place ID when present, otherwise on name and
+ * address — and an existing call schedule is never overwritten by an import.
+ */
+export async function POST(request: Request) {
+  try {
+    const auth = await apiSession(can.manageDoctors);
+    if ("response" in auth) return auth.response;
+    const { doctors } = schema.parse(await request.json());
+    await connectDb();
+
+    let created = 0, updated = 0;
+    const savedIds: string[] = [];
+    let sequence = await Doctor.estimatedDocumentCount();
+
+    for (const value of doctors) {
+      const match = value.googlePlaceId
+        ? { googlePlaceId: value.googlePlaceId }
+        : { name: value.name, fullAddress: value.fullAddress };
+
+      const fields: Record<string, unknown> = {
+        name: value.name,
+        clinicName: value.clinicName || value.name,
+        specialties: value.specialty ? [value.specialty] : [],
+        phones: value.phone ? [value.phone] : [],
+        fullAddress: value.fullAddress,
+        area: value.area,
+        city: value.city,
+        googleMapsUrl: value.googleMapsUrl,
+        rating: value.rating,
+        reviewCount: value.reviewCount,
+        source: value.source
+      };
+      if (value.email) fields.email = value.email;
+      if (value.googlePlaceId) fields.googlePlaceId = value.googlePlaceId;
+      if (value.latitude !== undefined && value.longitude !== undefined) {
+        fields.location = { type: "Point", coordinates: [value.longitude, value.latitude] };
+      }
+
+      const existing = await Doctor.findOne(match);
+      if (existing) {
+        existing.set(fields);
+        await existing.save();
+        updated++;
+        savedIds.push(String(existing._id));
+        continue;
+      }
+
+      sequence++;
+      const doctor = await Doctor.create({ ...fields, code: `BHX-${String(sequence).padStart(5, "0")}` });
+      created++;
+      savedIds.push(String(doctor._id));
+    }
+
+    return ok({ created, updated, total: doctors.length, savedIds }, 201);
+  } catch (error) {
+    return fail(error);
+  }
+}

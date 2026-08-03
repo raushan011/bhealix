@@ -1,8 +1,13 @@
 export const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
 export const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
-/** "14:30" -> 870 minutes past midnight. Returns null for anything unparseable. */
-export function toMinutes(time: string): number | null {
+/**
+ * "14:30" -> 870 minutes past midnight. Returns null for anything unparseable,
+ * including missing values — records written before a field existed still flow
+ * through these helpers, so they must not throw on undefined.
+ */
+export function toMinutes(time: string | null | undefined): number | null {
+  if (typeof time !== "string") return null;
   const match = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
   if (!match) return null;
   const hours = Number(match[1]), minutes = Number(match[2]);
@@ -17,9 +22,9 @@ export function toClock(minutes: number): string {
 }
 
 /** "14:30" -> "2:30 PM" for display; field staff read 12-hour time. */
-export function toDisplayTime(time: string): string {
+export function toDisplayTime(time: string | null | undefined): string {
   const minutes = toMinutes(time);
-  if (minutes === null) return time;
+  if (minutes === null) return time ?? "—";
   const hours = Math.floor(minutes / 60), mins = minutes % 60;
   const suffix = hours >= 12 ? "PM" : "AM";
   const hour12 = hours % 12 === 0 ? 12 : hours % 12;

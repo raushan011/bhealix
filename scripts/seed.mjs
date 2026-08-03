@@ -1,184 +1,148 @@
+/**
+ * Prepares the database for the BHEALIX CRM.
+ *
+ * Safe to run repeatedly and safe to run against real data: it never deletes
+ * doctors. It creates the demo accounts and product catalogue, then migrates
+ * any call timings held in the old `mrcallschedules` collection into the
+ * `callSchedule` field the app now reads.
+ */
+import fs from "node:fs";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
-import fs from "node:fs";
-const uri = fs
-  .readFileSync(".env.local", "utf8")
-  .split(/\r?\n/)
-  .find((x) => x.startsWith("MONGODB_URI="))
-  ?.slice(12);
-if (!uri) throw new Error("MONGODB_URI missing");
+
+function readEnv(key) {
+  for (const file of [".env.local", ".env"]) {
+    if (!fs.existsSync(file)) continue;
+    const line = fs.readFileSync(file, "utf8").split(/\r?\n/).find(row => row.startsWith(`${key}=`));
+    if (line) return line.slice(key.length + 1).trim();
+  }
+  return process.env[key];
+}
+
+const uri = readEnv("MONGODB_URI");
+if (!uri) throw new Error("MONGODB_URI is not set in .env.local");
+
 await mongoose.connect(uri);
 const db = mongoose.connection;
-const hash = await bcrypt.hash("Bhealix@123", 12);
+console.log(`Connected to ${db.name}`);
+
+// ---------------------------------------------------------------- accounts
+const password = process.env.SEED_PASSWORD ?? "Bhealix@123";
+const passwordHash = await bcrypt.hash(password, 12);
+
 const accounts = [
-  {
-    employeeId: "BHL-ADMIN",
-    name: "Ananya Mehta",
-    email: "admin@bhealix.test",
-    role: "ADMIN",
-  },
-  {
-    employeeId: "BHL-MR01",
-    name: "Rohan Shah",
-    email: "mr@bhealix.test",
-    role: "MR",
-  },
-  {
-    employeeId: "BHL-MR02",
-    name: "Nisha Jain",
-    email: "mr2@bhealix.test",
-    role: "MR",
-  },
-  {
-    employeeId: "BHL-HR01",
-    name: "Neha Singh",
-    email: "hr@bhealix.test",
-    role: "HR",
-  },
-  {
-    employeeId: "BHL-SALES01",
-    name: "Vikram Rao",
-    email: "sales@bhealix.test",
-    role: "SALES",
-  },
+  { employeeId: "BHX-ADMIN", name: "Ananya Mehta", email: "admin@bhealix.test", role: "ADMIN" },
+  { employeeId: "BHX-HR01", name: "Neha Singh", email: "hr@bhealix.test", role: "HR" },
+  { employeeId: "BHX-MR01", name: "Rohan Shah", email: "mr@bhealix.test", role: "MR" },
+  { employeeId: "BHX-MR02", name: "Nisha Jain", email: "mr2@bhealix.test", role: "MR" },
+  { employeeId: "BHX-SL01", name: "Vikram Rao", email: "sales@bhealix.test", role: "SALES" }
 ];
-for (const account of accounts)
-  await db
-    .collection("users")
-    .updateOne(
-      { email: account.email },
-      {
-        $set: {
-          ...account,
-          passwordHash: hash,
-          permissions: [],
-          active: true,
-          updatedAt: new Date(),
-        },
-        $setOnInsert: { createdAt: new Date() },
-      },
-      { upsert: true },
-    );
-const users = await db
-  .collection("users")
-  .find({ email: { $in: accounts.map((x) => x.email) } })
-  .toArray();
-const mr = users.find((x) => x.role === "MR"),
-  sales = users.find((x) => x.role === "SALES");
-const names = [
-  "Mira Iyer",
-  "Arun Khanna",
-  "Saloni Das",
-  "Isha Kapoor",
-  "Ritu Sharma",
-  "Aman Verma",
-  "Nisha Jain",
-  "Karan Patel",
-  "Divya Menon",
-  "Sameer Rao",
-];
-for (let i = 0; i < 30; i++)
-  await db
-    .collection("doctors")
-    .updateOne(
-      { code: `BHD-${String(i + 1).padStart(5, "0")}` },
-      {
-        $set: {
-          name: `Dr. ${names[i % names.length]}`,
-          specialties: [i % 3 === 0 ? "Dermatology" : "General Medicine"],
-          doctorTypes: [i % 3 === 0 ? "Dermatologist" : "General physician"],
-          clinicName: `${["Glow Skin", "Care Point", "Aster", "Derma Plus"][i % 4]} Clinic`,
-          phones: [`+9190000${String(i).padStart(5, "0")}`],
-          city: ["Bengaluru", "Mumbai", "Delhi", "Pune"][i % 4],
-          area: ["Indiranagar", "Andheri", "Saket", "Koregaon Park"][i % 4],
-          priority: ["Hot", "High", "Medium", "Low"][i % 4],
-          stage: ["New", "Assigned", "Visited", "Interested"][i % 4],
-          status: "Active",
-          dataSource: "Seed",
-          treatsSkinProblems: i % 3 === 0,
-          assignedTo: i % 2 === 0 ? mr?._id : sales?._id,
-          updatedAt: new Date(),
-        },
-        $setOnInsert: {
-          code: `BHD-${String(i + 1).padStart(5, "0")}`,
-          createdAt: new Date(),
-        },
-      },
-      { upsert: true },
-    );
-for (const name of ["Noida", "Delhi NCR", "Ghaziabad"])
-  await db
-    .collection("territories")
-    .updateOne(
-      { name },
-      {
-        $set: { cities: [name], active: true, updatedAt: new Date() },
-        $setOnInsert: { createdAt: new Date() },
-      },
-      { upsert: true },
-    );
-for (const [i, category] of [
-  "Face wash",
-  "Face serum",
-  "Toner",
-  "Moisturizer",
-  "Sunscreen",
-].entries())
-  await db
-    .collection("products")
-    .updateOne(
-      { sku: `BHL-${i + 1}` },
-      {
-        $set: {
-          name: `BHEALIX ${category}`,
-          category,
-          active: true,
-          sampleAvailable: true,
-          price: 299 + i * 100,
-          updatedAt: new Date(),
-        },
-        $setOnInsert: { sku: `BHL-${i + 1}`, createdAt: new Date() },
-      },
-      { upsert: true },
-    );
-const doctors = await db.collection("doctors").find().limit(6).toArray();
-for (const [i, doctor] of doctors.entries()) {
-  await db
-    .collection("mrcallschedules")
-    .updateOne(
-      { doctor: doctor._id, clinic: null, weekday: (i + 1) % 7 },
-      {
-        $set: {
-          allowed: true,
-          slots: [{ start: "14:00", end: "16:00" }],
-          appointmentRequired: i % 2 === 0,
-          lastVerifiedAt: new Date(),
-          updatedAt: new Date(),
-        },
-        $setOnInsert: { createdAt: new Date() },
-      },
-      { upsert: true },
-    );
-  if (mr)
-    await db
-      .collection("assignments")
-      .updateOne(
-        {
-          doctor: doctor._id,
-          employee: mr._id,
-          date: new Date(new Date().setHours(0, 0, 0, 0)),
-        },
-        {
-          $set: {
-            scheduledTime: `${10 + i}:00`,
-            status: "Scheduled",
-            recurrence: "None",
-            updatedAt: new Date(),
-          },
-          $setOnInsert: { createdAt: new Date() },
-        },
-        { upsert: true },
-      );
+
+for (const account of accounts) {
+  await db.collection("users").updateOne(
+    { email: account.email },
+    {
+      $set: { ...account, active: true, updatedAt: new Date() },
+      // Only set the password when the account is first created, so a real
+      // password chosen later is never silently reset by re-seeding.
+      $setOnInsert: { passwordHash, createdAt: new Date() }
+    },
+    { upsert: true }
+  );
 }
-console.log("Seed complete: admin@bhealix.test / Bhealix@123");
+console.log(`${accounts.length} accounts ready`);
+
+// ---------------------------------------------------------------- products
+const products = [
+  { name: "BHEALIX Gentle Face Wash", category: "Cleanser" },
+  { name: "BHEALIX Vitamin C Serum", category: "Serum" },
+  { name: "BHEALIX Hydrating Moisturiser", category: "Moisturiser" },
+  { name: "BHEALIX Mineral Sunscreen SPF 50", category: "Sun care" },
+  { name: "BHEALIX Acne Control Gel", category: "Treatment" },
+  { name: "BHEALIX Anti-Pigmentation Cream", category: "Treatment" },
+  { name: "BHEALIX Hair Fall Tonic", category: "Hair care" }
+];
+
+for (const product of products) {
+  await db.collection("products").updateOne(
+    { name: product.name },
+    { $set: { ...product, sampleAvailable: true, active: true, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
+    { upsert: true }
+  );
+}
+console.log(`${products.length} products ready`);
+
+// ------------------------------------------------- migrate old call timings
+const collections = await db.db.listCollections({ name: "mrcallschedules" }).toArray();
+if (collections.length) {
+  const legacy = await db.collection("mrcallschedules").find().toArray();
+  const byDoctor = new Map();
+
+  for (const row of legacy) {
+    if (!row.doctor || !Array.isArray(row.slots) || !row.slots.length) continue;
+    const key = String(row.doctor);
+    const windows = byDoctor.get(key) ?? [];
+    windows.push({
+      weekday: row.weekday,
+      slots: row.slots.filter(slot => slot?.start && slot?.end).map(slot => ({ start: slot.start, end: slot.end })),
+      appointmentRequired: Boolean(row.appointmentRequired),
+      remarks: row.instructions ?? "",
+      updatedAt: row.updatedAt ?? new Date()
+    });
+    byDoctor.set(key, windows);
+  }
+
+  let migrated = 0;
+  for (const [doctorId, windows] of byDoctor) {
+    const usable = windows.filter(window => window.slots.length);
+    if (!usable.length) continue;
+    const result = await db.collection("doctors").updateOne(
+      { _id: new mongoose.Types.ObjectId(doctorId), $or: [{ callSchedule: { $exists: false } }, { callSchedule: { $size: 0 } }] },
+      { $set: { callSchedule: usable, callTimeVerifiedAt: new Date() } }
+    );
+    migrated += result.modifiedCount;
+  }
+  console.log(`Migrated call timings for ${migrated} doctor(s) from the old collection`);
+} else {
+  console.log("No legacy call-time collection found — nothing to migrate");
+}
+
+// --------------------------------------------------- normalise doctor state
+// Older records used lead stages that no longer exist. Map them to the closest
+// current meaning rather than discarding what was already known about a lead.
+const validStages = ["New", "Contacted", "Interested", "Prescribing", "Not interested"];
+const stageMap = { Visited: "Contacted", Assigned: "New", Unverified: "New", Converted: "Prescribing" };
+
+let stageFixCount = 0;
+for (const [oldStage, newStage] of Object.entries(stageMap)) {
+  const result = await db.collection("doctors").updateMany({ stage: oldStage }, { $set: { stage: newStage } });
+  stageFixCount += result.modifiedCount;
+}
+// Anything still unrecognised falls back to the start of the funnel.
+const remaining = await db.collection("doctors").updateMany(
+  { stage: { $nin: validStages } },
+  { $set: { stage: "New" } }
+);
+stageFixCount += remaining.modifiedCount;
+const statusFix = await db.collection("doctors").updateMany(
+  { status: { $nin: ["Active", "Archived"] } },
+  { $set: { status: "Active" } }
+);
+const scheduleFix = await db.collection("doctors").updateMany(
+  { callSchedule: { $exists: false } },
+  { $set: { callSchedule: [] } }
+);
+console.log(`Normalised ${stageFixCount} stages, ${statusFix.modifiedCount} statuses, ${scheduleFix.modifiedCount} schedules`);
+
+const totals = {
+  doctors: await db.collection("doctors").countDocuments(),
+  withCallTime: await db.collection("doctors").countDocuments({ "callSchedule.0": { $exists: true } }),
+  withLocation: await db.collection("doctors").countDocuments({ "location.coordinates": { $exists: true, $ne: null } })
+};
+
+console.log("\nReady.");
+console.log(`  Doctors: ${totals.doctors} (${totals.withCallTime} with call time, ${totals.withLocation} with coordinates)`);
+console.log(`  Sign in: admin@bhealix.test / ${password}`);
+console.log("  Change these credentials before going live.\n");
+
 await mongoose.disconnect();

@@ -1,67 +1,89 @@
-# BHEALIX Doctor CRM
+# BHEALIX CRM
 
-Mobile-first doctor discovery, relationship management, MR scheduling, assignments and field-visit application for BHEALIX.
+Doctor discovery, MR call scheduling, route planning and field visit tracking for BHEALIX, a skincare brand.
 
-## Stack and architecture
+Built for phones first — reps use it standing in a clinic corridor — and equally usable on a desktop for the admin team.
 
-Next.js App Router, strict TypeScript, Tailwind CSS, MongoDB/Mongoose, signed HTTP-only JWT sessions, Zod, bcrypt, Google Maps Platform, SheetJS, Recharts and Vitest. Pages call protected Next.js route handlers; server models and secrets never enter client bundles. MongoDB connections are reused for serverless deployment.
+## What it does
 
-Core models include User, Doctor, Clinic, Territory, Product, MrCallSchedule, Assignment, Visit, FollowUp, Order, SavedSearch, AuditEvent and AppSetting. Doctor and Clinic locations use GeoJSON `[longitude, latitude]` with `2dsphere` indexes.
+**Phase 1 — build the doctor base**
+- Search any location (city, area or PIN code) within a 100 km radius for skin specialists, using Google Places.
+- Filter by doctor type: dermatologist, cosmetologist, trichologist, acne/pigmentation specialist and more.
+- Save results to the directory, export the whole directory to Excel, and upload an edited sheet back.
+- Record each doctor's **MR call time**: which days they see representatives, the exact time slots, whether an appointment is needed, and any remarks.
 
-## Setup
+**Route planning built around call times**
+- Pick a date, a starting doctor, and the doctors to visit.
+- The route is ordered by **call time first and distance second**. A doctor who only sees reps from 2–4 PM will not be scheduled for 10 AM however close they are.
+- Every stop gets a planned arrival time. Doctors who cannot be reached inside their window are flagged rather than silently misplaced.
+- Assign the plan to an MR or sales executive; their day is created automatically.
 
-1. Use Node.js 20+ and create a MongoDB Atlas database.
-2. Copy `.env.example` to `.env.local` and configure MongoDB, random 32+ character secrets and Google keys.
-3. Run `npm install`.
-4. Run `npm run seed`.
-5. Run `npm run dev` and open `http://localhost:3000/login`.
+**Field work**
+- The rep opens the app to today's route in visiting order, with call times, addresses, one-tap call and directions.
+- Check in (captures location), then log the outcome, products discussed, samples given with quantities, the doctor's interest, order value, notes and a follow-up date.
+- If the doctor gives a different call timing, the rep corrects it on the spot — future route plans use it immediately.
 
-Development Admin: `admin@bhealix.test` / `Bhealix@123`. MR, HR and Sales accounts use `mr@bhealix.test`, `mr2@bhealix.test`, `hr@bhealix.test`, and `sales@bhealix.test` with the same password. Never retain these credentials in production.
-
-## Google Cloud setup
-
-Enable Places API (New), Geocoding API, Maps JavaScript API and Routes API. Use separate keys:
-
-- Browser key: restrict to your local and production HTTP referrers; enable Maps JavaScript only.
-- Server key: restrict by server environment where supported; enable Places and Geocoding only.
-
-Set `GOOGLE_MAPS_SERVER_API_KEY` and `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`. Large-radius discovery uses multiple search centres, merges by Google Place ID, calculates real distance and enforces a maximum of 100 km. Google coverage is not guaranteed to be exhaustive, and missing contact data is never fabricated.
-
-## Excel workflow
-
-Admin can import `.xlsx`, `.xls` or `.csv` files up to 5 MB. Rows are validated, duplicates are checked by code or doctor/clinic identity, invalid rows are reported, and valid records are saved. Export produces a current non-archived doctor workbook. Use headings such as Doctor Name, Doctor Code, Specialty, Clinic Name, Mobile Number, Area, City, Priority and Lead Status.
+**Admin tracking**
+- Every visit with its outcome, samples and notes.
+- Reports: completion rate per representative, sample distribution by product, visit outcomes and doctor interest.
 
 ## Roles
 
-- ADMIN: full management, discovery, imports/exports, reporting and settings.
-- MR: assigned doctors, field visits, notes, follow-ups and interests.
-- SALES: assigned doctors, opportunities, orders and area activity.
-- HR: employee management and basic visit activity; no confidential commercial fields.
+| | Admin | HR | MR | Sales |
+|---|:---:|:---:|:---:|:---:|
+| Doctor directory and discovery | ✓ | | | |
+| Route planning and assignment | ✓ | | | |
+| Reports | ✓ | | | |
+| Employee management | ✓ | ✓ | | |
+| Own daily route and visits | | | ✓ | ✓ |
+| Update a doctor's call time | ✓ | | ✓ | ✓ |
 
-Middleware protects both panels and APIs. APIs additionally enforce ownership for visit check-in/out. Passwords use bcrypt cost 12; session cookies are HTTP-only, SameSite Lax and Secure in production.
+Admin and HR use the desktop panel at `/admin`; MR and Sales use the mobile panel at `/employee`. Middleware keeps each role in its own panel, and every API route re-checks permission on the server — the UI never decides access on its own.
+
+## Setup
+
+1. Node.js 20+ and a MongoDB database.
+2. Copy `.env.example` to `.env.local` and fill it in.
+3. `npm install`
+4. `npm run seed`
+5. `npm run dev`, then open `http://localhost:3000/login`
+
+Seed accounts (password `Bhealix@123`): `admin@bhealix.test`, `hr@bhealix.test`, `mr@bhealix.test`, `sales@bhealix.test`. **Change these before going live.**
+
+`npm run seed` is safe to re-run against real data: it never deletes doctors, never resets an existing password, and migrates call timings from the older `mrcallschedules` collection into each doctor record.
+
+## Google Maps setup
+
+Enable **Places API (New)** and **Geocoding API**, then set `GOOGLE_MAPS_SERVER_API_KEY`. Restrict the key to those two APIs.
+
+A wide-radius search covers ground by querying a ring of sub-centres and merging results by Place ID, because one Places call only returns about 20 results near a single point. Google does not publish an email for most clinics and often no phone — those fields show "Not available" rather than being invented.
 
 ## Commands
 
 ```bash
-npm run dev
-npm run seed
+npm run dev        # development server
+npm run seed       # accounts, products, and call-time migration
 npm run typecheck
 npm run lint
 npm test
 npm run build
 ```
 
+## How the route ordering works
+
+`src/lib/routing.ts`. From the starting doctor the planner repeatedly looks at every doctor not yet visited, works out when the meeting could actually begin given travel time and that doctor's call window, and takes whoever can be seen soonest — breaking ties by distance so nearby doctors sharing a window stay together. Waiting for a window to open is allowed; arriving after it closes is not, and those stops are reported as conflicts.
+
+This is a greedy heuristic, not a proven optimum. It will occasionally leave a doctor unreachable when a different order would have fitted everyone. It always says so rather than quietly scheduling an impossible visit, and the fix is usually an earlier start, shorter visits, or moving that doctor to another day.
+
+Travel time is estimated from straight-line distance at 25 km/h, so it is a planning aid, not live traffic.
+
+## Known limitations
+
+- Google Places cannot guarantee every doctor in an area, and rarely provides email addresses.
+- Doctors need latitude and longitude to appear in a route plan. Google-sourced records have them; manually added ones need coordinates entered.
+- Password reset is administrator-assisted; there is no reset email until a mail provider is configured.
+- Excel import runs inline, so very large sheets are best split.
+
 ## Deployment
 
-Deploy to Vercel with MongoDB Atlas. Configure all production environment variables in Vercel, rotate seed credentials, restrict Google keys to production domains/APIs, restrict Atlas network/database users, and run the production build before release. Do not commit `.env.local`.
-
-## Troubleshooting
-
-- Login failure: run `npm run seed`, confirm `AUTH_SECRET`, then clear old cookies.
-- Empty Google search: configure the server key and confirm Places API (New) and Geocoding billing/access.
-- Atlas timeout: verify the database user, password, IP access list and URI database name.
-- Old routes after edits: stop the dev server, remove `.next`, and restart.
-
-## Genuine limitations
-
-Google Places cannot guarantee every doctor or private phone number. The current import executes validated rows immediately rather than maintaining a long-running background import job. Production password email delivery requires an email provider; without one, password recovery is administrator-assisted. Object-storage-backed photos require a configured storage provider.
+Deploy to Vercel with MongoDB Atlas. Set every environment variable in the Vercel project, rotate the seed passwords, restrict the Google key to your production APIs, lock down the Atlas network access list, and run `npm run build` before release. Never commit `.env.local`.

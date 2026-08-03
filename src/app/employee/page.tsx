@@ -1,68 +1,132 @@
 import Link from "next/link";
-import { startOfDay,endOfDay } from "date-fns";
-import { CalendarDays, Check, ChevronRight, Clock3, MapPin, Navigation, Phone, Play, RotateCcw } from "lucide-react";
-import { requireAuth } from "@/lib/auth/authorize";
+import { CalendarCheck, ChevronRight, Clock, MapPin, Navigation, Phone, Route } from "lucide-react";
+import { requireFieldPanel } from "@/lib/auth/guard";
 import { connectDb } from "@/lib/db/mongoose";
-import { User } from "@/models/User";
-import { Assignment,FollowUp } from "@/models/CRM";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { haversineKm } from "@/lib/routePlanning";
+import { Visit } from "@/models/Visit";
+import { RoutePlan } from "@/models/RoutePlan";
+import { Badge, Card, EmptyState, PageTitle, statusTone } from "@/components/ui/kit";
+import { formatDate, toDisplayTime, WEEKDAYS } from "@/lib/time";
+import { callTimeOn } from "@/components/doctors/doctor-picker";
+import type { EditableWindow } from "@/components/doctors/call-schedule-editor";
 
-type DoctorRef={_id:unknown;name:string;clinicName?:string;area?:string;city?:string;priority?:string;location?:{coordinates?:number[]}};
-type AssignmentRow={_id:unknown;scheduledTime?:string;status:string;doctor?:DoctorRef};
+export const dynamic = "force-dynamic";
 
-function greeting(hour:number){return hour<12?"Good morning":hour<17?"Good afternoon":"Good evening"}
+type VisitDoc = {
+  _id: unknown; plannedStart?: string; status: string;
+  doctor?: {
+    _id: unknown; name?: string; clinicName?: string; area?: string; city?: string;
+    phones?: string[]; fullAddress?: string; location?: { coordinates?: number[] }; callSchedule?: EditableWindow[];
+  };
+};
+type PlanDoc = { _id: unknown; name: string; totalDistanceKm: number; stops: unknown[] };
 
-export default async function EmployeeDashboard(){
-  const session=await requireAuth();
+export default async function TodayPage() {
+  const session = await requireFieldPanel();
   await connectDb();
-  const now=new Date();
-  const [user,assignments,followUpsDue]=await Promise.all([
-    User.findById(session.userId).select("name").lean() as Promise<{name:string}|null>,
-    Assignment.find({employee:session.userId,date:{$gte:startOfDay(now),$lte:endOfDay(now)}}).populate("doctor","name clinicName area city priority location").sort({scheduledTime:1}).lean() as unknown as Promise<AssignmentRow[]>,
-    FollowUp.countDocuments({employee:session.userId,status:"Pending",dueAt:{$lte:endOfDay(now)}})
+
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const end = new Date(); end.setHours(23, 59, 59, 999);
+  const weekday = new Date().getDay();
+
+  const [visits, plan] = await Promise.all([
+    Visit.find({ employee: session.userId, plannedDate: { $gte: start, $lte: end } })
+      .populate("doctor", "name clinicName area city phones fullAddress location callSchedule")
+      .sort({ plannedStart: 1 }).lean() as unknown as Promise<VisitDoc[]>,
+    RoutePlan.findOne({ assignedTo: session.userId, date: { $gte: start, $lte: end } })
+      .select("name totalDistanceKm stops").lean() as Promise<PlanDoc | null>
   ]);
 
-  const completed=assignments.filter(a=>a.status==="Completed").length;
-  const total=assignments.length;
-  const progress=total?Math.round((completed/total)*100):0;
-  const upNext=assignments.find(a=>a.status!=="Completed"&&a.status!=="Cancelled");
+  const done = visits.filter(visit => visit.status === "Completed" || visit.status === "Missed").length;
+  const progress = visits.length ? Math.round((done / visits.length) * 100) : 0;
+  const next = visits.find(visit => visit.status === "Planned" || visit.status === "In progress");
 
-  let previousLocation:{latitude:number;longitude:number}|undefined;
-  const rows=assignments.map(assignment=>{
-    const coordinates=assignment.doctor?.location?.coordinates;
-    const location=coordinates?.length===2?{latitude:coordinates[1],longitude:coordinates[0]}:undefined;
-    const distance=location&&previousLocation?`${haversineKm(previousLocation,location).toFixed(1)} km`:"—";
-    if(location)previousLocation=location;
-    return {assignment,distance};
-  });
+  return <div className="space-y-4">
+    <PageTitle title={`Good day, ${session.name.split(" ")[0]}`} subtitle={formatDate(new Date())} />
 
-  return <div className="space-y-6">
-    <div><p className="text-sm text-[#6c7975]">{now.toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long"})}</p><h1 className="mt-1 text-2xl font-semibold">{greeting(now.getHours())}, {user?.name?.split(" ")[0]??"there"}</h1></div>
-
-    <section className="surface flex items-center justify-between p-4">
-      <div><p className="text-xs font-medium text-[#6c7975]">Daily progress</p><p className="mt-1 text-lg font-semibold">{completed} of {total} visits</p></div>
-      <div className="grid size-14 place-items-center rounded-full" style={{background:`conic-gradient(#2f7469 ${progress}%, #e4e9e7 0)`}}><span className="grid size-10 place-items-center rounded-full bg-white text-xs font-bold">{progress}%</span></div>
-    </section>
-
-    {upNext&&<section>
-      <div className="mb-3 flex items-center justify-between"><h2 className="font-semibold">Up next</h2>{upNext.scheduledTime&&<span className="flex items-center gap-1 text-xs text-[#697572]"><Clock3 size={14}/> {upNext.scheduledTime}</span>}</div>
-      <div className="rounded-2xl bg-[#173f3a] p-5 text-white">
-        <div className="flex items-start justify-between"><div><h3 className="font-semibold">{upNext.doctor?.name??"Doctor"}</h3><p className="mt-1 text-sm text-white/70">{[upNext.doctor?.clinicName,upNext.doctor?.area].filter(Boolean).join(", ")||"—"}</p></div>{upNext.doctor?.priority&&<StatusBadge value={upNext.doctor.priority}/>}</div>
-        <p className="mt-4 flex items-center gap-2 text-sm text-white/75"><MapPin size={15}/> {[upNext.doctor?.area,upNext.doctor?.city].filter(Boolean).join(", ")||"Location not set"}</p>
-        <div className="mt-5 grid grid-cols-[1fr_52px_52px] gap-2">
-          <Link href={`/employee/visits/${upNext._id}`} className="tap flex items-center justify-center gap-2 rounded-xl bg-white font-semibold text-[#173f3a]"><Play size={17} fill="currentColor"/>Start visit</Link>
-          <a aria-label="Call doctor" href="tel:" className="tap grid place-items-center rounded-xl bg-white/10"><Phone size={19}/></a>
-          <span aria-label="Navigate" className="tap grid place-items-center rounded-xl bg-white/10"><Navigation size={19}/></span>
+    {visits.length > 0 && (
+      <Card className="flex items-center justify-between p-4">
+        <div>
+          <p className="text-xs text-[var(--muted)]">Today&apos;s progress</p>
+          <p className="mt-0.5 text-lg font-semibold">{done} of {visits.length} done</p>
+          {plan && <p className="mt-0.5 text-xs text-[var(--muted)]">{plan.name} · {plan.totalDistanceKm} km</p>}
         </div>
-      </div>
-    </section>}
+        <div className="grid size-14 shrink-0 place-items-center rounded-full"
+          style={{ background: `conic-gradient(var(--brand) ${progress}%, var(--line) 0)` }}>
+          <span className="grid size-11 place-items-center rounded-full bg-white text-xs font-bold">{progress}%</span>
+        </div>
+      </Card>
+    )}
+
+    {next?.doctor && (
+      <section>
+        <h2 className="mb-2 text-[15px] font-semibold">Up next</h2>
+        <div className="rounded-[14px] bg-[var(--brand)] p-4 text-white">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate font-semibold">{next.doctor.name}</p>
+              <p className="mt-0.5 truncate text-sm text-white/75">{[next.doctor.clinicName, next.doctor.area].filter(Boolean).join(" · ") || "—"}</p>
+            </div>
+            {next.plannedStart && <span className="shrink-0 rounded-full bg-white/15 px-2.5 py-1 text-xs font-bold">{toDisplayTime(next.plannedStart)}</span>}
+          </div>
+
+          <p className="mt-3 flex items-center gap-1.5 text-sm text-white/85">
+            <Clock size={14} />{callTimeOn(next.doctor as never, weekday) ?? `No call time for ${WEEKDAYS[weekday]}`}
+          </p>
+          <p className="mt-1 flex items-start gap-1.5 text-sm text-white/75">
+            <MapPin size={14} className="mt-0.5 shrink-0" /><span className="line-clamp-2">{next.doctor.fullAddress || [next.doctor.area, next.doctor.city].filter(Boolean).join(", ") || "Address not recorded"}</span>
+          </p>
+
+          <div className="mt-4 grid grid-cols-[1fr_48px_48px] gap-2">
+            <Link href={`/employee/visits/${next._id}`}
+              className="tap flex items-center justify-center gap-2 rounded-[10px] bg-white font-semibold text-[var(--brand)]">
+              {next.status === "In progress" ? "Continue visit" : "Start visit"}
+            </Link>
+            {next.doctor.phones?.[0] ? (
+              <a href={`tel:${next.doctor.phones[0]}`} aria-label="Call doctor" className="tap grid place-items-center rounded-[10px] bg-white/15"><Phone size={18} /></a>
+            ) : <span className="tap grid place-items-center rounded-[10px] bg-white/5 text-white/30"><Phone size={18} /></span>}
+            {next.doctor.location?.coordinates?.length === 2 ? (
+              <a href={`https://www.google.com/maps/dir/?api=1&destination=${next.doctor.location.coordinates[1]},${next.doctor.location.coordinates[0]}`}
+                target="_blank" rel="noreferrer" aria-label="Navigate" className="tap grid place-items-center rounded-[10px] bg-white/15"><Navigation size={18} /></a>
+            ) : <span className="tap grid place-items-center rounded-[10px] bg-white/5 text-white/30"><Navigation size={18} /></span>}
+          </div>
+        </div>
+      </section>
+    )}
 
     <section>
-      <div className="mb-3 flex items-center justify-between"><h2 className="font-semibold">Today</h2><Link href="/employee/route-plan" className="text-sm font-semibold text-[#285f57]">View plan</Link></div>
-      {rows.length?<div className="space-y-3">{rows.map(({assignment,distance})=><Link key={String(assignment._id)} href={`/employee/visits/${assignment._id}`} className="surface block p-4"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><h3 className="truncate text-sm font-semibold">{assignment.doctor?.name??"Doctor"}</h3><p className="mt-0.5 text-xs text-[#6c7975]">{[assignment.doctor?.clinicName,assignment.doctor?.area].filter(Boolean).join(", ")||"—"}</p></div>{assignment.doctor?.priority&&<StatusBadge value={assignment.doctor.priority}/>}</div><div className="mt-3 flex items-center justify-between border-t border-[#edf0ef] pt-3"><div className="flex gap-4 text-xs text-[#6b7874]"><span className="flex items-center gap-1"><CalendarDays size={14}/>{assignment.scheduledTime??"No time set"}</span><span>{distance}</span></div>{assignment.status==="Completed"?<Check size={18} className="text-emerald-600"/>:<ChevronRight size={18} className="text-[#84908d]"/>}</div></Link>)}</div>:<p className="surface p-6 text-center text-sm text-[#697572]">No visits scheduled for today.</p>}
+      <h2 className="mb-2 text-[15px] font-semibold">Today&apos;s route</h2>
+      {visits.length ? (
+        <div className="space-y-2">
+          {visits.map((visit, index) => (
+            <Link key={String(visit._id)} href={`/employee/visits/${visit._id}`}
+              className="card flex items-center gap-3 p-3.5 active:bg-[var(--surface-2)]">
+              <span className={`grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-bold ${
+                visit.status === "Completed" ? "bg-emerald-600 text-white" : visit.status === "Missed" ? "bg-rose-500 text-white" : "bg-[var(--brand)] text-white"
+              }`}>{index + 1}</span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold">{visit.doctor?.name ?? "Doctor removed"}</p>
+                <p className="truncate text-xs text-[var(--muted)]">{[visit.doctor?.clinicName, visit.doctor?.area].filter(Boolean).join(" · ") || "—"}</p>
+                <p className="mt-0.5 flex items-center gap-1 text-xs text-[var(--brand)]">
+                  <Clock size={11} />{visit.plannedStart ? toDisplayTime(visit.plannedStart) : "No time set"}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <Badge tone={statusTone(visit.status)}>{visit.status}</Badge>
+                <ChevronRight size={16} className="text-[var(--muted)]" />
+              </div>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <EmptyState icon={CalendarCheck} title="Nothing scheduled today"
+          description="When your administrator assigns you a route plan, your day appears here in visiting order." />
+      )}
     </section>
 
-    <Link href="/employee/follow-ups" className="tap flex w-full items-center justify-center gap-2 rounded-xl border border-[#d9e1de] bg-white text-sm font-semibold"><RotateCcw size={17}/>{followUpsDue} follow-up{followUpsDue===1?"":"s"} due</Link>
+    {plan && (
+      <Link href="/employee/history" className="card tap flex items-center justify-center gap-2 text-sm font-semibold">
+        <Route size={16} />See past visits
+      </Link>
+    )}
   </div>;
 }
