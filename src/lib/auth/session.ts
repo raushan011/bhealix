@@ -24,7 +24,13 @@ export async function getSession(): Promise<Session | null> {
   if (!token || !process.env.AUTH_SECRET) return null;
   try {
     const { payload } = await jwtVerify(token, secret());
-    return { userId: String(payload.userId), name: String(payload.name), role: payload.role as Role };
+    // Tokens issued before `name` existed carry no name. Leave it empty so the
+    // caller can look it up — String(undefined) would render as "undefined".
+    return {
+      userId: String(payload.userId),
+      name: typeof payload.name === "string" ? payload.name : "",
+      role: payload.role as Role
+    };
   } catch {
     return null;
   }

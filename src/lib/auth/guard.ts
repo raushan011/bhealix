@@ -2,11 +2,25 @@ import { redirect } from "next/navigation";
 import { homeFor, usesAdminPanel, usesFieldPanel, type Role } from "@/constants/access";
 import { getSession, type Session } from "./session";
 
+/**
+ * Sessions issued before the token carried a name have none. Rather than
+ * signing those people out, fill the name in from the database so the screen
+ * greets them properly until their token is next reissued.
+ */
+async function withName(session: Session): Promise<Session> {
+  if (session.name) return session;
+  const { connectDb } = await import("@/lib/db/mongoose");
+  const { User } = await import("@/models/User");
+  await connectDb();
+  const user = await User.findById(session.userId).select("name").lean() as { name?: string } | null;
+  return { ...session, name: user?.name ?? "there" };
+}
+
 /** For pages: guarantees a session, sending anyone signed out to the login screen. */
 export async function requireSession(): Promise<Session> {
   const session = await getSession();
   if (!session) redirect("/login");
-  return session;
+  return withName(session);
 }
 
 /** For pages under /admin — desk roles only; field staff are sent to their own panel. */

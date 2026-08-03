@@ -17,29 +17,34 @@
   --line-2: #dbc8ab;
 }
 
-* { box-sizing: border-box; }
-html { background: var(--bg); -webkit-text-size-adjust: 100%; }
-body {
-  margin: 0;
-  color: var(--ink);
-  background: var(--bg);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  font-size: 15px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-}
-button, a, input, select, textarea { font: inherit; color: inherit; }
-button, [role="button"], select, summary { cursor: pointer; }
-button:disabled { cursor: not-allowed; }
-h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.011em; }
-p { margin: 0; }
-:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 8px; }
-
 /*
- * Component classes live in the components layer so Tailwind utilities always
- * win. Without this, the padding shorthand below would override a `pl-9`
- * utility and push placeholder text underneath a leading icon.
+ * Everything below is layered on purpose.
+ *
+ * Unlayered CSS outranks every cascade layer, so a bare `a { color: inherit }`
+ * would beat Tailwind's `text-white` and leave dark text on dark buttons.
+ * Keeping resets in `base` and component classes in `components` lets
+ * utilities win, which is what call sites expect.
  */
+@layer base {
+  * { box-sizing: border-box; }
+  html { background: var(--bg); -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    background: var(--bg);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, a, input, select, textarea { font: inherit; color: inherit; }
+  button, [role="button"], select, summary { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.011em; }
+  p { margin: 0; }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 8px; }
+}
+
 @layer components {
   .input, .select, .textarea {
     width: 100%;
@@ -68,8 +73,10 @@ p { margin: 0; }
   .tap { min-height: 44px; min-width: 44px; }
 }
 
-.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
-.no-scrollbar::-webkit-scrollbar { display: none; }
+@layer utilities {
+  .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
