@@ -19,14 +19,25 @@ export const DOCTOR_TYPES = [
 
 export const RADIUS_OPTIONS = [2, 5, 10, 25, 50, 75, 100] as const;
 
+export const MAX_RESULTS = 500;
+
 export const discoverySchema = z.object({
   location: z.string().trim().min(2, "Enter a city, area or PIN code"),
   radiusKm: z.number().positive().max(100, "Radius cannot be more than 100 km"),
   doctorTypes: z.array(z.enum(DOCTOR_TYPES)).min(1, "Choose at least one doctor type").max(4),
-  resultLimit: z.union([z.literal(60), z.literal(120), z.literal(240)]).default(120)
+  resultLimit: z.number().int()
+    .min(10, "Ask for at least 10 results")
+    .max(MAX_RESULTS, `Maximum results cannot be more than ${MAX_RESULTS}`)
+    .default(120)
 });
 
 export type DiscoveryInput = z.infer<typeof discoverySchema>;
+
+/** Looking up one named doctor or clinic, rather than sweeping an area. */
+export const lookupSchema = z.object({
+  query: z.string().trim().min(3, "Enter at least three characters of the name"),
+  near: z.string().trim().max(80).optional()
+});
 
 export type DiscoveredDoctor = {
   placeId: string;

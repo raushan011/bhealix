@@ -1,21 +1,52 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { CheckCircle2, Download, ExternalLink, MapPin, Phone, RotateCcw, Save, Search, Star, Upload } from "lucide-react";
+import { Check, CheckCircle2, Download, ExternalLink, MapPin, Phone, Plus, RotateCcw, Save, Search, Star, Upload, UserSearch } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Field, Notice, PageTitle, Spinner } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
-import { DOCTOR_TYPES, RADIUS_OPTIONS, discoverySchema, fromExcelRow, toExcelRow, type DiscoveredDoctor } from "@/lib/doctors/discovery";
+import {
+  DOCTOR_TYPES, MAX_RESULTS, RADIUS_OPTIONS, discoverySchema, fromExcelRow, lookupSchema, toExcelRow,
+  type DiscoveredDoctor
+} from "@/lib/doctors/discovery";
 
 type Row = DiscoveredDoctor & { fromFile?: boolean };
+type Mode = "area" | "name";
+
+/** Shapes a result into the payload the bulk save endpoint accepts. */
+const toPayload = (row: Row) => ({
+  ...(row.fromFile ? {} : { googlePlaceId: row.placeId }),
+  name: row.name,
+  specialty: row.doctorType,
+  clinicName: row.name,
+  phone: row.phone,
+  fullAddress: row.address,
+  area: row.area,
+  city: row.city,
+  googleMapsUrl: row.mapsUrl,
+  rating: row.rating,
+  reviewCount: row.reviewCount,
+  ...(row.latitude && row.longitude ? { latitude: row.latitude, longitude: row.longitude } : {}),
+  source: row.fromFile ? ("Excel" as const) : ("Google" as const)
+});
 
 export default function DiscoverPage() {
+  const [mode, setMode] = useState<Mode>("area");
+
+  // Area sweep
   const [location, setLocation] = useState("");
   const [radiusKm, setRadiusKm] = useState(10);
   const [types, setTypes] = useState<string[]>(["Dermatologist"]);
-  const [resultLimit, setResultLimit] = useState<60 | 120 | 240>(120);
-
+  const [resultLimit, setResultLimit] = useState("120");
   const [rows, setRows] = useState<Row[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // Name lookup
+  const [name, setName] = useState("");
+  const [near, setNear] = useState("");
+  const [matches, setMatches] = useState<DiscoveredDoctor[]>([]);
+  const [added, setAdded] = useState<Set<string>>(new Set());
+  const [addingId, setAddingId] = useState<string>();
+
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -26,14 +57,20 @@ export default function DiscoverPage() {
   const selectedRows = useMemo(() => rows.filter(row => selected.has(row.placeId)), [rows, selected]);
   const allSelected = rows.length > 0 && selected.size === rows.length;
 
+  function switchMode(next: Mode) {
+    setMode(next); setError(""); setMessage("");
+  }
+
   function toggleType(type: string) {
     setTypes(current => current.includes(type)
       ? current.filter(item => item !== type)
       : current.length < 4 ? [...current, type] : current);
   }
 
-  async function search() {
-    const parsed = discoverySchema.safeParse({ location, radiusKm, doctorTypes: types, resultLimit });
+  async function searchArea() {
+    const parsed = discoverySchema.safeParse({
+      location, radiusKm, doctorTypes: types, resultLimit: Number(resultLimit)
+    });
     if (!parsed.success) { setError(parsed.error.issues[0].message); return; }
 
     setSearching(true); setError(""); setMessage(""); setRows([]); setSelected(new Set());
@@ -51,6 +88,43 @@ export default function DiscoverPage() {
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Search failed");
     } finally { setSearching(false); }
+  }
+
+  async function searchByName() {
+    const parsed = lookupSchema.safeParse({ query: name, near: near || undefined });
+    if (!parsed.success) { setError(parsed.error.issues[0].message); return; }
+
+    setSearching(true); setError(""); setMessage(""); setMatches([]);
+    try {
+      const response = await fetch("/api/google/lookup", {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(parsed.data)
+      });
+      const json = await response.json() as { error?: string; data?: { items: DiscoveredDoctor[] } };
+      if (!response.ok) throw new Error(json.error ?? "Lookup failed");
+      const items = json.data?.items ?? [];
+      setMatches(items);
+      if (!items.length) setMessage("Nothing matched that name. Try adding the area or city.");
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : "Lookup failed");
+    } finally { setSearching(false); }
+  }
+
+  async function addOne(doctor: DiscoveredDoctor) {
+    setAddingId(doctor.placeId); setError("");
+    try {
+      const response = await fetch("/api/doctors/bulk", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ doctors: [toPayload(doctor)] })
+      });
+      const json = await response.json() as { error?: string; data?: { created: number; updated: number } };
+      if (!response.ok) throw new Error(json.error ?? "Could not add this doctor");
+      setAdded(current => new Set(current).add(doctor.placeId));
+      setMessage(json.data?.updated
+        ? `${doctor.name} was already in the directory and has been refreshed.`
+        : `${doctor.name} added to the directory.`);
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : "Could not add this doctor");
+    } finally { setAddingId(undefined); }
   }
 
   function toggle(placeId: string) {
@@ -99,6 +173,7 @@ export default function DiscoverPage() {
         distanceKm: 0
       }));
 
+      setMode("area");
       setRows(current => [...asRows, ...current]);
       setSelected(current => new Set([...current, ...asRows.map(row => row.placeId)]));
       const noCoords = asRows.filter(row => !row.latitude || !row.longitude).length;
@@ -114,23 +189,7 @@ export default function DiscoverPage() {
     try {
       const response = await fetch("/api/doctors/bulk", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          doctors: selectedRows.map(row => ({
-            ...(row.fromFile ? {} : { googlePlaceId: row.placeId }),
-            name: row.name,
-            specialty: row.doctorType,
-            clinicName: row.name,
-            phone: row.phone,
-            fullAddress: row.address,
-            area: row.area,
-            city: row.city,
-            googleMapsUrl: row.mapsUrl,
-            rating: row.rating,
-            reviewCount: row.reviewCount,
-            ...(row.latitude && row.longitude ? { latitude: row.latitude, longitude: row.longitude } : {}),
-            source: row.fromFile ? "Excel" as const : "Google" as const
-          }))
-        })
+        body: JSON.stringify({ doctors: selectedRows.map(toPayload) })
       });
       const json = await response.json() as { error?: string; data?: { created: number; updated: number } };
       if (!response.ok) throw new Error(json.error ?? "Could not save");
@@ -141,62 +200,148 @@ export default function DiscoverPage() {
     } finally { setSaving(false); }
   }
 
+  const limitNumber = Number(resultLimit);
+  const limitInvalid = resultLimit !== "" && (!Number.isInteger(limitNumber) || limitNumber < 10 || limitNumber > MAX_RESULTS);
+
   return <div className="space-y-5">
-    <PageTitle title="Find doctors" subtitle="Search a location for skin specialists, then save them to your directory" actions={
+    <PageTitle title="Find doctors" subtitle="Sweep an area, or look up one doctor by name" actions={
       <>
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={uploadExcel} className="hidden" />
         <Button tone="secondary" onClick={() => fileRef.current?.click()}><Upload size={16} />Upload sheet</Button>
-        <Button tone="secondary" onClick={() => { setRows([]); setSelected(new Set()); setMessage(""); setError(""); }}>
-          <RotateCcw size={16} />Reset
-        </Button>
+        <Button tone="secondary" onClick={() => {
+          setRows([]); setSelected(new Set()); setMatches([]); setAdded(new Set()); setMessage(""); setError("");
+        }}><RotateCcw size={16} />Reset</Button>
       </>
     } />
 
-    <Card className="space-y-4 p-4 sm:p-5">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_auto]">
-        <Field label="Location">
-          <div className="relative">
-            <MapPin size={16} className="pointer-events-none absolute left-3 top-3.5 text-[var(--muted)]" />
-            <input value={location} onChange={e => setLocation(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") search(); }}
-              placeholder="Noida, Ghaziabad or a PIN code" className="input pl-9" />
-          </div>
-        </Field>
-        <Field label="Radius">
-          <select value={radiusKm} onChange={e => setRadiusKm(Number(e.target.value))} className="select">
-            {RADIUS_OPTIONS.map(value => <option key={value} value={value}>{value} km</option>)}
-          </select>
-        </Field>
-        <Field label="Max results">
-          <select value={resultLimit} onChange={e => setResultLimit(Number(e.target.value) as 60 | 120 | 240)} className="select">
-            <option value={60}>60</option><option value={120}>120</option><option value={240}>240</option>
-          </select>
-        </Field>
-        <div className="flex items-end">
-          <Button onClick={search} busy={searching} className="w-full lg:w-auto"><Search size={16} />Search</Button>
-        </div>
-      </div>
+    <div className="flex gap-1.5 rounded-[10px] border border-[var(--line)] bg-white p-1">
+      {([["area", "Search an area", Search], ["name", "Find by name", UserSearch]] as const).map(([value, label, Icon]) => (
+        <button key={value} type="button" onClick={() => switchMode(value)} aria-pressed={mode === value}
+          className={`flex min-h-[40px] flex-1 items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors ${
+            mode === value ? "bg-[var(--brand)] text-white" : "text-[var(--ink-2)] hover:bg-[var(--surface-2)]"
+          }`}>
+          <Icon size={15} />{label}
+        </button>
+      ))}
+    </div>
 
-      <div>
-        <p className="mb-2 text-[13px] font-medium text-[var(--ink-2)]">Doctor type <span className="font-normal text-[var(--muted)]">· up to 4</span></p>
-        <div className="flex flex-wrap gap-1.5">
-          {DOCTOR_TYPES.map(type => {
-            const on = types.includes(type);
-            return <button key={type} type="button" onClick={() => toggleType(type)} aria-pressed={on}
-              className={`min-h-[36px] rounded-full border px-3 text-xs font-semibold transition-colors ${
-                on ? "border-[var(--brand)] bg-[var(--brand)] text-white" : "border-[var(--line-2)] bg-white text-[var(--ink-2)] hover:bg-[var(--surface-2)]"
-              }`}>{type}</button>;
-          })}
+    {mode === "area" ? (
+      <Card className="space-y-4 p-4 sm:p-5">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_auto]">
+          <Field label="Location">
+            <div className="relative">
+              <MapPin size={16} className="pointer-events-none absolute left-3 top-3.5 text-[var(--muted)]" />
+              <input value={location} onChange={e => setLocation(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") searchArea(); }}
+                placeholder="Noida, Ghaziabad or a PIN code" className="input pl-9" />
+            </div>
+          </Field>
+          <Field label="Radius">
+            <select value={radiusKm} onChange={e => setRadiusKm(Number(e.target.value))} className="select">
+              {RADIUS_OPTIONS.map(value => <option key={value} value={value}>{value} km</option>)}
+            </select>
+          </Field>
+          <Field label="Max results" hint={`10 to ${MAX_RESULTS}`}>
+            <input type="number" inputMode="numeric" min={10} max={MAX_RESULTS} step={10}
+              value={resultLimit}
+              onChange={e => setResultLimit(e.target.value.replace(/[^0-9]/g, ""))}
+              onKeyDown={e => { if (e.key === "Enter") searchArea(); }}
+              aria-invalid={limitInvalid}
+              className="input" />
+          </Field>
+          <div className="flex items-end">
+            <Button onClick={searchArea} busy={searching} disabled={limitInvalid} className="w-full lg:w-auto">
+              <Search size={16} />Search
+            </Button>
+          </div>
         </div>
-      </div>
-    </Card>
+
+        <div>
+          <p className="mb-2 text-[13px] font-medium text-[var(--ink-2)]">Doctor type <span className="font-normal text-[var(--muted)]">· up to 4</span></p>
+          <div className="flex flex-wrap gap-1.5">
+            {DOCTOR_TYPES.map(type => {
+              const on = types.includes(type);
+              return <button key={type} type="button" onClick={() => toggleType(type)} aria-pressed={on}
+                className={`min-h-[36px] rounded-full border px-3 text-xs font-semibold transition-colors ${
+                  on ? "border-[var(--brand)] bg-[var(--brand)] text-white" : "border-[var(--line-2)] bg-white text-[var(--ink-2)] hover:bg-[var(--surface-2)]"
+                }`}>{type}</button>;
+            })}
+          </div>
+        </div>
+        {limitNumber > 250 && (
+          <p className="text-xs text-[var(--muted)]">
+            Asking for more than 250 results searches many sub-areas and uses proportionally more Google Places quota.
+          </p>
+        )}
+      </Card>
+    ) : (
+      <Card className="p-4 sm:p-5">
+        <div className="grid gap-4 sm:grid-cols-[2fr_1fr_auto]">
+          <Field label="Doctor or clinic name">
+            <div className="relative">
+              <UserSearch size={16} className="pointer-events-none absolute left-3 top-3.5 text-[var(--muted)]" />
+              <input value={name} onChange={e => setName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") searchByName(); }}
+                placeholder="Dr Ranjana Singh Cosmetologist" className="input pl-9" />
+            </div>
+          </Field>
+          <Field label="Near" hint="Optional — narrows the match">
+            <input value={near} onChange={e => setNear(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") searchByName(); }}
+              placeholder="Ghaziabad" className="input" />
+          </Field>
+          <div className="flex items-end">
+            <Button onClick={searchByName} busy={searching} className="w-full sm:w-auto"><Search size={16} />Find</Button>
+          </div>
+        </div>
+        <p className="mt-3 text-xs text-[var(--muted)]">
+          For adding one doctor you already know about. Each result can be added to the directory on its own.
+        </p>
+      </Card>
+    )}
 
     {error && <Notice tone="error">{error}</Notice>}
     {message && !error && <Notice>{message}</Notice>}
 
-    {searching && <Spinner label="Searching Google Places…" />}
+    {searching && <Spinner label={mode === "area" ? "Searching Google Places…" : "Looking up that name…"} />}
 
-    {!searching && rows.length > 0 && <>
+    {mode === "name" && !searching && matches.length > 0 && (
+      <div className="space-y-2.5">
+        {matches.map(match => {
+          const isAdded = added.has(match.placeId);
+          return <Card key={match.placeId} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-semibold">{match.name}</h3>
+              <p className="mt-1 flex items-start gap-1.5 text-xs text-[var(--ink-2)]">
+                <MapPin size={12} className="mt-0.5 shrink-0 text-[var(--muted)]" />{match.address || "Address not available"}
+              </p>
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted)]">
+                <span className="flex items-center gap-1"><Phone size={11} />{match.phone || "No phone"}</span>
+                {match.rating !== undefined && (
+                  <span className="flex items-center gap-1"><Star size={11} className="fill-amber-400 text-amber-400" />{match.rating} ({match.reviewCount ?? 0})</span>
+                )}
+                {match.mapsUrl && (
+                  <a href={match.mapsUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 font-semibold text-[var(--brand)]">
+                    Maps <ExternalLink size={11} />
+                  </a>
+                )}
+              </div>
+            </div>
+            {isAdded ? (
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-[10px] bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                <Check size={14} />Added
+              </span>
+            ) : (
+              <Button onClick={() => addOne(match)} busy={addingId === match.placeId} className="shrink-0">
+                <Plus size={15} />Add
+              </Button>
+            )}
+          </Card>;
+        })}
+      </div>
+    )}
+
+    {mode === "area" && !searching && rows.length > 0 && <>
       <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-[var(--line)] bg-white px-3 py-2.5 lg:top-2">
         <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold">
           <input type="checkbox" checked={allSelected}
@@ -237,9 +382,12 @@ export default function DiscoverPage() {
       </div>
     </>}
 
-    {!searching && !rows.length && !message && (
-      <EmptyState icon={Search} title="Search a location"
-        description="Pick a city or PIN code, choose the doctor types you care about, and results appear here ready to save." />
+    {!searching && !rows.length && !matches.length && !message && (
+      mode === "area"
+        ? <EmptyState icon={Search} title="Search a location"
+            description="Pick a city or PIN code, choose the doctor types you care about, and results appear here ready to save." />
+        : <EmptyState icon={UserSearch} title="Look up a doctor"
+            description="Type the name of a doctor or clinic you already know about and add it straight to the directory." />
     )}
 
     {saved && (

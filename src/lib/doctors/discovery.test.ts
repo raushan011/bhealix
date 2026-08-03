@@ -1,14 +1,44 @@
 import { describe, expect, it } from "vitest";
-import { discoverySchema, fromExcelRow, toExcelRow } from "./discovery";
+import { MAX_RESULTS, discoverySchema, fromExcelRow, lookupSchema, toExcelRow } from "./discovery";
+
+const base = { location: "Noida", radiusKm: 10, doctorTypes: ["Dermatologist"] };
 
 describe("discovery input", () => {
   it("caps the search radius at 100 km", () => {
-    expect(discoverySchema.safeParse({ location: "Noida", radiusKm: 101, doctorTypes: ["Dermatologist"] }).success).toBe(false);
-    expect(discoverySchema.safeParse({ location: "Noida", radiusKm: 100, doctorTypes: ["Dermatologist"] }).success).toBe(true);
+    expect(discoverySchema.safeParse({ ...base, radiusKm: 101 }).success).toBe(false);
+    expect(discoverySchema.safeParse({ ...base, radiusKm: 100 }).success).toBe(true);
   });
 
   it("requires at least one doctor type", () => {
-    expect(discoverySchema.safeParse({ location: "Noida", radiusKm: 10, doctorTypes: [] }).success).toBe(false);
+    expect(discoverySchema.safeParse({ ...base, doctorTypes: [] }).success).toBe(false);
+  });
+
+  it("accepts any whole number of results up to the maximum", () => {
+    expect(discoverySchema.safeParse({ ...base, resultLimit: 75 }).success).toBe(true);
+    expect(discoverySchema.safeParse({ ...base, resultLimit: MAX_RESULTS }).success).toBe(true);
+  });
+
+  it("rejects a result count above the maximum, below ten, or fractional", () => {
+    expect(discoverySchema.safeParse({ ...base, resultLimit: MAX_RESULTS + 1 }).success).toBe(false);
+    expect(discoverySchema.safeParse({ ...base, resultLimit: 9 }).success).toBe(false);
+    expect(discoverySchema.safeParse({ ...base, resultLimit: 50.5 }).success).toBe(false);
+  });
+
+  it("defaults the result count when it is left out", () => {
+    const parsed = discoverySchema.safeParse(base);
+    expect(parsed.success && parsed.data.resultLimit).toBe(120);
+  });
+});
+
+describe("lookup by name", () => {
+  it("needs a few characters before searching", () => {
+    expect(lookupSchema.safeParse({ query: "Dr" }).success).toBe(false);
+    expect(lookupSchema.safeParse({ query: "Dr Ranjana Singh" }).success).toBe(true);
+  });
+
+  it("treats the surrounding area as optional", () => {
+    expect(lookupSchema.safeParse({ query: "Skin Clinic", near: "Ghaziabad" }).success).toBe(true);
+    expect(lookupSchema.safeParse({ query: "Skin Clinic" }).success).toBe(true);
   });
 });
 
