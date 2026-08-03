@@ -21,10 +21,23 @@ export const RADIUS_OPTIONS = [2, 5, 10, 25, 50, 75, 100] as const;
 
 export const MAX_RESULTS = 500;
 
+/**
+ * Worst-case Google Places requests for a search: every chosen type is swept
+ * across every sub-area, two pages each. The search stops early once enough
+ * results are found, so this is a ceiling rather than a prediction — but it is
+ * what a wide, thin search actually costs.
+ */
+export function estimateGoogleRequests(doctorTypes: number, resultLimit: number) {
+  const zones = Math.min(16, Math.max(1, Math.ceil(resultLimit / 40)));
+  return Math.max(1, doctorTypes) * zones * 2;
+}
+
 export const discoverySchema = z.object({
   location: z.string().trim().min(2, "Enter a city, area or PIN code"),
   radiusKm: z.number().positive().max(100, "Radius cannot be more than 100 km"),
-  doctorTypes: z.array(z.enum(DOCTOR_TYPES)).min(1, "Choose at least one doctor type").max(4),
+  doctorTypes: z.array(z.enum(DOCTOR_TYPES))
+    .min(1, "Choose at least one doctor type")
+    .max(DOCTOR_TYPES.length),
   resultLimit: z.number().int()
     .min(10, "Ask for at least 10 results")
     .max(MAX_RESULTS, `Maximum results cannot be more than ${MAX_RESULTS}`)

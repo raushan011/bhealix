@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { MAX_RESULTS, discoverySchema, fromExcelRow, lookupSchema, toExcelRow } from "./discovery";
+import {
+  DOCTOR_TYPES, MAX_RESULTS, discoverySchema, estimateGoogleRequests,
+  fromExcelRow, lookupSchema, toExcelRow
+} from "./discovery";
 
 const base = { location: "Noida", radiusKm: 10, doctorTypes: ["Dermatologist"] };
 
@@ -11,6 +14,14 @@ describe("discovery input", () => {
 
   it("requires at least one doctor type", () => {
     expect(discoverySchema.safeParse({ ...base, doctorTypes: [] }).success).toBe(false);
+  });
+
+  it("accepts every doctor type at once", () => {
+    expect(discoverySchema.safeParse({ ...base, doctorTypes: [...DOCTOR_TYPES] }).success).toBe(true);
+  });
+
+  it("still rejects a type that is not on the list", () => {
+    expect(discoverySchema.safeParse({ ...base, doctorTypes: ["Dentist"] }).success).toBe(false);
   });
 
   it("accepts any whole number of results up to the maximum", () => {
@@ -27,6 +38,29 @@ describe("discovery input", () => {
   it("defaults the result count when it is left out", () => {
     const parsed = discoverySchema.safeParse(base);
     expect(parsed.success && parsed.data.resultLimit).toBe(120);
+  });
+});
+
+describe("google request estimate", () => {
+  it("grows with the number of doctor types", () => {
+    const one = estimateGoogleRequests(1, 120);
+    const all = estimateGoogleRequests(DOCTOR_TYPES.length, 120);
+    expect(all).toBe(one * DOCTOR_TYPES.length);
+  });
+
+  it("grows with the requested result count", () => {
+    expect(estimateGoogleRequests(1, 40)).toBeLessThan(estimateGoogleRequests(1, 400));
+    // 40 results per sub-area, two requests each: 500 needs 13 sub-areas.
+    expect(estimateGoogleRequests(1, MAX_RESULTS)).toBe(26);
+  });
+
+  it("stops growing at the 16 sub-area ceiling the sweep enforces", () => {
+    // Only reachable above the allowed maximum, but the guard must hold.
+    expect(estimateGoogleRequests(1, 10_000)).toBe(32);
+  });
+
+  it("never reports zero, even with nothing selected", () => {
+    expect(estimateGoogleRequests(0, 120)).toBeGreaterThan(0);
   });
 });
 

@@ -32,6 +32,7 @@ import {
   MAX_RESULTS,
   RADIUS_OPTIONS,
   discoverySchema,
+  estimateGoogleRequests,
   fromExcelRow,
   lookupSchema,
   toExcelRow,
@@ -105,9 +106,7 @@ export default function DiscoverPage() {
     setTypes((current) =>
       current.includes(type)
         ? current.filter((item) => item !== type)
-        : current.length < 4
-          ? [...current, type]
-          : current,
+        : [...current, type],
     );
   }
 
@@ -343,6 +342,13 @@ export default function DiscoverPage() {
       limitNumber < 10 ||
       limitNumber > MAX_RESULTS);
 
+  const allTypesSelected = types.length === DOCTOR_TYPES.length;
+  // Shown so a wide search is a deliberate choice, not a surprise on the bill.
+  const estimatedRequests = estimateGoogleRequests(
+    types.length,
+    limitInvalid || !limitNumber ? 120 : limitNumber,
+  );
+
   return (
     <div className="space-y-5">
       <PageTitle
@@ -470,10 +476,23 @@ export default function DiscoverPage() {
           </div>
 
           <div>
-            <p className="mb-2 text-[13px] font-medium text-[var(--ink-2)]">
-              Doctor type{" "}
-              <span className="font-normal text-[var(--muted)]">· up to 4</span>
-            </p>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-[13px] font-medium text-[var(--ink-2)]">
+                Doctor type{" "}
+                <span className="font-normal text-[var(--muted)]">
+                  · {types.length} of {DOCTOR_TYPES.length} selected
+                </span>
+              </p>
+              <button
+                type="button"
+                onClick={() =>
+                  setTypes(allTypesSelected ? [] : [...DOCTOR_TYPES])
+                }
+                className="text-xs font-semibold text-[var(--brand)]"
+              >
+                {allTypesSelected ? "Clear all" : "Select all"}
+              </button>
+            </div>
             <div className="flex flex-wrap gap-1.5">
               {DOCTOR_TYPES.map((type) => {
                 const on = types.includes(type);
@@ -495,10 +514,16 @@ export default function DiscoverPage() {
               })}
             </div>
           </div>
-          {limitNumber > 250 && (
+          {estimatedRequests > 60 && (
             <p className="text-xs text-[var(--muted)]">
-              Asking for more than 250 results searches many sub-areas and uses
-              proportionally more Google Places quota.
+              This search sweeps {types.length} doctor type
+              {types.length === 1 ? "" : "s"} across the whole radius — up to{" "}
+              <strong className="font-semibold text-[var(--ink-2)]">
+                {estimatedRequests} Google Places requests
+              </strong>
+              , which counts against your billed quota. It stops early once the
+              result limit is reached, so a narrower radius or fewer types costs
+              less.
             </p>
           )}
         </Card>
