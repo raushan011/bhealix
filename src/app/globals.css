@@ -1,13 +1,65 @@
 @import "tailwindcss";
 
-:root { --brand:#173f3a; --brand-2:#d3a768; --canvas:#f5f7f5; --ink:#17201f; --muted:#697572; --line:#dfe5e2; }
+:root {
+  --bg: #f4f7f6;
+  --surface: #ffffff;
+  --surface-2: #f9fbfa;
+  --ink: #0f1a18;
+  --ink-2: #3d4d49;
+  --muted: #6b7a76;
+  --line: #e2e9e7;
+  --line-2: #cfdad7;
+  --brand: #0e4d45;
+  --brand-hover: #0a3a34;
+  --brand-soft: #e8f1ef;
+  --accent: #c07f4f;
+}
+
 * { box-sizing: border-box; }
-html { background: var(--canvas); }
-body { margin:0; color:var(--ink); background:var(--canvas); font-family:Arial, Helvetica, sans-serif; }
-button,a,input { font:inherit; }
-button,[role="button"],select { cursor:pointer; }
-button:disabled,[aria-disabled="true"] { cursor:not-allowed; }
-:focus-visible { outline:3px solid #86bdb5; outline-offset:2px; }
-.surface { background:#fff; border:1px solid var(--line); border-radius:16px; box-shadow:0 1px 2px rgb(16 24 22 / .04); }
-.tap { min-height:44px; min-width:44px; }
-@media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior:auto!important; transition:none!important; } }
+html { background: var(--bg); -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--bg);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+button, a, input, select, textarea { font: inherit; color: inherit; }
+button, [role="button"], select, summary { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.011em; }
+p { margin: 0; }
+:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 8px; }
+
+/* Form controls share one look so every screen feels like one product. */
+.input, .select, .textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  color: var(--ink);
+  transition: border-color .15s, box-shadow .15s;
+}
+.textarea { min-height: 96px; resize: vertical; }
+.input:focus, .select:focus, .textarea:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgb(14 77 69 / .12);
+}
+.input::placeholder, .textarea::placeholder { color: #9aa8a4; }
+.input:disabled, .select:disabled { background: var(--surface-2); color: var(--muted); }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+.tap { min-height: 44px; min-width: 44px; }
+
+/* Hide scrollbar on horizontal chip rails while keeping them scrollable. */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

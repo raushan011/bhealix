@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo,useState } from "react";
-import { CheckSquare,Download,ExternalLink,MapPin,RefreshCw,Save,Search,Star,Trash2 } from "lucide-react";
+import { useMemo,useRef,useState } from "react";
+import { CheckCircle2,CheckSquare,Download,ExternalLink,MapPin,RefreshCw,Save,Search,Star,Trash2,Upload,X } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { doctorSearchSchema,externalDoctorToPayload,SKIN_DOCTOR_TYPES,type ExternalDoctor } from "@/lib/doctors/search";
+import { doctorSearchSchema,excelRowToExternalDoctor,externalDoctorToPayload,SKIN_DOCTOR_TYPES,type ExternalDoctor } from "@/lib/doctors/search";
 
 const RADII=[1,2,5,10,20,25,50,75,100];
 
@@ -19,6 +19,8 @@ export default function DoctorSearch(){
   const [busy,setBusy]=useState(false);
   const [saving,setSaving]=useState(false);
   const [message,setMessage]=useState("");
+  const [saveResult,setSaveResult]=useState<{created:number;updated:number;names:string[]}|null>(null);
+  const fileInputRef=useRef<HTMLInputElement>(null);
   const allSelected=items.length>0&&items.every(item=>selected.has(item.id));
   const selectedItems=useMemo(()=>items.filter(item=>selected.has(item.id)),[items,selected]);
   const totalPages=Math.max(1,Math.ceil(items.length/pageSize));
@@ -45,18 +47,42 @@ export default function DoctorSearch(){
   async function saveSelected(){
     if(!selectedItems.length)return;
     setSaving(true);setMessage("");
-    try{const response=await fetch("/api/doctors/bulk",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({doctors:selectedItems.map(externalDoctorToPayload)})});const json=await response.json() as {error?:string;data?:{created:number;updated:number}};if(!response.ok)throw new Error(json.error??"Could not save doctors");setMessage(`${json.data?.created??0} saved · ${json.data?.updated??0} existing records updated.`);setSelected(new Set())}catch(error){setMessage(error instanceof Error?error.message:"Could not save doctors")}finally{setSaving(false)}
+    const names=selectedItems.map(item=>item.displayName?.text??"Unknown doctor");
+    try{const response=await fetch("/api/doctors/bulk",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({doctors:selectedItems.map(externalDoctorToPayload)})});const json=await response.json() as {error?:string;data?:{created:number;updated:number}};if(!response.ok)throw new Error(json.error??"Could not save doctors");setSaveResult({created:json.data?.created??0,updated:json.data?.updated??0,names});setSelected(new Set())}catch(error){setMessage(error instanceof Error?error.message:"Could not save doctors")}finally{setSaving(false)}
   }
 
   async function downloadExcel(){
     if(!items.length)return;
     const XLSX=await import("xlsx");
-    const rows=items.map(item=>({"Doctor or Clinic":item.displayName?.text??"Not available",Type:item.category,Rating:item.rating??"Not available",Reviews:item.userRatingCount??0,Address:item.formattedAddress??"Not available",Distance:`${item.distanceKm} km`,Mobile:item.nationalPhoneNumber??"Not available",Email:"Not available","Google Maps":item.googleMapsUri??"Not available","Place ID":item.id}));
+    const rows=items.map(item=>({"Doctor or Clinic":item.displayName?.text??"Not available",Type:item.category,Rating:item.rating??"Not available",Reviews:item.userRatingCount??0,Address:item.formattedAddress??"Not available",Distance:`${item.distanceKm} km`,Mobile:item.nationalPhoneNumber??"Not available",Email:item.email??"Not available","Google Maps":item.googleMapsUri??"Not available","Place ID":item.fromFile?"":item.id,Latitude:item.location?.latitude??"",Longitude:item.location?.longitude??""}));
     const workbook=XLSX.utils.book_new();XLSX.utils.book_append_sheet(workbook,XLSX.utils.json_to_sheet(rows),"Doctor search");XLSX.writeFile(workbook,`bhealix-${doctorType.toLowerCase().replaceAll(" ","-")}-${location.toLowerCase().replaceAll(" ","-")}.xlsx`);
   }
 
+  async function uploadExcel(event:React.ChangeEvent<HTMLInputElement>){
+    const file=event.target.files?.[0];
+    event.target.value="";
+    if(!file)return;
+    setBusy(true);setMessage("");
+    try{
+      const XLSX=await import("xlsx");
+      const workbook=XLSX.read(await file.arrayBuffer(),{type:"array"});
+      const sheet=workbook.Sheets[workbook.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json<Record<string,unknown>>(sheet,{defval:""});
+      const parsed=rows.map((row,index)=>excelRowToExternalDoctor(row,`file-${Date.now()}-${index}`)).filter(item=>item.displayName?.text);
+      if(!parsed.length){setMessage("No valid rows found in that file — make sure it has a Doctor or Clinic column.");return}
+      setItems(current=>[...parsed,...current]);
+      setSelected(current=>{const next=new Set(current);parsed.forEach(item=>next.add(item.id));return next});
+      setPage(1);
+      setMessage(`${parsed.length} row(s) loaded from the file and selected below. Review, then save.`);
+    }catch{setMessage("Could not read that file. Use the same format as the downloaded Excel sheet.")}finally{setBusy(false)}
+  }
+
   return <div className="space-y-6 pb-24">
-    <PageHeader title="Search doctors" subtitle="Google Places doctor and clinic discovery" actions={<button onClick={newSearch} className="tap inline-flex items-center gap-2 rounded-xl border border-[#cad5d2] bg-white px-4 text-sm font-semibold"><RefreshCw size={17}/>New search</button>}/>
+    <PageHeader title="Search doctors" subtitle="Google Places doctor and clinic discovery" actions={<>
+      <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={uploadExcel} className="hidden"/>
+      <button onClick={()=>fileInputRef.current?.click()} disabled={busy} className="tap inline-flex items-center gap-2 rounded-xl border border-[#cad5d2] bg-white px-4 text-sm font-semibold disabled:opacity-50"><Upload size={17}/>Upload Excel</button>
+      <button onClick={newSearch} className="tap inline-flex items-center gap-2 rounded-xl border border-[#cad5d2] bg-white px-4 text-sm font-semibold"><RefreshCw size={17}/>New search</button>
+    </>}/>
 
     <section className="surface p-4 sm:p-5">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1fr_1fr_150px_150px_auto]">
@@ -83,7 +109,7 @@ export default function DoctorSearch(){
           <div className="mt-4 grid gap-3 text-sm">
             <p className="flex items-start gap-2"><Star size={16} className="mt-0.5 shrink-0 text-[#b98639]" fill="#d3a768"/><span>{item.rating??"Not available"}{item.userRatingCount!==undefined&&` (${item.userRatingCount} reviews)`}</span></p>
             <p className="flex items-start gap-2 text-[#56635f]"><MapPin size={16} className="mt-0.5 shrink-0"/><span>{item.formattedAddress??"Not available"}</span></p>
-            <div className="grid grid-cols-[74px_1fr] gap-y-2"><span className="text-[#7a8682]">Mobile</span><span>{item.nationalPhoneNumber??"Not available"}</span><span className="text-[#7a8682]">Email</span><span>Not available</span></div>
+            <div className="grid grid-cols-[74px_1fr] gap-y-2"><span className="text-[#7a8682]">Mobile</span><span>{item.nationalPhoneNumber??"Not available"}</span><span className="text-[#7a8682]">Email</span><span>{item.email??"Not available"}</span></div>
           </div>
           <div className="mt-4 border-t border-[#edf0ef] pt-3">{item.googleMapsUri?<a href={item.googleMapsUri} target="_blank" rel="noreferrer" className="tap inline-flex items-center gap-2 text-sm font-semibold text-[#285f57]">Open location <ExternalLink size={15}/></a>:<span className="text-sm text-[#7a8682]">Location link not available</span>}</div>
         </article>
@@ -92,5 +118,7 @@ export default function DoctorSearch(){
     </>}
 
     {!items.length&&!busy&&!message&&<div className="py-16 text-center"><Search className="mx-auto text-[#80908c]" size={32}/><h2 className="mt-3 font-semibold">Choose a doctor type and location</h2><p className="mt-1 text-sm text-[#697572]">Search results will appear here.</p></div>}
+
+    {saveResult&&<div role="dialog" aria-modal="true" className="fixed inset-0 z-30 grid place-items-center bg-black/40 p-4"><div className="surface w-full max-w-md p-6"><div className="flex items-start justify-between gap-3"><div className="flex items-center gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-full bg-emerald-50 text-emerald-600"><CheckCircle2 size={22}/></span><div><h2 className="font-semibold">Doctors saved</h2><p className="mt-0.5 text-sm text-[#697572]">{saveResult.created} new · {saveResult.updated} updated</p></div></div><button onClick={()=>setSaveResult(null)} aria-label="Close" className="tap grid size-9 shrink-0 place-items-center rounded-xl hover:bg-[#f4f6f5]"><X size={18}/></button></div><ul className="mt-5 max-h-64 divide-y divide-[#edf0ef] overflow-y-auto rounded-xl border border-[#e5e9e7]">{saveResult.names.map((name,index)=><li key={`${name}-${index}`} className="px-4 py-2.5 text-sm font-medium">{name}</li>)}</ul><button onClick={()=>setSaveResult(null)} className="tap mt-5 w-full rounded-xl bg-[#173f3a] text-sm font-semibold text-white">Done</button></div></div>}
   </div>
 }

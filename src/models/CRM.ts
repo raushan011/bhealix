@@ -15,3 +15,7 @@ export const Order=models.Order??model("Order",OrderSchema);
 
 const AuditSchema = new Schema({actor:{type:Schema.Types.ObjectId,ref:"User"},action:{type:String,required:true,index:true},entityType:String,entityId:Schema.Types.ObjectId,metadata:Schema.Types.Mixed,ip:String,userAgent:String},{timestamps:true});
 export const AuditEvent=models.AuditEvent??model("AuditEvent",AuditSchema);
+
+const RoutePlanStopSchema = new Schema({ doctor:{type:Schema.Types.ObjectId,ref:"Doctor",required:true}, sequence:{type:Number,required:true}, distanceFromPreviousKm:{type:Number,default:0} },{_id:false});
+const RoutePlanSchema = new Schema({ name:{type:String,required:true}, date:{type:Date,required:true,index:true}, referenceDoctor:{type:Schema.Types.ObjectId,ref:"Doctor",required:true}, stops:[RoutePlanStopSchema], totalDistanceKm:{type:Number,default:0}, assignedTo:{type:Schema.Types.ObjectId,ref:"User",index:true}, createdBy:{type:Schema.Types.ObjectId,ref:"User"}, status:{type:String,enum:["Draft","Assigned","Completed"],default:"Draft"} },{timestamps:true});
+export const RoutePlan=models.RoutePlan??model("RoutePlan",RoutePlanSchema);

@@ -1,4 +1,57 @@
 import { Schema, model, models } from "mongoose";
-const DoctorSchema = new Schema({ code:{type:String,required:true,unique:true,index:true}, name:{type:String,required:true,index:true}, qualifications:[String], specialties:[String], subSpecialties:[String], doctorTypes:[String], clinicName:String, clinicType:String, phones:[String], whatsapp:String, email:String, website:String, fullAddress:String, state:String, pinCode:String, city:{type:String,index:true}, area:{type:String,index:true}, googlePlaceId:{type:String,index:true,sparse:true},googleMapsUrl:String,rating:Number,reviewCount:Number,dataSource:{type:String,default:"Manual"},lastSyncedAt:Date, location:{type:{type:String,enum:["Point"],default:"Point"},coordinates:{type:[Number],default:undefined}}, priority:{type:String,enum:["Hot","High","Medium","Low"],default:"Medium"}, stage:{type:String,default:"New",index:true}, status:{type:String,enum:["Active","Inactive","Archived","Invalid"],default:"Active"}, verified:{type:Boolean,default:false,index:true}, treatsSkinProblems:Boolean, selfDispensary:Boolean, pharmacyAttached:Boolean, productInterest:[String], notes:String, confidentialAdminNotes:{type:String,select:false}, assignedTo:{type:Schema.Types.ObjectId,ref:"User",index:true} },{timestamps:true});
-DoctorSchema.index({location:"2dsphere"}); DoctorSchema.index({name:"text",clinicName:"text",city:"text",area:"text"});
+
+/**
+ * A doctor's weekly availability for medical-rep calls. Embedded rather than a
+ * separate collection: it is at most seven small entries, it is always read with
+ * the doctor, and route planning needs it on every doctor in one query.
+ */
+const CallWindowSchema = new Schema({
+  weekday: { type: Number, min: 0, max: 6, required: true },
+  slots: [{ _id: false, start: { type: String, required: true }, end: { type: String, required: true } }],
+  appointmentRequired: { type: Boolean, default: false },
+  remarks: String,
+  updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
+  updatedAt: Date
+}, { _id: false });
+
+const DoctorSchema = new Schema({
+  code: { type: String, required: true, unique: true, index: true },
+  name: { type: String, required: true, index: true },
+  specialties: { type: [String], default: [] },
+  clinicName: String,
+
+  phones: { type: [String], default: [] },
+  email: String,
+  website: String,
+
+  fullAddress: String,
+  area: { type: String, index: true },
+  city: { type: String, index: true },
+  pinCode: String,
+  location: {
+    type: { type: String, enum: ["Point"], default: "Point" },
+    coordinates: { type: [Number], default: undefined }   // [longitude, latitude]
+  },
+
+  googlePlaceId: { type: String, index: true, sparse: true },
+  googleMapsUrl: String,
+  rating: Number,
+  reviewCount: Number,
+  source: { type: String, enum: ["Google", "Excel", "Manual"], default: "Manual" },
+
+  callSchedule: { type: [CallWindowSchema], default: [] },
+  callTimeVerifiedAt: Date,
+
+  priority: { type: String, enum: ["Hot", "High", "Medium", "Low"], default: "Medium" },
+  stage: { type: String, enum: ["New", "Contacted", "Interested", "Prescribing", "Not interested"], default: "New", index: true },
+  status: { type: String, enum: ["Active", "Archived"], default: "Active", index: true },
+
+  assignedTo: { type: Schema.Types.ObjectId, ref: "User", index: true },
+  notes: String,
+  lastVisitedAt: Date
+}, { timestamps: true });
+
+DoctorSchema.index({ location: "2dsphere" });
+DoctorSchema.index({ "callSchedule.weekday": 1 });
+
 export const Doctor = models.Doctor ?? model("Doctor", DoctorSchema);
