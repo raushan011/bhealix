@@ -83,8 +83,15 @@
    * Deliberately short: reps tap through these screens all day, and anything
    * slower than this starts to feel like waiting.
    */
-  .page-enter { animation: page-enter .28s cubic-bezier(.22, .61, .36, 1) both; }
-  .fade-in { animation: fade-in .2s ease-out both; }
+  /*
+   * No fill mode. A transform that keeps filling after the animation ends
+   * leaves the element a containing block for `position: fixed`, and anything
+   * fixed inside it — a dialog, a sheet — then measures itself against that box
+   * instead of the viewport. There is no animation-delay here, so backwards
+   * fill bought nothing anyway.
+   */
+  .page-enter { animation: page-enter .28s cubic-bezier(.22, .61, .36, 1); }
+  .fade-in { animation: fade-in .2s ease-out; }
 }
 
 @keyframes page-enter {
