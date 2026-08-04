@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { BarChart3, Boxes, CalendarRange, ClipboardList, LayoutDashboard, LogOut, Menu, Package, Search, Stethoscope, Users, X } from "lucide-react";
+import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { Brand, BrandMark } from "@/components/ui/brand";
 import { ROLE_LABEL, type Role } from "@/constants/access";
 
@@ -84,7 +85,11 @@ export function AdminShell({ user, children }: { user: { name: string; role: Rol
         </div>
       </div>}
 
-      <main className="mx-auto w-full max-w-[1180px] px-4 py-5 sm:px-6 lg:px-8 lg:py-8">{children}</main>
+      {/* Keyed on the path so the entrance animation replays on every navigation. */}
+      <main key={pathname} className="page-enter mx-auto w-full max-w-[1180px] px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+        <InstallPrompt description="Install it for a full-screen window and a desktop icon, without the browser chrome." />
+        {children}
+      </main>
     </div>
   </div>;
 }

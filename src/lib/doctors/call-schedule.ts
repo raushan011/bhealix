@@ -36,3 +36,18 @@ export function summariseCallSchedule(schedule: CallWindow[] = []): string {
 export function slotsForWeekday(schedule: CallWindow[] = [], weekday: number) {
   return schedule.find(window => window.weekday === weekday)?.slots ?? [];
 }
+
+/**
+ * The doctor's call window on a given weekday, or null when they do not see
+ * reps that day.
+ *
+ * Lives here rather than beside the picker that first needed it because the
+ * rep's Today screen is a server component: a helper exported from a module
+ * carrying the client directive is a client reference, and calling one during
+ * a server render throws instead of running.
+ */
+export function callTimeOn(doctor: { callSchedule?: CallWindow[] }, weekday: number): string | null {
+  const slots = slotsForWeekday(doctor.callSchedule, weekday);
+  if (!slots.length) return null;
+  return slots.map(slot => `${toDisplayTime(slot.start)}–${toDisplayTime(slot.end)}`).join(", ");
+}

@@ -72,11 +72,22 @@ A wide-radius search covers ground by querying a ring of sub-centres and merging
 ```bash
 npm run dev        # development server
 npm run seed       # accounts, products, and call-time migration
+npm run icons      # redraw the PWA icons from the brand mark
 npm run typecheck
 npm run lint
 npm test
 npm run build
 ```
+
+## Installing it as an app
+
+The site is a PWA, so reps can add it to a home screen and get a full-screen app with no browser chrome. Android and desktop Chrome show an install card on the field panel; iOS needs Share → Add to Home Screen, and the same card says so. Dismissing it hides it for 30 days.
+
+The service worker (`public/sw.js`) is deliberately conservative. It caches build output and icons only — never `/api` responses and never page HTML, because both are per-user and phones get shared. So **the app does not work offline**: losing coverage shows a banner, and a navigation with no connection lands on `public/offline.html` instead of an error page. Making visits work offline would need a local write queue, which is a separate piece of work.
+
+New deploys do not take over a page mid-form. The waiting worker sits idle and a "new version is ready" banner appears; the swap happens when the rep taps it. Bump `VERSION` in `public/sw.js` to force every cache to be dropped on the next release.
+
+Icons are generated from the `<BrandMark />` heart by `npm run icons` and committed under `public/icons/`.
 
 ## How the route ordering works
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { KeyRound, UserRound } from "lucide-react";
 import { Button, Card, Field, Notice, PageTitle, Spinner } from "@/components/ui/kit";
+import { PasswordInput } from "@/components/ui/password-input";
 import { ROLE_LABEL, type Role } from "@/constants/access";
 
 type Me = { name: string; email: string; employeeId: string; role: Role };
@@ -53,8 +54,8 @@ export default function ProfilePage() {
         <h2 className="text-[15px] font-semibold">Change password</h2>
       </div>
       <form action={changePassword} className="mt-4 space-y-4">
-        <Field label="Current password"><input name="currentPassword" type="password" required className="input" /></Field>
-        <Field label="New password" hint="At least 8 characters"><input name="newPassword" type="password" minLength={8} required className="input" /></Field>
+        <Field label="Current password"><PasswordInput name="currentPassword" required /></Field>
+        <Field label="New password" hint="At least 8 characters"><PasswordInput name="newPassword" minLength={8} required /></Field>
         {result && <Notice tone={result.tone}>{result.text}</Notice>}
         <Button type="submit" busy={busy} className="w-full">{busy ? "Saving…" : "Change password"}</Button>
       </form>

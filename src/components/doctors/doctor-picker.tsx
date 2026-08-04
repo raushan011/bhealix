@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { Clock, Loader2, MapPin, Search } from "lucide-react";
-import { WEEKDAY_SHORT, toDisplayTime } from "@/lib/time";
+import { WEEKDAY_SHORT } from "@/lib/time";
+import { callTimeOn } from "@/lib/doctors/call-schedule";
 import type { EditableWindow } from "./call-schedule-editor";
 
 export type PickableDoctor = {
@@ -13,13 +14,6 @@ export type PickableDoctor = {
 export const hasCoordinates = (doctor: PickableDoctor) => (doctor.location?.coordinates?.length ?? 0) === 2;
 export const placeOf = (doctor: PickableDoctor) =>
   [doctor.clinicName, doctor.area, doctor.city].filter(Boolean).join(" · ") || "Location not recorded";
-
-/** The doctor's call window on a given weekday, or null when they do not see reps that day. */
-export function callTimeOn(doctor: PickableDoctor, weekday: number): string | null {
-  const window = doctor.callSchedule?.find(entry => entry.weekday === weekday);
-  if (!window?.slots.length) return null;
-  return window.slots.map(slot => `${toDisplayTime(slot.start)}–${toDisplayTime(slot.end)}`).join(", ");
-}
 
 /**
  * Type-ahead doctor search. When a weekday is supplied it shows each doctor's

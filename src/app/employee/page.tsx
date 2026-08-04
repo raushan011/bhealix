@@ -6,7 +6,7 @@ import { Visit } from "@/models/Visit";
 import { RoutePlan } from "@/models/RoutePlan";
 import { Badge, Card, EmptyState, LinkButton, PageTitle, statusTone } from "@/components/ui/kit";
 import { formatDate, toDisplayTime, WEEKDAYS } from "@/lib/time";
-import { callTimeOn } from "@/components/doctors/doctor-picker";
+import { callTimeOn } from "@/lib/doctors/call-schedule";
 import type { EditableWindow } from "@/components/doctors/call-schedule-editor";
 
 export const dynamic = "force-dynamic";

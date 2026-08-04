@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Boxes, CalendarCheck, History, LogOut, Route, Stethoscope, UserRound } from "lucide-react";
+import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { BrandMark } from "@/components/ui/brand";
 import { ROLE_LABEL, type Role } from "@/constants/access";
 
@@ -45,7 +46,11 @@ export function FieldShell({ user, children }: { user: { name: string; role: Rol
       </div>
     </header>
 
-    <main className="mx-auto w-full max-w-2xl px-4 py-5">{children}</main>
+    {/* Keyed on the path so the entrance animation replays on every tab change. */}
+    <main key={pathname} className="page-enter mx-auto w-full max-w-2xl px-4 py-5">
+      <InstallPrompt />
+      {children}
+    </main>
 
     <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--line)] bg-white pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto grid h-[68px] max-w-2xl grid-cols-6">

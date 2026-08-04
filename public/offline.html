@@ -1,0 +1,49 @@
+<!doctype html>
+<!--
+  Served by the service worker when a navigation fails. Kept as a standalone
+  file with inline styles so it renders without a single extra request.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#73461f">
+<title>You're offline · BHEALIX</title>
+<style>
+  :root { --bg:#fff9ed; --brand:#73461f; --brand-hover:#5b3617; --ink:#1c1611; --muted:#7a695b; --line-2:#dbc8ab; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100dvh; display: grid; place-items: center; padding: 24px;
+    background: var(--bg); color: var(--ink); text-align: center;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+  }
+  .mark { width: 46px; height: 46px; margin: 0 auto; display: grid; place-items: center; border-radius: 12px; background: var(--brand); color: #fff; }
+  h1 { margin: 18px 0 0; font-size: 20px; font-weight: 600; letter-spacing: -.011em; }
+  p { margin: 6px auto 0; max-width: 22rem; font-size: 14px; color: var(--muted); }
+  button {
+    margin-top: 24px; min-height: 44px; padding: 0 20px; border: 0; border-radius: 10px;
+    background: var(--brand); color: #fff; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  button:hover { background: var(--brand-hover); }
+  button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  .hint { margin-top: 14px; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <main>
+    <span class="mark" aria-hidden="true">
+      <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10Z"/>
+      </svg>
+    </span>
+    <h1>You're offline</h1>
+    <p>BHEALIX needs a connection to load your visits, doctors and sample counts. Your saved work is safe on the server.</p>
+    <button type="button" onclick="location.reload()">Try again</button>
+    <p class="hint">This page reloads by itself once you're back online.</p>
+  </main>
+  <script>
+    addEventListener("online", function () { location.reload(); });
+  </script>
+</body>
+</html>

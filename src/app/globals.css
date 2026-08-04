@@ -76,6 +76,25 @@
 @layer utilities {
   .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
+
+  /*
+   * Panel entrance. The shells key this off the pathname, so it replays on
+   * every navigation and each screen settles in rather than snapping.
+   * Deliberately short: reps tap through these screens all day, and anything
+   * slower than this starts to feel like waiting.
+   */
+  .page-enter { animation: page-enter .28s cubic-bezier(.22, .61, .36, 1) both; }
+  .fade-in { animation: fade-in .2s ease-out both; }
+}
+
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
