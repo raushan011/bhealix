@@ -35,22 +35,39 @@ export async function GET(request: Request) {
     const params = new URL(request.url).searchParams;
     const filter: FilterQuery<Record<string, unknown>> = { status: "Active" };
 
+    // Anything needing its own $or goes here: assigning filter.$or more than
+    // once would leave only the last one standing, silently widening the search.
+    const clauses: FilterQuery<Record<string, unknown>>[] = [];
+
     if (q) {
       const term = { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
-      filter.$or = [
-        { name: term }, { clinicName: term }, { city: term }, { area: term },
-        { fullAddress: term }, { phones: term }, { email: term }, { code: term }, { specialties: term }
-      ];
+      clauses.push({
+        $or: [
+          { name: term }, { clinicName: term }, { city: term }, { area: term },
+          { fullAddress: term }, { phones: term }, { email: term }, { code: term }, { specialties: term }
+        ]
+      });
     }
+    // One control on the directory covers both fields, because whether a place
+    // landed in `area` or `city` depends on what the Google import returned.
+    const location = params.get("location");
+    if (location) clauses.push({ $or: [{ area: location }, { city: location }] });
+
     if (params.get("city")) filter.city = params.get("city");
     if (params.get("specialty")) filter.specialties = params.get("specialty");
     if (params.get("priority")) filter.priority = params.get("priority");
     // Route planning only works with a coordinate, so the planner asks for these.
     if (params.get("routable") === "1") filter["location.coordinates"] = { $exists: true, $ne: null };
     if (params.get("weekday")) filter["callSchedule.weekday"] = Number(params.get("weekday"));
-    if (params.get("missingCallTime") === "1") filter.callSchedule = { $size: 0 };
+    // Imported records can arrive with no callSchedule key at all, and $size
+    // matches only an array that exists — so absent has to be spelled out too.
+    if (params.get("missingCallTime") === "1") {
+      clauses.push({ $or: [{ callSchedule: { $size: 0 } }, { callSchedule: { $exists: false } }] });
+    }
     // Field staff only ever see their own doctors.
     if (params.get("mine") === "1") filter.assignedTo = auth.session.userId;
+
+    if (clauses.length) filter.$and = clauses;
 
     const [items, total] = await Promise.all([
       Doctor.find(filter).select(DOCTOR_LIST_FIELDS).sort({ name: 1 }).skip(skip).limit(limit).lean(),

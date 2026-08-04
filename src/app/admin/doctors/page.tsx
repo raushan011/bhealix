@@ -8,6 +8,7 @@ import { Badge, Button, Card, EmptyState, LinkButton, Notice, PageTitle, Spinner
 import { Modal } from "@/components/ui/modal";
 import { CallScheduleEditor, type EditableWindow } from "@/components/doctors/call-schedule-editor";
 import { summariseCallSchedule } from "@/lib/doctors/call-schedule";
+import type { DoctorLocation } from "@/lib/doctors/fields";
 
 type DoctorRow = {
   _id: string; code: string; name: string; clinicName?: string; specialties?: string[];
@@ -16,10 +17,18 @@ type DoctorRow = {
   priority: string; stage: string; googleMapsUrl?: string;
 };
 
+/** Everything the list is narrowed by, kept together so it can be passed as one. */
+type Filters = { q: string; location: string; missingCallTime: boolean };
+
 function DirectoryContent() {
   const params = useSearchParams();
   const [query, setQuery] = useState("");
-  const [onlyMissingCallTime, setOnlyMissingCallTime] = useState(params.get("missingCallTime") === "1");
+  const [filters, setFilters] = useState<Filters>({
+    q: "",
+    location: params.get("location") ?? "",
+    missingCallTime: params.get("missingCallTime") === "1"
+  });
+  const [locations, setLocations] = useState<DoctorLocation[]>([]);
   const [doctors, setDoctors] = useState<DoctorRow[]>([]);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
@@ -28,11 +37,13 @@ function DirectoryContent() {
   const [notice, setNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [editing, setEditing] = useState<DoctorRow | null>(null);
 
-  const load = useCallback(async (nextPage: number, search: string, missingOnly: boolean) => {
+  const load = useCallback(async (nextPage: number, next: Filters) => {
     setLoading(true);
     try {
-      const url = `/api/doctors?q=${encodeURIComponent(search)}&page=${nextPage}&limit=24${missingOnly ? "&missingCallTime=1" : ""}`;
-      const response = await fetch(url);
+      const search = new URLSearchParams({ q: next.q, page: String(nextPage), limit: "24" });
+      if (next.location) search.set("location", next.location);
+      if (next.missingCallTime) search.set("missingCallTime", "1");
+      const response = await fetch(`/api/doctors?${search}`);
       const json = await response.json() as { data?: { items: DoctorRow[]; total: number; pages: number } };
       setDoctors(json.data?.items ?? []);
       setTotal(json.data?.total ?? 0);
@@ -41,7 +52,36 @@ function DirectoryContent() {
     } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { load(1, "", params.get("missingCallTime") === "1"); }, [load, params]);
+  /** Every filter change restarts at page one: page 7 of the old result set means nothing here. */
+  const apply = useCallback((patch: Partial<Filters>) => {
+    setFilters(current => {
+      const next = { ...current, ...patch };
+      load(1, next);
+      return next;
+    });
+  }, [load]);
+
+  useEffect(() => {
+    load(1, {
+      q: "",
+      location: params.get("location") ?? "",
+      missingCallTime: params.get("missingCallTime") === "1"
+    });
+  }, [load, params]);
+
+  useEffect(() => {
+    fetch("/api/doctors/locations")
+      .then(response => response.json())
+      .then((json: { data?: { items: DoctorLocation[] } }) => setLocations(json.data?.items ?? []))
+      // The filter is an aid, not the point of the page; a failure here just leaves it empty.
+      .catch(() => setLocations([]));
+  }, []);
+
+  // How much of the gap sits at the chosen place, so the checkbox says whether
+  // it is worth ticking before it is ticked.
+  const selectedPlace = filters.location ? locations.find(place => place.name === filters.location) : undefined;
+  const missingHere = selectedPlace?.missingCallTime;
+  const locationTotal = selectedPlace?.total;
 
   async function archive(doctor: DoctorRow) {
     if (!window.confirm(`Remove ${doctor.name} from the directory? Past visit history is kept.`)) return;
@@ -67,21 +107,50 @@ function DirectoryContent() {
     } />
 
     <Card className="p-4">
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row">
         <div className="relative flex-1">
           <Search size={16} className="pointer-events-none absolute left-3 top-3.5 text-[var(--muted)]" />
           <input value={query} onChange={e => setQuery(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") load(1, query, onlyMissingCallTime); }}
+            onKeyDown={e => { if (e.key === "Enter") apply({ q: query }); }}
             placeholder="Name, clinic, area, city, phone or email" className="input pl-9" />
         </div>
-        <Button onClick={() => load(1, query, onlyMissingCallTime)}>Search</Button>
+        <div className="flex gap-2">
+          <label className="relative flex-1 sm:w-56 sm:flex-none">
+            <span className="sr-only">Filter by location</span>
+            <MapPin size={15} className="pointer-events-none absolute left-3 top-3.5 text-[var(--muted)]" />
+            <select value={filters.location} onChange={e => apply({ location: e.target.value })}
+              className="select pl-9">
+              <option value="">All locations</option>
+              {locations.map(place => (
+                <option key={place.name} value={place.name}>{place.name} ({place.total})</option>
+              ))}
+            </select>
+          </label>
+          <Button onClick={() => apply({ q: query })}>Search</Button>
+        </div>
       </div>
-      <label className="mt-3 flex cursor-pointer items-center gap-2 text-[13px] font-medium">
-        <input type="checkbox" checked={onlyMissingCallTime}
-          onChange={e => { setOnlyMissingCallTime(e.target.checked); load(1, query, e.target.checked); }}
-          className="size-4 accent-[var(--brand)]" />
-        Only doctors with no call time recorded
+
+      <label className="mt-3 flex cursor-pointer items-start gap-2 text-[13px] font-medium">
+        <input type="checkbox" checked={filters.missingCallTime}
+          onChange={e => apply({ missingCallTime: e.target.checked })}
+          className="mt-0.5 size-4 shrink-0 accent-[var(--brand)]" />
+        <span>
+          Only doctors with no call time recorded
+          {filters.location && <> at <span className="font-semibold text-[var(--brand)]">{filters.location}</span></>}
+          {missingHere !== undefined && (
+            <span className="ml-1 font-normal text-[var(--muted)]">
+              — {missingHere} of {locationTotal} {missingHere === 1 ? "is" : "are"} missing one
+            </span>
+          )}
+        </span>
       </label>
+
+      {(filters.location || filters.missingCallTime || filters.q) && (
+        <button onClick={() => { setQuery(""); apply({ q: "", location: "", missingCallTime: false }); }}
+          className="mt-2.5 text-[13px] font-semibold text-[var(--brand)] hover:underline">
+          Clear filters
+        </button>
+      )}
     </Card>
 
     {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
@@ -156,8 +225,8 @@ function DirectoryContent() {
         <nav className="flex items-center justify-between rounded-[10px] border border-[var(--line)] bg-white px-4 py-2.5">
           <p className="text-sm text-[var(--muted)]">Page {page} of {pages}</p>
           <div className="flex gap-2">
-            <Button tone="secondary" disabled={page <= 1} onClick={() => load(page - 1, query, onlyMissingCallTime)}>Previous</Button>
-            <Button tone="secondary" disabled={page >= pages} onClick={() => load(page + 1, query, onlyMissingCallTime)}>Next</Button>
+            <Button tone="secondary" disabled={page <= 1} onClick={() => load(page - 1, filters)}>Previous</Button>
+            <Button tone="secondary" disabled={page >= pages} onClick={() => load(page + 1, filters)}>Next</Button>
           </div>
         </nav>
       )}
