@@ -1,13 +1,24 @@
+import Image from "next/image";
+
+/**
+ * The B monogram, lifted from the logo by `npm run icons`.
+ *
+ * Only the monogram appears here, never the full lockup: this sits at 30px in
+ * the app bars, where the circle and the wordmark would collapse into noise.
+ * `Brand` sets the wordmark as live text beside it instead, which stays crisp
+ * at any size and can be read by anything that reads the page.
+ */
 export function BrandMark({ size = 34 }: { size?: number }) {
-  return <span
+  return <Image
+    src="/brand/monogram.png"
+    alt=""
     aria-hidden
+    width={size}
+    height={size}
+    priority
+    className="shrink-0 object-contain"
     style={{ width: size, height: size }}
-    className="grid shrink-0 place-items-center rounded-[10px] bg-[var(--brand)] text-white"
-  >
-    <svg width={size * 0.55} height={size * 0.55} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10Z" />
-    </svg>
-  </span>;
+  />;
 }
 
 export function Brand({ subtitle }: { subtitle?: string }) {

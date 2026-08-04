@@ -9,9 +9,10 @@ export const metadata: Metadata = {
   applicationName: "BHEALIX CRM",
   appleWebApp: { capable: true, title: "BHEALIX", statusBarStyle: "default" },
   icons: {
+    // The logo is raster artwork, so there is no SVG variant to offer here.
     icon: [
       { url: "/icons/favicon-32.png", sizes: "32x32", type: "image/png" },
-      { url: "/icons/icon.svg", type: "image/svg+xml" }
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }
     ],
     apple: { url: "/icons/apple-touch-icon.png", sizes: "180x180" }
   }

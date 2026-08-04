@@ -13,7 +13,9 @@
  *
  * Bump VERSION to evict every cache on the next deploy.
  */
-const VERSION = "v1";
+/* v2: real logo artwork. The icon filenames did not change, so without this
+ * bump an installed worker would keep serving the placeholder from its cache. */
+const VERSION = "v2";
 const SHELL_CACHE = `bhealix-shell-${VERSION}`;
 const ASSET_CACHE = `bhealix-assets-${VERSION}`;
 const CURRENT = [SHELL_CACHE, ASSET_CACHE];
