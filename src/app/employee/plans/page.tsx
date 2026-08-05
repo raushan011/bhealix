@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { CalendarRange, ChevronRight, MapPin, Route } from "lucide-react";
+import { CalendarRange, ChevronRight, MapPin, Plus, Route } from "lucide-react";
 import { requireFieldPanel } from "@/lib/auth/guard";
 import { connectDb } from "@/lib/db/mongoose";
 import { RoutePlan } from "@/models/RoutePlan";
-import { Badge, EmptyState, PageTitle, statusTone } from "@/components/ui/kit";
+import { Badge, EmptyState, LinkButton, PageTitle, statusTone } from "@/components/ui/kit";
 import { formatDate, toDisplayTime, WEEKDAYS } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
@@ -63,7 +63,8 @@ export default async function MyPlansPage() {
   const earlier = plans.filter(plan => plan.date < start);
 
   return <div className="space-y-5">
-    <PageTitle title="My plans" subtitle="Routes your administrator has assigned to you" />
+    <PageTitle title="My plans" subtitle="Routes assigned to you, and rounds you have planned yourself"
+      actions={<LinkButton href="/employee/plans/new"><Plus size={16} />Plan a round</LinkButton>} />
 
     {plans.length ? <>
       <Group title="Today" plans={today} />
@@ -71,7 +72,8 @@ export default async function MyPlansPage() {
       <Group title="Earlier" plans={earlier} />
     </> : (
       <EmptyState icon={CalendarRange} title="No plans yet"
-        description="When your administrator assigns you a route, it appears here right away — even if it is for a later day." />
+        description="A route your administrator assigns appears here right away. You can also plan your own round — the order is worked out from each doctor's call time."
+        action={<LinkButton href="/employee/plans/new">Plan a round</LinkButton>} />
     )}
   </div>;
 }

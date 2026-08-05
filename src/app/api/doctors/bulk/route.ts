@@ -32,7 +32,9 @@ const schema = z.object({ doctors: z.array(itemSchema).min(1).max(500) });
  */
 export async function POST(request: Request) {
   try {
-    const auth = await apiSession(can.manageDoctors);
+    // Field staff add doctors one at a time through this same route, so it is
+    // gated on adding rather than on managing the directory.
+    const auth = await apiSession(can.addDoctors);
     if ("response" in auth) return auth.response;
     const { doctors } = schema.parse(await request.json());
     await connectDb();

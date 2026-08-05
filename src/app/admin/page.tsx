@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { CalendarRange, ClipboardList, Clock, MapPin, Search, Stethoscope, TriangleAlert, Users } from "lucide-react";
 import { requireAdminPanel } from "@/lib/auth/guard";
 import { connectDb } from "@/lib/db/mongoose";
@@ -16,6 +17,10 @@ const endOfToday = () => { const d = new Date(); d.setHours(23, 59, 59, 999); re
 
 export default async function AdminDashboard() {
   const session = await requireAdminPanel();
+  // This dashboard is about doctors, routes and visits — none of which are HR's
+  // work. They get their own front page rather than one full of links they
+  // cannot follow.
+  if (session.role === "HR") redirect("/admin/hr");
   await connectDb();
 
   const [doctors, missingCallTime, missingLocation, team, todayVisits, todayDone, plans] = await Promise.all([

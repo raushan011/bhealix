@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { KeyRound, Plus, Trash2, UserRound } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Field, Notice, PageTitle, Spinner } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import { ROLES, ROLE_LABEL, type Role } from "@/constants/access";
 
-type Member = { _id: string; name: string; employeeId: string; email: string; role: Role; active: boolean; lastLoginAt?: string };
+type Member = {
+  _id: string; name: string; employeeId: string; email: string; role: Role; active: boolean;
+  lastLoginAt?: string; designation?: string; department?: string;
+};
 
 const roleTone = (role: Role) => role === "ADMIN" ? "brand" : role === "HR" ? "info" : "neutral";
 
@@ -64,14 +68,16 @@ export default function TeamPage() {
       <Card className="divide-y divide-[var(--line)]">
         {members.map(member => (
           <div key={member._id} className="flex flex-wrap items-center gap-3 px-5 py-4">
-            <div className="min-w-0 flex-1">
+            <Link href={`/admin/team/${member._id}`} className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="truncate text-sm font-semibold">{member.name}</p>
                 <Badge tone={roleTone(member.role)}>{ROLE_LABEL[member.role]}</Badge>
                 {!member.active && <Badge tone="danger">Inactive</Badge>}
               </div>
-              <p className="mt-0.5 truncate text-xs text-[var(--muted)]">{member.employeeId} · {member.email}</p>
-            </div>
+              <p className="mt-0.5 truncate text-xs text-[var(--muted)]">
+                {[member.employeeId, member.designation, member.department, member.email].filter(Boolean).join(" · ")}
+              </p>
+            </Link>
             <div className="flex shrink-0 items-center gap-2">
               <select value={member.role} aria-label={`Role for ${member.name}`}
                 onChange={e => patch(member._id, { role: e.target.value }, `${member.name} is now ${ROLE_LABEL[e.target.value as Role]}.`)}
@@ -112,7 +118,11 @@ function AddMember({ onClose, onAdded }: { onClose: () => void; onAdded: () => v
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({
           name: data.get("name"), employeeId: data.get("employeeId"),
-          email: data.get("email"), password: data.get("password"), role: data.get("role")
+          email: data.get("email"), password: data.get("password"), role: data.get("role"),
+          designation: data.get("designation") || undefined,
+          department: data.get("department") || undefined,
+          joiningDate: data.get("joiningDate") || undefined,
+          phone: data.get("phone") || undefined
         })
       });
       const json = await response.json() as { error?: string };
@@ -137,6 +147,16 @@ function AddMember({ onClose, onAdded }: { onClose: () => void; onAdded: () => v
           {ROLES.map(role => <option key={role} value={role}>{ROLE_LABEL[role]}</option>)}
         </select>
       </Field>
+
+      {/* Enough of the employment record to be useful on day one; the rest is
+          filled in on their profile afterwards. */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Designation"><input name="designation" className="input" placeholder="Medical Representative" /></Field>
+        <Field label="Department"><input name="department" className="input" placeholder="Field Sales" /></Field>
+        <Field label="Joining date"><input name="joiningDate" type="date" className="input" /></Field>
+        <Field label="Phone"><input name="phone" className="input" inputMode="tel" /></Field>
+      </div>
+
       {error && <Notice tone="error">{error}</Notice>}
       <Button type="submit" busy={busy} className="w-full">{busy ? "Adding…" : "Add employee"}</Button>
     </form>

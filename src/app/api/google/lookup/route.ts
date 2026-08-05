@@ -13,7 +13,9 @@ import { searchText, toDiscovered } from "@/lib/doctors/places";
  */
 export async function POST(request: Request) {
   try {
-    const auth = await apiSession(can.manageDoctors);
+    // Whoever may add a doctor may look one up by name — it is the same job,
+    // and a rep who cannot search would be left typing an address by hand.
+    const auth = await apiSession(can.addDoctors);
     if ("response" in auth) return auth.response;
 
     const key = process.env.GOOGLE_MAPS_SERVER_API_KEY;

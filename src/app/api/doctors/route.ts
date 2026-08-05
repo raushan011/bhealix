@@ -3,7 +3,7 @@ import type { FilterQuery } from "mongoose";
 import { connectDb } from "@/lib/db/mongoose";
 import { Doctor } from "@/models/Doctor";
 import { apiSession } from "@/lib/auth/guard";
-import { can } from "@/constants/access";
+import { can, usesFieldPanel } from "@/constants/access";
 import { fail, ok, pageParams } from "@/lib/api";
 import { callScheduleSchema } from "@/lib/doctors/call-schedule";
 import { DOCTOR_LIST_FIELDS } from "@/lib/doctors/fields";
@@ -79,9 +79,18 @@ export async function GET(request: Request) {
   }
 }
 
+/**
+ * Adds a doctor to the directory.
+ *
+ * Open to field staff as well as the administrator: a rep standing in a
+ * corridor is the first to hear of a doctor nobody at the office knows about,
+ * and making them phone it in is how a directory stops reflecting reality. A
+ * doctor added by a rep is assigned to that rep, so it lands in the round of
+ * whoever found them.
+ */
 export async function POST(request: Request) {
   try {
-    const auth = await apiSession(can.manageDoctors);
+    const auth = await apiSession(can.addDoctors);
     if ("response" in auth) return auth.response;
     await connectDb();
 
@@ -91,6 +100,7 @@ export async function POST(request: Request) {
       ...value,
       code: `BHX-${String(count + 1).padStart(5, "0")}`,
       source: "Manual",
+      ...(usesFieldPanel(auth.session.role) ? { assignedTo: auth.session.userId } : {}),
       ...(latitude !== undefined && longitude !== undefined
         ? { location: { type: "Point", coordinates: [longitude, latitude] } }
         : {})

@@ -3,27 +3,45 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, Boxes, Building2, CalendarRange, ClipboardList, LayoutDashboard, LogOut, Menu, Package, Receipt, Search, Stethoscope, Users, Warehouse, X } from "lucide-react";
+import { BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, HeartHandshake, LayoutDashboard, LogOut, Menu, Package, Receipt, Search, Stethoscope, Users, Warehouse, X } from "lucide-react";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { Brand, BrandMark } from "@/components/ui/brand";
 import { ROLE_LABEL, type Role } from "@/constants/access";
 
+/**
+ * Grouped, because the desk serves two jobs. An administrator runs the field
+ * operation and the books; HR runs the people. Showing each their own headings
+ * is what stops the sidebar reading as one undifferentiated list of twelve.
+ */
 const NAV = [
-  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, roles: ["ADMIN", "HR"] },
-  { href: "/admin/discover", label: "Find doctors", icon: Search, roles: ["ADMIN"] },
-  { href: "/admin/doctors", label: "Doctors", icon: Stethoscope, roles: ["ADMIN"] },
-  { href: "/admin/plans", label: "Route plans", icon: CalendarRange, roles: ["ADMIN"] },
-  { href: "/admin/visits", label: "Visits", icon: ClipboardList, roles: ["ADMIN"] },
-  { href: "/admin/reports", label: "Reports", icon: BarChart3, roles: ["ADMIN"] },
-  { href: "/admin/billing", label: "Billing", icon: Receipt, roles: ["ADMIN", "HR"] },
-  { href: "/admin/customers", label: "Customers", icon: Building2, roles: ["ADMIN", "HR"] },
-  { href: "/admin/inventory", label: "Inventory", icon: Warehouse, roles: ["ADMIN", "HR"] },
-  { href: "/admin/products", label: "Products", icon: Package, roles: ["ADMIN"] },
-  { href: "/admin/samples", label: "Samples", icon: Boxes, roles: ["ADMIN", "HR"] },
-  { href: "/admin/team", label: "Team", icon: Users, roles: ["ADMIN", "HR"] }
+  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, roles: ["ADMIN", "HR"], group: "" },
+  { href: "/admin/discover", label: "Find doctors", icon: Search, roles: ["ADMIN"], group: "Field" },
+  { href: "/admin/doctors", label: "Doctors", icon: Stethoscope, roles: ["ADMIN"], group: "Field" },
+  { href: "/admin/plans", label: "Route plans", icon: CalendarRange, roles: ["ADMIN"], group: "Field" },
+  { href: "/admin/visits", label: "Visits", icon: ClipboardList, roles: ["ADMIN"], group: "Field" },
+  { href: "/admin/reports", label: "Reports", icon: BarChart3, roles: ["ADMIN"], group: "Field" },
+
+  { href: "/admin/billing", label: "Billing", icon: Receipt, roles: ["ADMIN", "HR"], group: "Trade" },
+  { href: "/admin/customers", label: "Customers", icon: Building2, roles: ["ADMIN", "HR"], group: "Trade" },
+  { href: "/admin/inventory", label: "Inventory", icon: Warehouse, roles: ["ADMIN", "HR"], group: "Trade" },
+  { href: "/admin/products", label: "Products", icon: Package, roles: ["ADMIN"], group: "Trade" },
+  { href: "/admin/samples", label: "Samples", icon: Boxes, roles: ["ADMIN", "HR"], group: "Trade" },
+
+  { href: "/admin/hr", label: "People", icon: HeartHandshake, roles: ["ADMIN", "HR"], group: "People" },
+  { href: "/admin/team", label: "Employees", icon: Users, roles: ["ADMIN", "HR"], group: "People" },
+  { href: "/admin/hr/attendance", label: "Attendance", icon: CalendarCheck, roles: ["ADMIN", "HR"], group: "People" },
+  { href: "/admin/hr/leave", label: "Leave", icon: ClipboardCheck, roles: ["ADMIN", "HR"], group: "People" },
+  { href: "/admin/hr/holidays", label: "Holidays", icon: CalendarDays, roles: ["ADMIN", "HR"], group: "People" }
 ] as const;
 
-const isActive = (pathname: string, href: string) => href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
+/**
+ * Exact matching for the two that sit above others in the same path — /admin/hr
+ * is the People dashboard, not an ancestor of Attendance, and would otherwise
+ * light up on every HR screen at once.
+ */
+const EXACT = new Set(["/admin", "/admin/hr"]);
+const isActive = (pathname: string, href: string) =>
+  EXACT.has(href) ? pathname === href : pathname.startsWith(href);
 const initials = (name: string) => name.trim().split(/\s+/).map(part => part[0]).slice(0, 2).join("").toUpperCase() || "?";
 
 export function AdminShell({ user, children }: { user: { name: string; role: Role }; children: React.ReactNode }) {
@@ -38,15 +56,26 @@ export function AdminShell({ user, children }: { user: { name: string; role: Rol
     router.refresh();
   }
 
+  // Only headings with something under them for this role are drawn, so HR does
+  // not see an empty "Field" heading.
+  const groups = [...new Set(items.map(item => item.group))];
+
   const navList = (
-    <nav className="space-y-0.5">
-      {items.map(({ href, label, icon: Icon }) => (
-        <Link key={href} href={href} onClick={() => setMenuOpen(false)}
-          className={`tap flex items-center gap-3 rounded-[10px] px-3 text-sm font-medium transition-colors ${
-            isActive(pathname, href) ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "text-[var(--ink-2)] hover:bg-[var(--surface-2)]"
-          }`}>
-          <Icon size={18} className="shrink-0" />{label}
-        </Link>
+    <nav className="space-y-3">
+      {groups.map(group => (
+        <div key={group} className="space-y-0.5">
+          {group && (
+            <p className="px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wider text-[var(--muted)]">{group}</p>
+          )}
+          {items.filter(item => item.group === group).map(({ href, label, icon: Icon }) => (
+            <Link key={href} href={href} onClick={() => setMenuOpen(false)}
+              className={`tap flex items-center gap-3 rounded-[10px] px-3 text-sm font-medium transition-colors ${
+                isActive(pathname, href) ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "text-[var(--ink-2)] hover:bg-[var(--surface-2)]"
+              }`}>
+              <Icon size={18} className="shrink-0" />{label}
+            </Link>
+          ))}
+        </div>
       ))}
     </nav>
   );

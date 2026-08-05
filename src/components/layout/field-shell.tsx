@@ -2,22 +2,33 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Boxes, CalendarCheck, History, LogOut, Receipt, Route, Stethoscope, UserRound } from "lucide-react";
+import { CalendarCheck, LayoutGrid, LogOut, Receipt, Route, Stethoscope } from "lucide-react";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { BrandMark } from "@/components/ui/brand";
 import { ROLE_LABEL, type Role } from "@/constants/access";
 
+/**
+ * Five tabs, because that is what a thumb can hit reliably on a 360px phone.
+ * The four screens a rep opens all day get a tab of their own; everything they
+ * reach for occasionally lives behind More, which is a real page rather than a
+ * pop-up menu so it survives a back button.
+ */
 const TABS = [
   { href: "/employee", label: "Today", icon: CalendarCheck },
   { href: "/employee/plans", label: "Plans", icon: Route },
   { href: "/employee/doctors", label: "Doctors", icon: Stethoscope },
   { href: "/employee/bills", label: "Bills", icon: Receipt },
-  { href: "/employee/samples", label: "Samples", icon: Boxes },
-  { href: "/employee/history", label: "History", icon: History },
-  { href: "/employee/profile", label: "Profile", icon: UserRound }
+  { href: "/employee/more", label: "More", icon: LayoutGrid }
 ] as const;
 
-const isActive = (pathname: string, href: string) => href === "/employee" ? pathname === "/employee" : pathname.startsWith(href);
+/** The paths More owns, so its tab stays lit while the rep is inside one. */
+const UNDER_MORE = ["/employee/more", "/employee/samples", "/employee/history", "/employee/leave", "/employee/profile"];
+
+function isActive(pathname: string, href: string) {
+  if (href === "/employee") return pathname === "/employee";
+  if (href === "/employee/more") return UNDER_MORE.some(path => pathname.startsWith(path));
+  return pathname.startsWith(href);
+}
 
 /**
  * Phone-first: content is a single column with a thumb-reachable tab bar that
@@ -54,14 +65,12 @@ export function FieldShell({ user, children }: { user: { name: string; role: Rol
     </main>
 
     <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--line)] bg-white pb-[env(safe-area-inset-bottom)]">
-      {/* Seven tabs is the most this bar takes on a 360px phone, so the label
-          shrinks rather than wrapping onto a second line. */}
-      <div className="mx-auto grid h-[68px] max-w-2xl grid-cols-7">
+      <div className="mx-auto grid h-[68px] max-w-2xl grid-cols-5">
         {TABS.map(({ href, label, icon: Icon }) => {
           const active = isActive(pathname, href);
           return <Link key={href} href={href} aria-current={active ? "page" : undefined}
-            className={`flex min-w-0 flex-col items-center justify-center gap-1 px-0.5 text-[10px] font-medium ${active ? "text-[var(--brand)]" : "text-[var(--muted)]"}`}>
-            <Icon size={20} className="shrink-0" /><span className="w-full truncate text-center">{label}</span>
+            className={`flex min-w-0 flex-col items-center justify-center gap-1 text-[11px] font-medium ${active ? "text-[var(--brand)]" : "text-[var(--muted)]"}`}>
+            <Icon size={21} className="shrink-0" /><span className="w-full truncate text-center">{label}</span>
           </Link>;
         })}
       </div>

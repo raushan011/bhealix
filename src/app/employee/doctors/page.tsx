@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, Clock, MapPin, Phone, Search, Stethoscope } from "lucide-react";
-import { EmptyState, PageTitle, Spinner } from "@/components/ui/kit";
+import { ChevronRight, Clock, MapPin, Phone, Plus, Search, Stethoscope } from "lucide-react";
+import { EmptyState, LinkButton, PageTitle, Spinner } from "@/components/ui/kit";
 import { summariseCallSchedule } from "@/lib/doctors/call-schedule";
 import type { EditableWindow } from "@/components/doctors/call-schedule-editor";
 
@@ -29,7 +29,8 @@ export default function FieldDoctors() {
   useEffect(() => { load(""); }, [load]);
 
   return <div className="space-y-4">
-    <PageTitle title="Doctors" subtitle="Look up a doctor and keep their call time correct" />
+    <PageTitle title="Doctors" subtitle="Look one up, fix their call time, or add somebody new"
+      actions={<LinkButton href="/employee/doctors/new"><Plus size={16} />Add</LinkButton>} />
 
     <div className="relative">
       <Search size={16} className="pointer-events-none absolute left-3 top-3.5 text-[var(--muted)]" />
@@ -41,7 +42,9 @@ export default function FieldDoctors() {
     {loading && <Spinner label="Loading…" />}
 
     {!loading && !doctors.length && (
-      <EmptyState icon={Stethoscope} title="No doctors found" description="Try a different name or area." />
+      <EmptyState icon={Stethoscope} title="No doctors found"
+        description={query ? "Nobody matches that. If they are new, add them yourself." : "Try a different name or area."}
+        action={<LinkButton href="/employee/doctors/new">Add a doctor</LinkButton>} />
     )}
 
     {!loading && doctors.length > 0 && (

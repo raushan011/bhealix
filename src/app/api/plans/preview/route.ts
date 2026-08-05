@@ -7,7 +7,9 @@ import { toClock } from "@/lib/time";
 
 export async function POST(request: Request) {
   try {
-    const auth = await apiSession(can.planRoutes);
+    // Previewing changes nothing, and a rep planning their own day needs it as
+    // much as the office does.
+    const auth = await apiSession(role => can.planRoutes(role) || can.planOwnRoute(role));
     if ("response" in auth) return auth.response;
     await connectDb();
 

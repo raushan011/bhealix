@@ -69,6 +69,32 @@ export type DiscoveredDoctor = {
   distanceKm: number;
 };
 
+/**
+ * Shapes a discovery result into the payload the bulk save endpoint accepts.
+ *
+ * Lives here rather than beside one screen because two now save doctors this
+ * way — the office discovering a neighbourhood, and a rep adding the one doctor
+ * in front of them — and a second copy of this mapping would drift.
+ */
+export function toBulkPayload(row: DiscoveredDoctor & { fromFile?: boolean }) {
+  return {
+    // A row read out of a spreadsheet has no Google identity to match on.
+    ...(row.fromFile ? {} : { googlePlaceId: row.placeId }),
+    name: row.name,
+    specialty: row.doctorType,
+    clinicName: row.name,
+    phone: row.phone,
+    fullAddress: row.address,
+    area: row.area,
+    city: row.city,
+    googleMapsUrl: row.mapsUrl,
+    rating: row.rating,
+    reviewCount: row.reviewCount,
+    ...(row.latitude && row.longitude ? { latitude: row.latitude, longitude: row.longitude } : {}),
+    source: row.fromFile ? ("Excel" as const) : ("Google" as const)
+  };
+}
+
 /** The single column shape used for both the Excel download and the upload. */
 export const EXCEL_COLUMNS = [
   "Doctor Name", "Doctor Type", "Clinic", "Mobile", "Email",

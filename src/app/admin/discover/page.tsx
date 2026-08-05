@@ -35,6 +35,7 @@ import {
   estimateGoogleRequests,
   fromExcelRow,
   lookupSchema,
+  toBulkPayload,
   toExcelRow,
   type DiscoveredDoctor,
 } from "@/lib/doctors/discovery";
@@ -42,24 +43,7 @@ import {
 type Row = DiscoveredDoctor & { fromFile?: boolean };
 type Mode = "area" | "name";
 
-/** Shapes a result into the payload the bulk save endpoint accepts. */
-const toPayload = (row: Row) => ({
-  ...(row.fromFile ? {} : { googlePlaceId: row.placeId }),
-  name: row.name,
-  specialty: row.doctorType,
-  clinicName: row.name,
-  phone: row.phone,
-  fullAddress: row.address,
-  area: row.area,
-  city: row.city,
-  googleMapsUrl: row.mapsUrl,
-  rating: row.rating,
-  reviewCount: row.reviewCount,
-  ...(row.latitude && row.longitude
-    ? { latitude: row.latitude, longitude: row.longitude }
-    : {}),
-  source: row.fromFile ? ("Excel" as const) : ("Google" as const),
-});
+const toPayload = toBulkPayload;
 
 export default function DiscoverPage() {
   const [mode, setMode] = useState<Mode>("area");

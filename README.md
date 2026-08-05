@@ -19,6 +19,9 @@ Built for phones first — reps use it standing in a clinic corridor — and equ
 - Assign the plan to an MR or sales executive; their day is created automatically.
 
 **Field work**
+- Reps **add doctors themselves** — searched by name so Google supplies the address and map location, or entered by hand with the phone's own position as the coordinate. A doctor added by a rep lands in that rep's list.
+- Reps **plan their own round**: pick a start, add who they are seeing, and the same engine orders it by call time first and distance second.
+- Five tabs on the phone — Today, Plans, Doctors, Bills — with samples, history, leave and profile behind **More**.
 - The rep opens the app to today's route in visiting order, with call times, addresses, one-tap call and directions.
 - Check in (captures location), then log the outcome, products discussed, samples given with quantities, the doctor's interest, order value, notes and a follow-up date.
 - If the doctor gives a different call timing, the rep corrects it on the spot — future route plans use it immediately.
@@ -42,6 +45,13 @@ Built for phones first — reps use it standing in a clinic corridor — and equ
 - Cancelling or deleting a bill puts its goods back.
 - Reorder levels flag what is running low, and anything that has gone below zero is shown rather than hidden.
 
+**HR**
+- A desk of its own at **Admin → People**: who is in, who is off, and what is waiting on a decision.
+- **Employment records** — designation, department, joining date, reporting line, emergency contact, PAN and bank details. Only the last four digits of an Aadhaar number are ever stored.
+- **Attendance** as a month grid, one row per person. Most of it fills itself in: a completed visit means the rep was out working, approved leave marks itself, and company holidays apply to everybody — so only the exceptions are marked by hand. An unmarked day stays visibly blank rather than counting as an absence.
+- **Leave** — reps apply from their phone, HR approves or refuses, and balances come off the requests themselves. Overlapping requests and requests beyond the balance are refused when they are made, not after two approvals have spent it twice. Nobody can sign off their own leave.
+- A **holiday calendar** that excludes those days from everybody's working days.
+
 **Admin tracking**
 - Every visit with its outcome, samples and notes.
 - Reports: completion rate per representative, sample distribution by product, visit outcomes and doctor interest.
@@ -54,6 +64,10 @@ Built for phones first — reps use it standing in a clinic corridor — and equ
 | Route planning and assignment | ✓ | | | |
 | Reports | ✓ | | | |
 | Employee management | ✓ | ✓ | | |
+| Attendance, leave approval and holidays | ✓ | ✓ | | |
+| Add a doctor to the directory | ✓ | | ✓ | ✓ |
+| Plan their own round | | | ✓ | ✓ |
+| Apply for leave | ✓ | ✓ | ✓ | ✓ |
 | Raise, cancel and edit bills | ✓ | | | |
 | Customer directory (stockists, distributors) | ✓ | | | |
 | Read every bill and what is owed | ✓ | ✓ | | |
