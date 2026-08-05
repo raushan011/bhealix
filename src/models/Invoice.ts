@@ -86,8 +86,15 @@ const InvoiceSchema = new Schema({
     name: String, clinicName: String, address: String,
     city: String, state: String, stateCode: String,
     pinCode: String, gstin: String, phone: String,
-    /** Printed under the name, so the bill says who it was raised for. */
-    type: String
+    /**
+     * Printed under the name, so the bill says who it was raised for.
+     *
+     * Spelled out as `{ type: String }` rather than a bare `String`: a key
+     * called `type` inside a nested object is read by Mongoose as the type
+     * declaration for the object around it, which would quietly turn the whole
+     * of `billTo` into a string field.
+     */
+    type: { type: String }
   },
   placeOfSupply: { state: String, code: String },
   /** Place of supply outside the seller's state, so IGST replaces CGST + SGST. */
