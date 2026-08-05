@@ -36,4 +36,6 @@ export async function middleware(request: NextRequest) {
   }
 }
 
-export const config = { matcher: ["/admin/:path*", "/employee/:path*", "/api/:path*"] };
+// /invoices is the printable bill, reached by both panels, so it is guarded for
+// a valid session but deliberately not confined to either one.
+export const config = { matcher: ["/admin/:path*", "/employee/:path*", "/invoices/:path*", "/api/:path*"] };

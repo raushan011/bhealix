@@ -55,6 +55,17 @@ export function toDateInput(value: string | Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+/**
+ * A "yyyy-mm-dd" form value as a Date.
+ *
+ * Anchored at local midday rather than midnight: a date stored at midnight is
+ * one timezone conversion away from becoming the previous day, and an invoice
+ * that changes its date in transit is not one anybody wants to explain.
+ */
+export function fromDateInput(value: string): Date {
+  return new Date(`${value}T12:00:00`);
+}
+
 export function todayIso(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;

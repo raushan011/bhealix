@@ -7,6 +7,7 @@ import { apiSession } from "@/lib/auth/guard";
 import { can, usesFieldPanel, type Role } from "@/constants/access";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
 import { MANUAL_MOVEMENT_TYPES, MOVEMENT_TYPES, signedQuantity, type ManualMovementType } from "@/lib/samples/movements";
+import { mirrorSampleMovements } from "@/lib/inventory/ledger";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -124,6 +125,15 @@ export async function POST(request: Request) {
       actor: auth.session.userId,
       occurredAt,
       notes: input.notes
+    })));
+
+    // Samples handed to a rep have left the warehouse, so the company's own
+    // stock has to move with them. An adjustment to a rep's count is a
+    // correction of that rep's count alone and does not touch the shelf.
+    await mirrorSampleMovements(created.map(row => ({
+      _id: row._id, product: row.product, productName: row.productName, type: row.type,
+      quantity: row.quantity, employee: row.employee, actor: row.actor,
+      occurredAt: row.occurredAt, notes: row.notes
     })));
 
     return ok({ recorded: created.length, employee: employee.name }, 201);

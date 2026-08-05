@@ -24,5 +24,18 @@ export const can = {
   /** Handing stock to a rep, and correcting the count, is the administrator's call. */
   issueSamples: (role: Role) => role === "ADMIN",
   /** HR reads the stock position but does not move any. */
-  viewAllStock: (role: Role) => role === "ADMIN" || role === "HR"
+  viewAllStock: (role: Role) => role === "ADMIN" || role === "HR",
+
+  /** Raising, cancelling and deleting an invoice is the administrator's alone. */
+  manageBilling: (role: Role) => role === "ADMIN",
+  /** HR sees the collection position without being able to change a bill. */
+  viewAllBilling: (role: Role) => role === "ADMIN" || role === "HR",
+  /**
+   * The rep is the one standing in the clinic when the doctor pays, so they may
+   * record a receipt — but only against an invoice raised in their own name,
+   * and recording a receipt can never alter what was billed.
+   */
+  recordPayment: (role: Role) => role === "ADMIN" || usesFieldPanel(role),
+  /** Receiving stock and correcting the warehouse count. */
+  manageInventory: (role: Role) => role === "ADMIN"
 };

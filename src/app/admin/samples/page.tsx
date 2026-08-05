@@ -17,7 +17,8 @@ type Movement = {
   actor?: { name: string } | null;
 };
 type Person = { _id: string; name: string; employeeId: string };
-type Product = { _id: string; name: string };
+/** `stock` is the company pool — the same units a bill to a doctor draws on. */
+type Product = { _id: string; name: string; stock?: number };
 
 const TABS = [
   { key: "stock", label: "Stock on hand", icon: Boxes },
@@ -251,8 +252,13 @@ function RecordMovement({ type, people, products, onClose, onSaved }: {
         </div>
 
         <div className="space-y-3">
-          {lines.map((line, index) => (
-            <div key={index} className="rounded-[10px] border border-[var(--line)] p-3">
+          {lines.map((line, index) => {
+            // Issuing draws on the same company stock a bill to a doctor does,
+            // so the count that matters is shown right where it is spent.
+            const available = products.find(product => product.name === line.product)?.stock;
+            const short = type === "ISSUE" && available !== undefined && line.quantity > available;
+
+            return <div key={index} className="rounded-[10px] border border-[var(--line)] p-3">
               <div className="flex items-center gap-2">
                 <select value={line.product} onChange={e => update(index, { product: e.target.value })} className="select flex-1">
                   {products.length ? products.map(product => <option key={product._id}>{product.name}</option>) : <option value="">No products configured</option>}
@@ -266,6 +272,13 @@ function RecordMovement({ type, people, products, onClose, onSaved }: {
                 )}
               </div>
 
+              {type === "ISSUE" && line.product && (
+                <p className={`mt-1.5 text-xs ${short ? "font-semibold text-rose-700" : "text-[var(--muted)]"}`}>
+                  {available ?? 0} available in company stock
+                  {short ? " — issuing this many will take it below zero" : ""}
+                </p>
+              )}
+
               {type === "ISSUE" && (
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   <input value={line.batchNo} onChange={e => update(index, { batchNo: e.target.value })}
@@ -274,8 +287,8 @@ function RecordMovement({ type, people, products, onClose, onSaved }: {
                     aria-label="Expiry date" className="input" />
                 </div>
               )}
-            </div>
-          ))}
+            </div>;
+          })}
         </div>
         {type === "ISSUE" && copy.hint && <p className="mt-1.5 text-xs text-[var(--muted)]">{copy.hint}</p>}
       </div>

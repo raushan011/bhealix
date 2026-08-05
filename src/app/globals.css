@@ -107,3 +107,25 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/*
+ * Printing an invoice is how the app produces a PDF, so the printed sheet is a
+ * first-class layout rather than a screenshot of the screen: A4 with real
+ * margins, white paper, and the page furniture removed.
+ */
+@page { size: A4; margin: 12mm; }
+
+@media print {
+  html, body { background: #fff; }
+  .no-print { display: none !important; }
+  .invoice-sheet {
+    width: 100%;
+    /* Backgrounds carry meaning in the totals block, so keep them. */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* A bill that splits a line across two pages is unreadable. */
+  .invoice-sheet table { page-break-inside: auto; }
+  .invoice-sheet tr { page-break-inside: avoid; }
+  .invoice-sheet thead { display: table-header-group; }
+}

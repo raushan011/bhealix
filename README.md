@@ -23,6 +23,25 @@ Built for phones first — reps use it standing in a clinic corridor — and equ
 - Check in (captures location), then log the outcome, products discussed, samples given with quantities, the doctor's interest, order value, notes and a follow-up date.
 - If the doctor gives a different call timing, the rep corrects it on the spot — future route plans use it immediately.
 
+**Billing**
+- Raise a bill for the products a buyer has taken, as either a **tax invoice** with GST or a **bill of supply** without it.
+- **Anyone can be billed, not only doctors.** A doctor from the visiting directory, a trade buyer from the customer directory — stockist, distributor, chemist, hospital, clinic, institution or individual — or a one-off buyer typed straight onto the bill and never filed. Trade buyers live in **Admin → Customers** with their own GSTIN, state, credit period and drug licence, so the second bill for a stockist needs no retyping.
+- A discount on every line, as a percentage or a flat amount, taken off before tax as it must be.
+- GST worked out per line and summarised by HSN code: CGST and SGST within your state, IGST outside it, decided by the place of supply. Rates can be entered with tax already inside them.
+- Bill numbers run `BHX/2025-26/0001` and restart each financial year.
+- Every bill names the **representative it belongs to**, when the money is due, and when to follow up.
+- **Part payments**: record each receipt as it comes in, by cash, UPI, cheque, card or transfer. The balance and the status follow from the receipts, so removing one entered by mistake corrects the bill by itself.
+- Reps see their own bills on their phone, collect against them, and **download any of them as a PDF**.
+- Raised in error? Cancel keeps the number in the books; delete is available only before anything has been received.
+
+**Inventory**
+- **One pool per product.** Each product carries a units-available figure set from **Admin → Products**. Samples issued to a representative and products billed to a doctor come out of that same figure, because in the storeroom they come out of the same box.
+- The figure is never stored on the product itself — it is the balance of the stock ledger, so typing a new count records the difference as a correction and the number can never disagree with the events behind it.
+- Company stock per product: opening stock, receipts from suppliers with batch and expiry, sales returns and stocktake corrections.
+- Billing a doctor takes the goods off the shelf. Issuing samples to a rep does too — the same units cannot be counted twice.
+- Cancelling or deleting a bill puts its goods back.
+- Reorder levels flag what is running low, and anything that has gone below zero is shown rather than hidden.
+
 **Admin tracking**
 - Every visit with its outcome, samples and notes.
 - Reports: completion rate per representative, sample distribution by product, visit outcomes and doctor interest.
@@ -35,7 +54,12 @@ Built for phones first — reps use it standing in a clinic corridor — and equ
 | Route planning and assignment | ✓ | | | |
 | Reports | ✓ | | | |
 | Employee management | ✓ | ✓ | | |
+| Raise, cancel and edit bills | ✓ | | | |
+| Customer directory (stockists, distributors) | ✓ | | | |
+| Read every bill and what is owed | ✓ | ✓ | | |
+| Inventory: receive stock and correct counts | ✓ | | | |
 | Own daily route and visits | | | ✓ | ✓ |
+| Own bills: collect payment and download | | | ✓ | ✓ |
 | Update a doctor's call time | ✓ | | ✓ | ✓ |
 
 Admin and HR use the desktop panel at `/admin`; MR and Sales use the mobile panel at `/employee`. Middleware keeps each role in its own panel, and every API route re-checks permission on the server — the UI never decides access on its own.
@@ -50,7 +74,9 @@ Admin and HR use the desktop panel at `/admin`; MR and Sales use the mobile pane
 
 The seed creates one administrator: `admin@bhealix.com` / `Bhealix@123`. **Change the password before going live.** Representatives are added from the Team screen; pass `SEED_DEMO_STAFF=1` if you want throwaway MR/HR/Sales accounts for a demo.
 
-No sample doctors or products are created. Product names appear in sample-distribution reports, so the catalogue starts empty and is filled from **Admin → Products** with the real range.
+No sample doctors or products are created. Product names appear in sample-distribution reports, so the catalogue starts empty and is filled from **Admin → Products** with the real range. Give each product its selling rate, HSN code and GST slab there — a bill is then raised by choosing a product and typing a quantity.
+
+Before the first tax invoice, fill in **Admin → Billing → Settings** with your GSTIN, your state and your bank details. Your state is what decides CGST + SGST against IGST. Without a GSTIN the app will still raise bills, but only as a bill of supply with no GST charged. Then record what you already hold from **Admin → Inventory**, so stock counts down correctly from the first bill.
 
 `npm run seed` is safe to re-run against real data: it never deletes doctors, never resets an existing password, and migrates call timings from the older `mrcallschedules` collection into each doctor record.
 

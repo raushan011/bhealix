@@ -28,6 +28,12 @@ const DoctorSchema = new Schema({
   area: { type: String, index: true },
   city: { type: String, index: true },
   pinCode: String,
+  // Billing identity. Captured the first time an invoice is raised and reused
+  // afterwards, so the second bill for a doctor needs no retyping. `state` also
+  // decides the place of supply, and with it CGST + SGST against IGST.
+  state: String,
+  stateCode: String,
+  gstin: String,
   location: {
     type: { type: String, enum: ["Point"], default: "Point" },
     coordinates: { type: [Number], default: undefined }   // [longitude, latitude]

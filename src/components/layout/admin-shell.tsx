@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, Boxes, CalendarRange, ClipboardList, LayoutDashboard, LogOut, Menu, Package, Search, Stethoscope, Users, X } from "lucide-react";
+import { BarChart3, Boxes, Building2, CalendarRange, ClipboardList, LayoutDashboard, LogOut, Menu, Package, Receipt, Search, Stethoscope, Users, Warehouse, X } from "lucide-react";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { Brand, BrandMark } from "@/components/ui/brand";
 import { ROLE_LABEL, type Role } from "@/constants/access";
@@ -15,6 +15,9 @@ const NAV = [
   { href: "/admin/plans", label: "Route plans", icon: CalendarRange, roles: ["ADMIN"] },
   { href: "/admin/visits", label: "Visits", icon: ClipboardList, roles: ["ADMIN"] },
   { href: "/admin/reports", label: "Reports", icon: BarChart3, roles: ["ADMIN"] },
+  { href: "/admin/billing", label: "Billing", icon: Receipt, roles: ["ADMIN", "HR"] },
+  { href: "/admin/customers", label: "Customers", icon: Building2, roles: ["ADMIN", "HR"] },
+  { href: "/admin/inventory", label: "Inventory", icon: Warehouse, roles: ["ADMIN", "HR"] },
   { href: "/admin/products", label: "Products", icon: Package, roles: ["ADMIN"] },
   { href: "/admin/samples", label: "Samples", icon: Boxes, roles: ["ADMIN", "HR"] },
   { href: "/admin/team", label: "Team", icon: Users, roles: ["ADMIN", "HR"] }

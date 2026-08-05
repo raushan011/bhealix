@@ -9,6 +9,9 @@ import type { EditableWindow } from "./call-schedule-editor";
 export type PickableDoctor = {
   _id: string; name: string; clinicName?: string; area?: string; city?: string;
   phones?: string[]; location?: { coordinates?: number[] }; callSchedule?: EditableWindow[];
+  // Carried for billing, which needs an address and a place of supply rather
+  // than a coordinate. Absent on doctors added before these were captured.
+  fullAddress?: string; pinCode?: string; state?: string; stateCode?: string; gstin?: string;
 };
 
 export const hasCoordinates = (doctor: PickableDoctor) => (doctor.location?.coordinates?.length ?? 0) === 2;
@@ -20,10 +23,16 @@ export const placeOf = (doctor: PickableDoctor) =>
  * call window for that day, so the planner can see availability before adding
  * somebody to a route rather than after calculating it.
  */
-export function DoctorPicker({ weekday, excludeIds, onSelect, placeholder = "Search doctor, clinic, area or city" }: {
+export function DoctorPicker({ weekday, excludeIds, onSelect, requireLocation = true, placeholder = "Search doctor, clinic, area or city" }: {
   weekday?: number;
   excludeIds?: Set<string>;
   onSelect: (doctor: PickableDoctor) => void;
+  /**
+   * Route planning needs a coordinate to work with, so it only offers doctors
+   * that have one. Billing does not — a doctor whose clinic was never pinned
+   * still buys products — so it turns this off.
+   */
+  requireLocation?: boolean;
   placeholder?: string;
 }) {
   const [query, setQuery] = useState("");
@@ -41,13 +50,15 @@ export function DoctorPicker({ weekday, excludeIds, onSelect, placeholder = "Sea
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
-        const response = await fetch(`/api/doctors?q=${encodeURIComponent(term)}&routable=1&limit=8`, { signal: controller.signal });
+        const response = await fetch(
+          `/api/doctors?q=${encodeURIComponent(term)}${requireLocation ? "&routable=1" : ""}&limit=8`,
+          { signal: controller.signal });
         const json = await response.json() as { data?: { items: PickableDoctor[] } };
         setItems(json.data?.items ?? []); setActive(0); setOpen(true); setLoading(false);
       } catch (error) { if ((error as Error).name !== "AbortError") setLoading(false); }
     }, 250);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [query]);
+  }, [query, requireLocation]);
 
   useEffect(() => {
     function onPointerDown(event: MouseEvent) { if (!boxRef.current?.contains(event.target as Node)) setOpen(false); }
@@ -58,7 +69,7 @@ export function DoctorPicker({ weekday, excludeIds, onSelect, placeholder = "Sea
   const visible = items.filter(item => !excludeIds?.has(item._id));
 
   function choose(doctor: PickableDoctor) {
-    if (!hasCoordinates(doctor)) return;
+    if (requireLocation && !hasCoordinates(doctor)) return;
     onSelect(doctor); setQuery(""); setItems([]); setOpen(false);
   }
 
@@ -99,7 +110,9 @@ export function DoctorPicker({ weekday, excludeIds, onSelect, placeholder = "Sea
               </span>
             </button>
           </li>;
-        }) : <li className="px-4 py-3 text-sm text-[var(--muted)]">{loading ? "Searching…" : "No doctors found with a saved location"}</li>}
+        }) : <li className="px-4 py-3 text-sm text-[var(--muted)]">
+          {loading ? "Searching…" : requireLocation ? "No doctors found with a saved location" : "No doctors found"}
+        </li>}
       </ul>
     )}
   </div>;

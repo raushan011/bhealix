@@ -27,4 +27,27 @@ describe("access", () => {
     expect(can.logVisits("MR")).toBe(true);
     expect(can.logVisits("ADMIN")).toBe(false);
   });
+
+  it("keeps raising a bill with the administrator, and lets HR watch the money", () => {
+    expect(can.manageBilling("ADMIN")).toBe(true);
+    expect(can.manageBilling("HR")).toBe(false);
+    expect(can.manageBilling("MR")).toBe(false);
+    expect(can.viewAllBilling("HR")).toBe(true);
+    expect(can.viewAllBilling("MR")).toBe(false);
+  });
+
+  it("lets the rep in the clinic record what the doctor paid", () => {
+    expect(can.recordPayment("MR")).toBe(true);
+    expect(can.recordPayment("SALES")).toBe(true);
+    expect(can.recordPayment("ADMIN")).toBe(true);
+    // Ownership of the bill is checked on the server; HR has no collection role.
+    expect(can.recordPayment("HR")).toBe(false);
+  });
+
+  it("keeps the warehouse count with the administrator", () => {
+    expect(can.manageInventory("ADMIN")).toBe(true);
+    expect(can.manageInventory("HR")).toBe(false);
+    expect(can.viewAllStock("HR")).toBe(true);
+    expect(can.manageInventory("MR")).toBe(false);
+  });
 });
