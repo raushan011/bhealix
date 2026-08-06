@@ -133,6 +133,8 @@ const InvoiceSchema = new Schema({
   terms: String,
 
   createdBy: { type: Schema.Types.ObjectId, ref: "User" },
+  /** Who last corrected it, where a bill has been edited after being raised. */
+  updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
   cancelledAt: Date,
   cancelledBy: { type: Schema.Types.ObjectId, ref: "User" },
   cancelReason: String

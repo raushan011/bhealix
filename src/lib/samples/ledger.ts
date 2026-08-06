@@ -100,11 +100,25 @@ export async function stockByEmployee(): Promise<EmployeeStock[]> {
   }).sort((a, b) => b.issued - a.issued || a.name.localeCompare(b.name));
 }
 
-/** Issued and dispensed per rep over a date range, for the reports page. */
+/**
+ * Sample movement per rep over a date range, for the reports page.
+ *
+ * Adjustments are included. Without them the figure derived here disagreed with
+ * the Samples screen for any rep whose count had been corrected, and could show
+ * a rep as having over-recorded when the shortfall was a stocktake all along.
+ */
 export async function movementTotalsByEmployee(range: { $gte: Date; $lte: Date }) {
-  const rows = await SampleMovement.aggregate<{ _id: unknown; issued: number; dispensed: number; returned: number }>([
+  const rows = await SampleMovement.aggregate<
+    { _id: unknown; issued: number; dispensed: number; returned: number; adjusted: number }
+  >([
     { $match: { occurredAt: range } },
-    { $group: { _id: "$employee", issued: TOTALS.issued, dispensed: TOTALS.dispensed, returned: TOTALS.returned } }
+    {
+      $group: {
+        _id: "$employee",
+        issued: TOTALS.issued, dispensed: TOTALS.dispensed,
+        returned: TOTALS.returned, adjusted: TOTALS.adjusted
+      }
+    }
   ]);
   return new Map(rows.map(row => [String(row._id), row]));
 }

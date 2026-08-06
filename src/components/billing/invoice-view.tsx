@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  AlertTriangle, ArrowLeft, Ban, CalendarClock, Download, Phone, Receipt, Trash2, User
+  AlertTriangle, ArrowLeft, Ban, CalendarClock, Download, Pencil, Phone, Receipt, Trash2, User
 } from "lucide-react";
 import { Badge, Button, Card, Field, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
@@ -97,6 +97,14 @@ export function InvoiceView({ invoiceId, backHref }: { invoiceId: string; backHr
           className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-white px-4 text-sm font-semibold">
           <Download size={16} />Download
         </a>
+        {/* Editing is only offered while nothing has been received — re-pricing
+            a bill below what has already been paid would be a nonsense. */}
+        {mayManage && invoice.status !== "Cancelled" && !invoice.payments.length && (
+          <Link href={`/admin/billing/${invoiceId}/edit`}
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-white px-4 text-sm font-semibold">
+            <Pencil size={16} />Edit
+          </Link>
+        )}
         {mayCollect && <Button onClick={() => setPaying(true)}>Record payment</Button>}
       </>} />
 

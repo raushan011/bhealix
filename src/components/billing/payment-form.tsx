@@ -17,7 +17,13 @@ export function PaymentForm({ invoiceId, balanceDue, onClose, onSaved }: {
   onClose: () => void;
   onSaved: (text: string) => void;
 }) {
-  const [amount, setAmount] = useState(balanceDue);
+  /**
+   * Deliberately empty rather than pre-filled with the whole balance. A dialog
+   * that opens with the full amount already in it turns "let me look at this"
+   * into "marked paid in full" with one stray tap — the figure has to be typed,
+   * or chosen from the buttons below.
+   */
+  const [amount, setAmount] = useState(0);
   const [mode, setMode] = useState<PaymentMode>("Cash");
   const [reference, setReference] = useState("");
   const [paidAt, setPaidAt] = useState(todayIso);
@@ -54,18 +60,26 @@ export function PaymentForm({ invoiceId, balanceDue, onClose, onSaved }: {
     footer={<Button onClick={submit} busy={busy} className="w-full">{busy ? "Saving…" : "Record payment"}</Button>}>
     <div className="space-y-4">
       <Field label="Amount received" hint="Part payments are fine — record each one as it comes in">
-        <input type="number" min={0} max={balanceDue} step="0.01" value={amount} className="input"
-          onChange={e => setAmount(Math.max(0, Number(e.target.value) || 0))} />
+        <input type="number" min={0} max={balanceDue} step="0.01" placeholder="0.00" className="input"
+          value={amount || ""} onChange={e => setAmount(Math.max(0, Number(e.target.value) || 0))} />
       </Field>
 
       <div className="flex flex-wrap gap-2">
-        {[balanceDue, balanceDue / 2].map((value, index) => (
-          <button key={index} type="button" onClick={() => setAmount(Math.round(value * 100) / 100)}
+        {[balanceDue, Math.round((balanceDue / 2) * 100) / 100].map((value, index) => (
+          <button key={index} type="button" onClick={() => setAmount(value)}
             className="rounded-full border border-[var(--line-2)] px-3 py-1.5 text-xs font-semibold">
-            {index === 0 ? `Full ${formatMoney(balanceDue)}` : `Half ${formatMoney(Math.round((balanceDue / 2) * 100) / 100)}`}
+            {index === 0 ? `Full ${formatMoney(value)}` : `Half ${formatMoney(value)}`}
           </button>
         ))}
       </div>
+
+      {amount > 0 && (
+        <p className="rounded-[10px] bg-[var(--surface-2)] px-3 py-2.5 text-sm">
+          {amount + 0.005 >= balanceDue
+            ? <>This settles the bill in full.</>
+            : <>{formatMoney(balanceDue - amount)} will still be outstanding.</>}
+        </p>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Mode">

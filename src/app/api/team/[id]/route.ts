@@ -8,7 +8,7 @@ import { Doctor } from "@/models/Doctor";
 import { SampleMovement } from "@/models/Sample";
 import { LeaveRequest } from "@/models/HR";
 import { apiSession } from "@/lib/auth/guard";
-import { can, ROLES } from "@/constants/access";
+import { can, ROLES, type Role } from "@/constants/access";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
 import type { LeaveType } from "@/lib/hr/leave";
 import { leaveBalanceFor } from "@/lib/hr/records";
@@ -102,12 +102,38 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!OBJECT_ID.test(id)) return badRequest("Invalid employee reference");
 
     const value = schema.parse(await request.json());
-    // Losing the last administrator would lock everyone out of the panel.
     if (id === auth.session.userId && value.active === false) {
       return badRequest("You cannot deactivate your own account");
     }
 
     await connectDb();
+    const target = await User.findById(id).select("role active name").lean() as
+      { role: Role; active: boolean; name: string } | null;
+    if (!target) return badRequest("Employee not found", 404);
+
+    /*
+     * Who somebody is, is the administrator's to decide.
+     *
+     * HR keeps the employment record — designation, leave, contact details —
+     * but granting a role is granting authority over billing, the doctor
+     * directory and inventory. Left to `manageEmployees` alone, an HR user
+     * could set their own row to Administrator and take all of it.
+     */
+    if (value.role !== undefined && value.role !== target.role && auth.session.role !== "ADMIN") {
+      return badRequest("Only an administrator can change somebody's role", 403);
+    }
+
+    /*
+     * The last administrator cannot be removed from the panel by any route.
+     * Deleting one is already refused; deactivating or demoting one was not,
+     * and would leave nobody able to bill, plan or move stock — with no way
+     * back, because restoring the role needs an administrator.
+     */
+    const losingLastAdmin = target.role === "ADMIN" && target.active
+      && (value.active === false || (value.role !== undefined && value.role !== "ADMIN"));
+    if (losingLastAdmin && await User.countDocuments({ role: "ADMIN", active: true }) <= 1) {
+      return badRequest(`${target.name} is the last active administrator. Appoint another one first.`);
+    }
     const { newPassword, reportingTo, ...profile } = value;
     const update: Record<string, unknown> = { ...profile };
     if (newPassword) update.passwordHash = await bcrypt.hash(newPassword, 12);

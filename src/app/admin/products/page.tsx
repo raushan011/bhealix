@@ -7,6 +7,7 @@ import { Badge, Button, Card, EmptyState, Field, Notice, PageTitle, Spinner, Sta
 import { Modal } from "@/components/ui/modal";
 import { formatMoney, GST_RATES, UNITS } from "@/lib/billing/constants";
 import { stockAlert } from "@/lib/inventory/movements";
+import { can, type Role } from "@/constants/access";
 
 type Product = {
   _id: string; name: string; category?: string; sampleAvailable: boolean; active: boolean;
@@ -21,6 +22,7 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Product | "new" | null>(null);
+  const [role, setRole] = useState<Role | null>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
   async function load() {
@@ -31,6 +33,15 @@ export default function ProductsPage() {
     setLoading(false);
   }
   useEffect(() => { load(); }, []);
+
+  // The catalogue is the administrator's to change — every mutation here is
+  // guarded by `can.manageDoctors` on the server. HR reaches this screen from
+  // Inventory, so the controls are hidden rather than left to fail on press.
+  useEffect(() => {
+    fetch("/api/auth/me").then(response => response.json())
+      .then((json: { data?: { role: Role } }) => setRole(json.data?.role ?? null))
+      .catch(() => setRole(null));
+  }, []);
 
   async function remove(product: Product) {
     if (!window.confirm(`Remove ${product.name} from the catalogue?`)) return;
@@ -47,10 +58,15 @@ export default function ProductsPage() {
   }
 
   async function toggleActive(product: Product) {
-    await fetch(`/api/products/${product._id}`, {
+    const response = await fetch(`/api/products/${product._id}`, {
       method: "PATCH", headers: { "content-type": "application/json" },
       body: JSON.stringify({ active: !product.active })
     });
+    const json = await response.json() as { error?: string };
+    // Reloading an unchanged list after a refused request looks like nothing
+    // happened at all, which is the least helpful thing a screen can do.
+    if (!response.ok) { setNotice({ tone: "error", text: json.error ?? "Could not change this product" }); return; }
+    setNotice({ tone: "success", text: `${product.name} ${product.active ? "retired" : "restored"}.` });
     load();
   }
 
@@ -58,11 +74,12 @@ export default function ProductsPage() {
   const unpriced = live.filter(product => !product.price).length;
   const shortages = live.filter(product => alertFor(product));
   const unitsHeld = live.reduce((total, product) => total + (product.stock ?? 0), 0);
+  const mayEdit = role !== null && can.manageDoctors(role);
 
   return <div className="space-y-5">
     <PageTitle title="Products"
       subtitle="What your representatives discuss, hand out as samples, and bill — all from one stock of units"
-      actions={<Button onClick={() => setEditing("new")}><Plus size={16} />Add product</Button>} />
+      actions={mayEdit && <Button onClick={() => setEditing("new")}><Plus size={16} />Add product</Button>} />
 
     {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
 
@@ -93,7 +110,7 @@ export default function ProductsPage() {
     {!loading && !products.length && (
       <EmptyState icon={Package} title="No products yet"
         description="Add your real BHEALIX range. These are the options a rep picks from when logging what was discussed, and the lines an administrator bills."
-        action={<Button onClick={() => setEditing("new")}>Add product</Button>} />
+        action={mayEdit && <Button onClick={() => setEditing("new")}>Add product</Button>} />
     )}
 
     {!loading && products.length > 0 && (
@@ -126,13 +143,15 @@ export default function ProductsPage() {
               </p>
               <p className="text-[11px] text-[var(--muted)]">available</p>
             </div>
-            <button onClick={() => setEditing(product)} aria-label={`Edit ${product.name}`}
-              className="grid size-9 shrink-0 place-items-center rounded-lg text-[var(--ink-2)] hover:bg-[var(--surface-2)]"><Pencil size={15} /></button>
-            <Button tone="secondary" className="!min-h-[38px] !px-3 text-xs" onClick={() => toggleActive(product)}>
-              {product.active ? "Retire" : "Restore"}
-            </Button>
-            <button onClick={() => remove(product)} aria-label={`Remove ${product.name}`}
-              className="grid size-9 shrink-0 place-items-center rounded-lg text-rose-600 hover:bg-rose-50"><Trash2 size={15} /></button>
+            {mayEdit && <>
+              <button onClick={() => setEditing(product)} aria-label={`Edit ${product.name}`}
+                className="grid size-9 shrink-0 place-items-center rounded-lg text-[var(--ink-2)] hover:bg-[var(--surface-2)]"><Pencil size={15} /></button>
+              <Button tone="secondary" className="!min-h-[38px] !px-3 text-xs" onClick={() => toggleActive(product)}>
+                {product.active ? "Retire" : "Restore"}
+              </Button>
+              <button onClick={() => remove(product)} aria-label={`Remove ${product.name}`}
+                className="grid size-9 shrink-0 place-items-center rounded-lg text-rose-600 hover:bg-rose-50"><Trash2 size={15} /></button>
+            </>}
           </div>
         ))}
       </Card>

@@ -1,5 +1,7 @@
+import { redirect } from "next/navigation";
 import { BarChart3, Package } from "lucide-react";
 import { requireAdminPanel } from "@/lib/auth/guard";
+import { can } from "@/constants/access";
 import { connectDb } from "@/lib/db/mongoose";
 import { Visit } from "@/models/Visit";
 import { Card, EmptyState, PageTitle, Stat } from "@/components/ui/kit";
@@ -21,7 +23,11 @@ function Bar({ value, max }: { value: number; max: number }) {
 }
 
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
-  await requireAdminPanel();
+  const session = await requireAdminPanel();
+  // The whole field team's performance is the administrator's to read. The API
+  // behind this already says so with `can.viewAllReports`; the page has to agree,
+  // or typing the address walks straight past it.
+  if (!can.viewAllReports(session.role)) redirect("/admin");
   const days = Math.min(180, Math.max(7, Number((await searchParams).days) || 30));
   await connectDb();
 
@@ -105,8 +111,15 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
             const stock = stockTotals.get(String(row._id));
             const issued = stock?.issued ?? 0;
             const dispensed = stock?.dispensed ?? 0;
-            // What was issued but has neither reached a doctor nor come back.
-            const unaccounted = issued - dispensed - (stock?.returned ?? 0);
+            /*
+             * What moved in this period and has neither reached a doctor nor
+             * come back. Adjustments count: a stocktake that wrote units off is
+             * accounted for, not a shortfall to hold against the rep.
+             *
+             * Period, not lifetime — every figure here is filtered to the range
+             * above, so stock issued before it is not in `issued`.
+             */
+            const unaccounted = issued - dispensed - (stock?.returned ?? 0) + (stock?.adjusted ?? 0);
 
             return <div key={String(row._id)} className="px-5 py-4">
               <div className="flex items-center justify-between gap-3">
@@ -124,9 +137,12 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
               {issued > 0 && (
                 <p className="mt-2 text-xs text-[var(--muted)]">
                   {issued} samples issued · {dispensed} reached doctors ({utilisation(issued, dispensed)}%)
+                  {/* "In this period", not "in hand": everything here is
+                      filtered to the range above, so stock issued before it is
+                      not counted. The running balance lives on Samples. */}
                   {unaccounted !== 0 && (
                     <span className={unaccounted > 0 ? "" : "font-semibold text-rose-700"}>
-                      {" "}· {Math.abs(unaccounted)} {unaccounted > 0 ? "still in hand" : "over-recorded"}
+                      {" "}· {Math.abs(unaccounted)} {unaccounted > 0 ? "not yet handed over" : "over-recorded"} in this period
                     </span>
                   )}
                 </p>

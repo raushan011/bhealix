@@ -10,11 +10,20 @@ import fs from "node:fs";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
+/**
+ * Reads one value out of the env files, the way Next.js reads them.
+ *
+ * Quotes are stripped and commented lines are skipped: `MONGODB_URI="mongodb+srv://…"`
+ * is perfectly valid and the app runs on it happily, but handing the quotes to
+ * `mongoose.connect` fails with an invalid-scheme error that says nothing about
+ * where the quotes came from.
+ */
 function readEnv(key) {
   for (const file of [".env.local", ".env"]) {
     if (!fs.existsSync(file)) continue;
-    const line = fs.readFileSync(file, "utf8").split(/\r?\n/).find(row => row.startsWith(`${key}=`));
-    if (line) return line.slice(key.length + 1).trim();
+    const line = fs.readFileSync(file, "utf8").split(/\r?\n/)
+      .find(row => !row.trimStart().startsWith("#") && row.trimStart().startsWith(`${key}=`));
+    if (line) return line.trimStart().slice(key.length + 1).trim().replace(/^(['"])(.*)\1$/, "$2");
   }
   return process.env[key];
 }
@@ -49,10 +58,16 @@ for (const account of accounts) {
   await db.collection("users").updateOne(
     { email: account.email },
     {
-      $set: { ...account, active: true, updatedAt: new Date() },
-      // Only set the password when the account is first created, so a real
-      // password chosen later is never silently reset by re-seeding.
-      $setOnInsert: { passwordHash, createdAt: new Date() }
+      $set: { updatedAt: new Date() },
+      /*
+       * Everything about the account is set on creation only.
+       *
+       * Re-seeding used to reapply the name, the role and `active: true` every
+       * run, so an administrator who had been renamed, moved to another role or
+       * deactivated from the Team screen was silently put back — which is not
+       * what "safe to run against real data" should mean.
+       */
+      $setOnInsert: { ...account, active: true, passwordHash, createdAt: new Date() }
     },
     { upsert: true }
   );
