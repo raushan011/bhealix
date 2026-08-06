@@ -44,6 +44,22 @@ describe("access", () => {
     expect(can.recordPayment("HR")).toBe(false);
   });
 
+  it("separates preparing payroll from releasing it", () => {
+    // The HR desk builds the month; only the administrator approves and pays.
+    // One person able to do both is the oldest hole in any set of books.
+    expect(can.runPayroll("HR")).toBe(true);
+    expect(can.approvePayroll("HR")).toBe(false);
+    expect(can.approvePayroll("ADMIN")).toBe(true);
+  });
+
+  it("keeps everybody else's salary away from the field", () => {
+    expect(can.viewPayroll("MR")).toBe(false);
+    expect(can.viewPayroll("SALES")).toBe(false);
+    expect(can.runPayroll("MR")).toBe(false);
+    // Reading their own payslip is not this permission; it is checked by owner.
+    expect(can.viewPayroll("HR")).toBe(true);
+  });
+
   it("keeps the warehouse count with the administrator", () => {
     expect(can.manageInventory("ADMIN")).toBe(true);
     expect(can.manageInventory("HR")).toBe(false);

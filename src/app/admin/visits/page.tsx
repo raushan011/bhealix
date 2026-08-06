@@ -1,10 +1,13 @@
 import Link from "next/link";
-import { ClipboardList, Package } from "lucide-react";
+import Image from "next/image";
+import { Camera, ClipboardList, Package } from "lucide-react";
 import { requireAdminPanel } from "@/lib/auth/guard";
 import { connectDb } from "@/lib/db/mongoose";
 import { Visit } from "@/models/Visit";
+import { VisitPhoto } from "@/models/VisitPhoto";
 import { Badge, Card, EmptyState, PageTitle, statusTone } from "@/components/ui/kit";
 import { formatDate, toDisplayTime } from "@/lib/time";
+import { daysLeft } from "@/lib/visits";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +18,7 @@ type VisitDoc = {
   doctor?: { _id: unknown; name?: string; area?: string; city?: string };
   employee?: { name?: string };
 };
+type PhotoDoc = { _id: unknown; visit: unknown; expiresAt: Date };
 
 export default async function VisitsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   await requireAdminPanel();
@@ -26,6 +30,18 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
     .populate("doctor", "name area city")
     .populate("employee", "name")
     .sort({ plannedDate: -1, plannedStart: 1 }).limit(60).lean() as unknown as VisitDoc[];
+
+  // Metadata for the visits on screen only, and nothing already past its thirty
+  // days. The bytes are fetched by the browser one image at a time.
+  const photos = await VisitPhoto.find({
+    visit: { $in: visits.map(visit => visit._id) }, expiresAt: { $gt: new Date() }
+  }).select("visit expiresAt").sort({ createdAt: 1 }).lean() as unknown as PhotoDoc[];
+
+  const photosByVisit = new Map<string, PhotoDoc[]>();
+  for (const photo of photos) {
+    const key = String(photo.visit);
+    photosByVisit.set(key, [...(photosByVisit.get(key) ?? []), photo]);
+  }
 
   const tabs = [
     { label: "All", value: undefined },
@@ -49,8 +65,9 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
 
     {visits.length ? (
       <Card className="divide-y divide-[var(--line)]">
-        {visits.map(visit => (
-          <div key={String(visit._id)} className="px-5 py-4">
+        {visits.map(visit => {
+          const attached = photosByVisit.get(String(visit._id)) ?? [];
+          return <div key={String(visit._id)} className="px-5 py-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 {visit.doctor ? (
@@ -81,8 +98,28 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
             )}
             {visit.orderValue ? <p className="mt-1 text-xs font-semibold">Order ₹{visit.orderValue.toLocaleString("en-IN")}</p> : null}
             {visit.notes && <p className="mt-1 text-xs italic text-[var(--muted)]">“{visit.notes}”</p>}
-          </div>
-        ))}
+
+            {attached.length > 0 && (
+              <div className="mt-2.5">
+                <p className="mb-1.5 flex items-center gap-1.5 text-xs text-[var(--muted)]">
+                  <Camera size={12} />{attached.length} photo{attached.length === 1 ? "" : "s"} · oldest removed in {daysLeft(attached[0].expiresAt)} days
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {attached.map(photo => (
+                    <a key={String(photo._id)} href={`/api/visits/${visit._id}/photos/${photo._id}`}
+                      target="_blank" rel="noreferrer"
+                      className="relative size-16 overflow-hidden rounded-[10px] border border-[var(--line-2)] bg-[var(--surface-2)]">
+                      {/* Unoptimized: private bytes with a thirty-day life of
+                          their own, which the image cache must not outlive. */}
+                      <Image src={`/api/visits/${visit._id}/photos/${photo._id}`} alt={`Photo from the visit on ${formatDate(visit.plannedDate)}`}
+                        fill unoptimized sizes="64px" className="object-cover" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>;
+        })}
       </Card>
     ) : (
       <EmptyState icon={ClipboardList} title="No visits here"

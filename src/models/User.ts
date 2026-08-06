@@ -1,6 +1,7 @@
 import { Schema, model, models } from "mongoose";
 import { ROLES } from "@/constants/access";
 import { LEAVE_TYPES } from "@/lib/hr/leave";
+import { EMPLOYMENT_STATUSES } from "@/lib/hr/payroll";
 
 /**
  * Leave the employee starts the year with, where it differs from the company
@@ -30,6 +31,20 @@ const UserSchema = new Schema({
   reportingTo: { type: Schema.Types.ObjectId, ref: "User" },
   employmentType: { type: String, enum: ["Full time", "Part time", "Contract", "Intern"] },
   workLocation: String,
+  /**
+   * Where they stand in their employment. `active` says whether they can sign
+   * in; this says what the company's relationship with them is, which is a
+   * different question — somebody serving notice signs in every day.
+   */
+  employmentStatus: { type: String, enum: EMPLOYMENT_STATUSES },
+  confirmationDate: String,
+  /**
+   * Their last working day. Payroll pays up to it and no further, so an exit
+   * halfway through a month settles itself instead of being paid in full and
+   * recovered afterwards.
+   */
+  exitDate: String,
+  exitReason: String,
 
   phone: String,
   dateOfBirth: String,
@@ -42,6 +57,10 @@ const UserSchema = new Schema({
   aadhaarLastFour: String,
   bankAccountNo: String,
   bankIfsc: String,
+  bankName: String,
+  /** The provident fund's universal account number, which follows a person between employers. */
+  uan: String,
+  esicNumber: String,
 
   leaveEntitlement: { type: EntitlementSchema, default: undefined },
   notes: String

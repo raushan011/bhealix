@@ -97,9 +97,10 @@ export function InvoiceView({ invoiceId, backHref }: { invoiceId: string; backHr
           className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-white px-4 text-sm font-semibold">
           <Download size={16} />Download
         </a>
-        {/* Editing is only offered while nothing has been received — re-pricing
-            a bill below what has already been paid would be a nonsense. */}
-        {mayManage && invoice.status !== "Cancelled" && !invoice.payments.length && (
+        {/* Shown whenever the bill still stands, even when a receipt currently
+            blocks it: hiding the button taught nobody why it was missing, and
+            the edit screen explains the one thing to do about it. */}
+        {mayManage && invoice.status !== "Cancelled" && (
           <Link href={`/admin/billing/${invoiceId}/edit`}
             className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-white px-4 text-sm font-semibold">
             <Pencil size={16} />Edit
@@ -264,19 +265,43 @@ export function InvoiceView({ invoiceId, backHref }: { invoiceId: string; backHr
     )}
 
     {mayManage && (
-      <Card className="flex flex-wrap items-center justify-between gap-3 p-5">
+      <Card className="space-y-3 p-5">
         <div className="min-w-0">
           <p className="text-sm font-semibold">Corrections</p>
           <p className="mt-0.5 text-xs text-[var(--muted)]">
-            Cancel keeps the bill and its number in the books. Delete is only for a bill raised in error, before anything
-            has been received against it.
+            Edit changes what the bill says and keeps its number. Cancel keeps the bill in the books, marked cancelled.
+            Delete is only for one raised in error, before anything has been received against it.
           </p>
         </div>
-        <div className="flex shrink-0 gap-2">
+
+        {/*
+          Every action is listed whether or not it can be taken right now, and
+          a blocked one says what is blocking it. Hiding them left a bill with
+          a receipt on it looking as though it simply could not be corrected.
+        */}
+        {invoice.payments.length > 0 && invoice.status !== "Cancelled" && (
+          <Notice tone="info">
+            {invoice.payments.length === 1 ? "A receipt is" : `${invoice.payments.length} receipts are`} recorded against
+            this bill, so it cannot be edited, cancelled or deleted while they stand. Remove them under Payments above
+            and all three become available again.
+          </Notice>
+        )}
+
+        <div className="flex flex-wrap gap-2">
           {invoice.status !== "Cancelled" && (
-            <Button tone="danger" onClick={() => setCancelling(true)}><Ban size={15} />Cancel bill</Button>
+            <Link href={`/admin/billing/${invoiceId}/edit`}
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-white px-4 text-sm font-semibold">
+              <Pencil size={15} />Edit this bill
+            </Link>
           )}
-          {!invoice.payments.length && <Button tone="danger" onClick={remove}><Trash2 size={15} />Delete</Button>}
+          {invoice.status !== "Cancelled" && (
+            <Button tone="danger" disabled={invoice.payments.length > 0} onClick={() => setCancelling(true)}>
+              <Ban size={15} />Cancel bill
+            </Button>
+          )}
+          <Button tone="danger" disabled={invoice.payments.length > 0} onClick={remove}>
+            <Trash2 size={15} />Delete
+          </Button>
         </div>
       </Card>
     )}

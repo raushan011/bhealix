@@ -3,20 +3,24 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Briefcase, CalendarCheck, Mail, Pencil, Phone, ShieldCheck, UserRound } from "lucide-react";
+import { ArrowLeft, Briefcase, CalendarCheck, Mail, MapPinned, Pencil, Phone, ShieldCheck, UserRound } from "lucide-react";
 import { Badge, Button, Card, Field, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import { formatDate, todayIso } from "@/lib/time";
-import { can, ROLE_LABEL, type Role } from "@/constants/access";
+import { can, ROLE_LABEL, usesFieldPanel, type Role } from "@/constants/access";
 import { LEAVE_TYPES, isCounted, leaveTone, type LeaveBalance, type LeaveStatus, type LeaveType } from "@/lib/hr/leave";
+import { EMPLOYMENT_STATUSES, type EmploymentStatus } from "@/lib/hr/payroll";
+import { SalaryCard } from "@/components/hr/salary-card";
 
 type Employee = {
   _id: string; name: string; employeeId: string; email: string; role: Role; active: boolean;
   designation?: string; department?: string; joiningDate?: string; employmentType?: string; workLocation?: string;
+  employmentStatus?: EmploymentStatus; confirmationDate?: string; exitDate?: string; exitReason?: string;
   reportingTo?: { _id: string; name: string; employeeId: string } | null;
   phone?: string; dateOfBirth?: string; bloodGroup?: string; address?: string;
   emergencyContact?: { name?: string; relation?: string; phone?: string };
   panNumber?: string; aadhaarLastFour?: string; bankAccountNo?: string; bankIfsc?: string;
+  bankName?: string; uan?: string; esicNumber?: string;
   leaveEntitlement?: Partial<Record<LeaveType, number>>;
   notes?: string; lastLoginAt?: string; createdAt?: string;
 };
@@ -80,6 +84,14 @@ export default function EmployeeProfile() {
     <PageTitle title={employee.name}
       subtitle={[employee.designation, employee.department, employee.employeeId].filter(Boolean).join(" · ")}
       actions={<>
+        {/* Where they have been and what the doctors said lives on its own
+            screen — it is the administrator's to read, not the HR desk's. */}
+        {role === "ADMIN" && usesFieldPanel(employee.role) && (
+          <Link href={`/admin/team/${id}/activity`}
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-white px-4 text-sm font-semibold">
+            <MapPinned size={16} />Field activity
+          </Link>
+        )}
         <Link href={`/admin/hr/attendance?month=${month}`}
           className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-white px-4 text-sm font-semibold">
           <CalendarCheck size={16} />Attendance
@@ -89,6 +101,12 @@ export default function EmployeeProfile() {
 
     {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
     {!employee.active && <Notice tone="error">This account is deactivated — they cannot sign in.</Notice>}
+    {employee.exitDate && (
+      <Notice tone="info">
+        Last working day {formatDate(employee.exitDate)}
+        {employee.exitReason ? ` — ${employee.exitReason}` : ""}. Payroll pays up to that day and no further.
+      </Notice>
+    )}
 
     <Card className="grid grid-cols-2 gap-5 p-5 sm:grid-cols-4">
       <div className="min-w-0">
@@ -115,6 +133,9 @@ export default function EmployeeProfile() {
           <Row label="Work location" value={employee.workLocation} />
           <Row label="Reports to" value={employee.reportingTo ? `${employee.reportingTo.name} (${employee.reportingTo.employeeId})` : undefined} />
           <Row label="Joined" value={employee.joiningDate ? formatDate(employee.joiningDate) : undefined} />
+          <Row label="Standing" value={employee.employmentStatus} />
+          <Row label="Confirmed" value={employee.confirmationDate ? formatDate(employee.confirmationDate) : undefined} />
+          <Row label="Last working day" value={employee.exitDate ? formatDate(employee.exitDate) : undefined} />
         </dl>
       </Card>
 
@@ -142,10 +163,20 @@ export default function EmployeeProfile() {
           <Row label="PAN" value={employee.panNumber} />
           {/* Only the last four digits are ever held — the whole number has no use here. */}
           <Row label="Aadhaar" value={employee.aadhaarLastFour ? `•••• •••• ${employee.aadhaarLastFour}` : undefined} />
+          <Row label="UAN" value={employee.uan} />
+          <Row label="ESIC number" value={employee.esicNumber} />
+          <Row label="Bank" value={employee.bankName} />
           <Row label="Bank account" value={employee.bankAccountNo} />
           <Row label="IFSC" value={employee.bankIfsc} />
         </dl>
       </Card>
+    )}
+
+    {/* Salary sits behind the payroll permission rather than the employment one:
+        HR keeps the record, but what a colleague earns is not something every
+        desk role has business reading. */}
+    {role !== null && can.viewPayroll(role) && (
+      <SalaryCard employeeId={id} employeeName={employee.name} canEdit={can.runPayroll(role)} />
     )}
 
     <Card className="overflow-hidden">
@@ -222,6 +253,10 @@ function EmploymentForm({ employee, team, onClose, onSave }: {
     workLocation: employee.workLocation ?? "",
     joiningDate: employee.joiningDate ?? "",
     reportingTo: employee.reportingTo?._id ?? "",
+    employmentStatus: employee.employmentStatus ?? "",
+    confirmationDate: employee.confirmationDate ?? "",
+    exitDate: employee.exitDate ?? "",
+    exitReason: employee.exitReason ?? "",
     notes: employee.notes ?? ""
   });
   const [busy, setBusy] = useState(false);
@@ -230,7 +265,13 @@ function EmploymentForm({ employee, team, onClose, onSave }: {
   return <Modal title="Employment record" description={employee.name} onClose={onClose}
     footer={<Button className="w-full" busy={busy} onClick={async () => {
       setBusy(true);
-      await onSave({ ...form, reportingTo: form.reportingTo || null });
+      await onSave({
+        ...form,
+        reportingTo: form.reportingTo || null,
+        // An empty select means "not recorded", which the schema takes as absent
+        // rather than as a value of its own.
+        employmentStatus: form.employmentStatus || undefined
+      });
       setBusy(false);
     }}>{busy ? "Saving…" : "Save"}</Button>}>
     <div className="space-y-4">
@@ -255,6 +296,27 @@ function EmploymentForm({ employee, team, onClose, onSave }: {
           </select>
         </Field>
       </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Standing" hint="Whether they can sign in is separate — somebody serving notice works every day.">
+          <select value={form.employmentStatus} onChange={e => set({ employmentStatus: e.target.value })} className="select">
+            <option value="">Not recorded</option>
+            {EMPLOYMENT_STATUSES.map(status => <option key={status} value={status}>{status}</option>)}
+          </select>
+        </Field>
+        <Field label="Confirmed on">
+          <input type="date" value={form.confirmationDate} onChange={e => set({ confirmationDate: e.target.value })} className="input" />
+        </Field>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Last working day" hint="Payroll pays up to this day, so a mid-month exit settles itself.">
+          <input type="date" value={form.exitDate} onChange={e => set({ exitDate: e.target.value })} className="input" />
+        </Field>
+        <Field label="Reason for leaving">
+          <input value={form.exitReason} onChange={e => set({ exitReason: e.target.value })} className="input" placeholder="Resigned" />
+        </Field>
+      </div>
+
       <Field label="Notes" hint="Anything the HR desk should remember">
         <textarea value={form.notes} onChange={e => set({ notes: e.target.value })} className="textarea" />
       </Field>
@@ -276,7 +338,10 @@ function PersonalForm({ employee, onClose, onSave }: {
     panNumber: employee.panNumber ?? "",
     aadhaarLastFour: employee.aadhaarLastFour ?? "",
     bankAccountNo: employee.bankAccountNo ?? "",
-    bankIfsc: employee.bankIfsc ?? ""
+    bankIfsc: employee.bankIfsc ?? "",
+    bankName: employee.bankName ?? "",
+    uan: employee.uan ?? "",
+    esicNumber: employee.esicNumber ?? ""
   });
   const [busy, setBusy] = useState(false);
   const set = (patch: Partial<typeof form>) => setForm(current => ({ ...current, ...patch }));
@@ -310,6 +375,11 @@ function PersonalForm({ employee, onClose, onSave }: {
           <input value={form.aadhaarLastFour} maxLength={4} inputMode="numeric" className="input"
             onChange={e => set({ aadhaarLastFour: e.target.value.replace(/\D/g, "").slice(0, 4) })} />
         </Field>
+        <Field label="UAN" hint="The provident fund number, which follows them between employers">
+          <input value={form.uan} onChange={e => set({ uan: e.target.value })} className="input" inputMode="numeric" />
+        </Field>
+        <Field label="ESIC number"><input value={form.esicNumber} onChange={e => set({ esicNumber: e.target.value })} className="input" inputMode="numeric" /></Field>
+        <Field label="Bank"><input value={form.bankName} onChange={e => set({ bankName: e.target.value })} className="input" placeholder="State Bank of India" /></Field>
         <Field label="Bank account"><input value={form.bankAccountNo} onChange={e => set({ bankAccountNo: e.target.value })} className="input" /></Field>
         <Field label="IFSC"><input value={form.bankIfsc} onChange={e => set({ bankIfsc: e.target.value.toUpperCase() })} className="input" /></Field>
       </div>

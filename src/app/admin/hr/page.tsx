@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  CakeSlice, CalendarCheck, CalendarDays, ClipboardCheck, PartyPopper, UserPlus, Users
+  CakeSlice, CalendarCheck, CalendarDays, ClipboardCheck, PartyPopper, UserPlus, Users, Wallet
 } from "lucide-react";
 import { Badge, Card, EmptyState, LinkButton, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
 import { ROLE_LABEL, type Role } from "@/constants/access";
@@ -69,12 +69,13 @@ export default function HrDashboard() {
       </Notice>
     )}
 
-    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
       {[
         { href: "/admin/team", label: "Employees", icon: Users },
         { href: `/admin/hr/attendance?month=${month}`, label: "Attendance", icon: CalendarCheck },
         { href: "/admin/hr/leave", label: "Leave", icon: ClipboardCheck },
-        { href: "/admin/hr/holidays", label: "Holidays", icon: CalendarDays }
+        { href: "/admin/hr/holidays", label: "Holidays", icon: CalendarDays },
+        { href: "/admin/hr/payroll", label: "Payroll", icon: Wallet }
       ].map(({ href, label, icon: Icon }) => (
         <Link key={href} href={href} className="card tap flex items-center gap-2.5 px-4 text-sm font-semibold hover:bg-[var(--surface-2)]">
           <Icon size={17} className="shrink-0 text-[var(--brand)]" />{label}

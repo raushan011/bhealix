@@ -118,14 +118,17 @@
 @media print {
   html, body { background: #fff; }
   .no-print { display: none !important; }
-  .invoice-sheet {
+  .invoice-sheet, .payslip-sheet {
     width: 100%;
     /* Backgrounds carry meaning in the totals block, so keep them. */
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
   /* A bill that splits a line across two pages is unreadable. */
-  .invoice-sheet table { page-break-inside: auto; }
-  .invoice-sheet tr { page-break-inside: avoid; }
-  .invoice-sheet thead { display: table-header-group; }
+  .invoice-sheet table, .payslip-sheet table { page-break-inside: auto; }
+  .invoice-sheet tr, .payslip-sheet tr { page-break-inside: avoid; }
+  .invoice-sheet thead, .payslip-sheet thead { display: table-header-group; }
+  /* A payslip is one page. Printing several is one sheet each, not a run-on. */
+  .payslip-sheet { page-break-after: always; }
+  .payslip-sheet:last-of-type { page-break-after: auto; }
 }

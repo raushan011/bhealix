@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, HeartHandshake, LayoutDashboard, LogOut, Menu, Package, Receipt, Search, Stethoscope, Users, Warehouse, X } from "lucide-react";
+import { BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, HeartHandshake, LayoutDashboard, LogOut, Menu, Package, Receipt, Search, Stethoscope, Users, Wallet, Warehouse, X } from "lucide-react";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { Brand, BrandMark } from "@/components/ui/brand";
 import { ROLE_LABEL, type Role } from "@/constants/access";
@@ -31,7 +31,8 @@ const NAV = [
   { href: "/admin/team", label: "Employees", icon: Users, roles: ["ADMIN", "HR"], group: "People" },
   { href: "/admin/hr/attendance", label: "Attendance", icon: CalendarCheck, roles: ["ADMIN", "HR"], group: "People" },
   { href: "/admin/hr/leave", label: "Leave", icon: ClipboardCheck, roles: ["ADMIN", "HR"], group: "People" },
-  { href: "/admin/hr/holidays", label: "Holidays", icon: CalendarDays, roles: ["ADMIN", "HR"], group: "People" }
+  { href: "/admin/hr/holidays", label: "Holidays", icon: CalendarDays, roles: ["ADMIN", "HR"], group: "People" },
+  { href: "/admin/hr/payroll", label: "Payroll", icon: Wallet, roles: ["ADMIN", "HR"], group: "People" }
 ] as const;
 
 /**

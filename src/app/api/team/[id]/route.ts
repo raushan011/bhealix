@@ -7,11 +7,13 @@ import { RoutePlan } from "@/models/RoutePlan";
 import { Doctor } from "@/models/Doctor";
 import { SampleMovement } from "@/models/Sample";
 import { LeaveRequest } from "@/models/HR";
+import { Payslip, SalaryStructure } from "@/models/Payroll";
 import { apiSession } from "@/lib/auth/guard";
 import { can, ROLES, type Role } from "@/constants/access";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
 import type { LeaveType } from "@/lib/hr/leave";
 import { leaveBalanceFor } from "@/lib/hr/records";
+import { EMPLOYMENT_STATUSES } from "@/lib/hr/payroll";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const text = (max = 200) => z.string().trim().max(max).optional();
@@ -29,6 +31,11 @@ const schema = z.object({
   reportingTo: z.string().regex(OBJECT_ID).nullable().optional(),
   employmentType: z.enum(["Full time", "Part time", "Contract", "Intern"]).optional(),
   workLocation: text(),
+  employmentStatus: z.enum(EMPLOYMENT_STATUSES).optional(),
+  confirmationDate: z.string().regex(ISO_DATE).optional().or(z.literal("")),
+  /** The last working day. Payroll pays up to it and no further. */
+  exitDate: z.string().regex(ISO_DATE).optional().or(z.literal("")),
+  exitReason: text(300),
   phone: text(40),
   dateOfBirth: z.string().regex(ISO_DATE).optional().or(z.literal("")),
   bloodGroup: text(10),
@@ -42,6 +49,10 @@ const schema = z.object({
   aadhaarLastFour: z.string().trim().regex(/^\d{4}$/, "Enter the last four digits").optional().or(z.literal("")),
   bankAccountNo: text(40),
   bankIfsc: text(20),
+  bankName: text(80),
+  /** The provident fund number that follows a person between employers. */
+  uan: text(20),
+  esicNumber: text(20),
   /**
    * Spelled out rather than built from LEAVE_TYPES with `z.record`: a record
    * keyed by an enum demands every key, so sending only the types being changed
@@ -59,8 +70,9 @@ const schema = z.object({
 /** Everything the HR profile screen reads. The password hash is never selected. */
 const PROFILE_FIELDS =
   "name employeeId email role active lastLoginAt designation department joiningDate reportingTo employmentType "
-  + "workLocation phone dateOfBirth bloodGroup address emergencyContact panNumber aadhaarLastFour bankAccountNo "
-  + "bankIfsc leaveEntitlement notes createdAt";
+  + "workLocation employmentStatus confirmationDate exitDate exitReason phone dateOfBirth bloodGroup address "
+  + "emergencyContact panNumber aadhaarLastFour bankAccountNo bankIfsc bankName uan esicNumber "
+  + "leaveEntitlement notes createdAt";
 
 /** One employee in full, with their leave position and recent field record. */
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -134,6 +146,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (losingLastAdmin && await User.countDocuments({ role: "ADMIN", active: true }) <= 1) {
       return badRequest(`${target.name} is the last active administrator. Appoint another one first.`);
     }
+    /*
+     * A leaving date is what payroll pays up to, so a nonsensical one would pay
+     * somebody for a month they had not started, or for none at all.
+     */
+    if (value.exitDate) {
+      const joining = value.joiningDate ?? (await User.findById(id).select("joiningDate").lean() as
+        { joiningDate?: string } | null)?.joiningDate;
+      if (joining && value.exitDate < joining) {
+        return badRequest("A leaving date cannot come before the joining date");
+      }
+    }
+
     const { newPassword, reportingTo, ...profile } = value;
     const update: Record<string, unknown> = { ...profile };
     if (newPassword) update.passwordHash = await bcrypt.hash(newPassword, 12);
@@ -183,8 +207,23 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
       return badRequest(`${user.name} has sample stock on record. Deactivate instead so the stock history is kept.`);
     }
 
+    /*
+     * A payslip is evidence of money paid to a person, and the payroll month it
+     * belongs to has been totalled and approved around it. Deleting the person
+     * would leave the month's figures describing somebody who is not there.
+     * Somebody who has left is recorded with a leaving date, not erased.
+     */
+    const paid = await Payslip.countDocuments({ employee: id });
+    if (paid) {
+      return badRequest(
+        `${user.name} has ${paid} payslip${paid === 1 ? "" : "s"} on record. Set their last working day and deactivate `
+        + "the account instead, so the payroll history stays whole."
+      );
+    }
+
     // Nothing worth keeping is attached, so clear the scheduling links too.
     await Visit.deleteMany({ employee: id });
+    await SalaryStructure.deleteMany({ employee: id });
     await RoutePlan.updateMany({ assignedTo: id }, { $unset: { assignedTo: "" }, $set: { status: "Draft" } });
     await Doctor.updateMany({ assignedTo: id }, { $unset: { assignedTo: "" } });
     await User.findByIdAndDelete(id);

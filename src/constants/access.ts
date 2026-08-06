@@ -60,5 +60,24 @@ export const can = {
   /** Approving or refusing somebody's leave. Never their own — checked on the server. */
   manageLeave: (role: Role) => role === "ADMIN" || role === "HR",
   /** Everybody works, so everybody can ask for time off. */
-  applyLeave: () => true
+  applyLeave: () => true,
+
+  // ----------------------------------------------------------------- payroll
+  /**
+   * Setting what somebody is paid and preparing a month's payroll. The HR desk's
+   * own work: they hold the employment record, the attendance and the leave that
+   * the figures are built from.
+   */
+  runPayroll: (role: Role) => role === "ADMIN" || role === "HR",
+  /**
+   * Approving a run and releasing the money.
+   *
+   * Deliberately not the same authority as preparing one. Payroll is the largest
+   * payment a company makes every month, and one person who can both raise the
+   * figures and release them is the oldest hole in any set of books. HR prepares;
+   * the administrator approves.
+   */
+  approvePayroll: (role: Role) => role === "ADMIN",
+  /** Reading what somebody else earns. Everybody may read their own payslip. */
+  viewPayroll: (role: Role) => role === "ADMIN" || role === "HR"
 };

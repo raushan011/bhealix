@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { KeyRound, Plus, Trash2, UserRound } from "lucide-react";
+import { KeyRound, MapPinned, Plus, Trash2, UserRound } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Field, Notice, PageTitle, Spinner } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
-import { ROLES, ROLE_LABEL, type Role } from "@/constants/access";
+import { ROLES, ROLE_LABEL, usesFieldPanel, type Role } from "@/constants/access";
 
 type Member = {
   _id: string; name: string; employeeId: string; email: string; role: Role; active: boolean;
@@ -16,6 +16,7 @@ const roleTone = (role: Role) => role === "ADMIN" ? "brand" : role === "HR" ? "i
 
 export default function TeamPage() {
   const [members, setMembers] = useState<Member[]>([]);
+  const [viewer, setViewer] = useState<Role | null>(null);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [resetting, setResetting] = useState<Member | null>(null);
@@ -29,6 +30,14 @@ export default function TeamPage() {
     setLoading(false);
   }
   useEffect(() => { load(); }, []);
+
+  // The field record is the administrator's to read, so HR is not offered a
+  // link into a screen that would only send them back.
+  useEffect(() => {
+    fetch("/api/auth/me").then(response => response.json())
+      .then((json: { data?: { role: Role } }) => setViewer(json.data?.role ?? null))
+      .catch(() => setViewer(null));
+  }, []);
 
   async function patch(id: string, body: Record<string, unknown>, successText: string) {
     const response = await fetch(`/api/team/${id}`, {
@@ -79,6 +88,13 @@ export default function TeamPage() {
               </p>
             </Link>
             <div className="flex shrink-0 items-center gap-2">
+              {viewer === "ADMIN" && usesFieldPanel(member.role) && (
+                <Link href={`/admin/team/${member._id}/activity`} aria-label={`Field activity for ${member.name}`}
+                  title="Field activity"
+                  className="tap grid place-items-center rounded-[10px] text-[var(--muted)] hover:bg-[var(--surface-2)]">
+                  <MapPinned size={16} />
+                </Link>
+              )}
               <select value={member.role} aria-label={`Role for ${member.name}`}
                 onChange={e => patch(member._id, { role: e.target.value }, `${member.name} is now ${ROLE_LABEL[e.target.value as Role]}.`)}
                 className="select !min-h-[38px] !py-1 text-xs">

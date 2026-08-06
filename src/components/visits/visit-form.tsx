@@ -6,6 +6,7 @@ import { Check, Clock, MapPin, Navigation, Package, Phone, Plus, X } from "lucid
 import { Badge, Button, Card, Field, Notice } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import { CallScheduleEditor, type EditableWindow } from "@/components/doctors/call-schedule-editor";
+import { VisitPhotos, type VisitPhoto } from "@/components/visits/visit-photos";
 import { summariseCallSchedule } from "@/lib/doctors/call-schedule";
 import { toDisplayTime, todayIso } from "@/lib/time";
 import { INTEREST_LEVELS, VISIT_OUTCOMES } from "@/lib/visits";
@@ -20,8 +21,8 @@ type DoctorState = {
   fullAddress?: string; phone?: string; coordinates?: number[]; callSchedule: EditableWindow[];
 };
 
-export function VisitForm({ visit, doctor, products, stock = {} }:
-  { visit: VisitState; doctor: DoctorState; products: string[]; stock?: Record<string, number> }) {
+export function VisitForm({ visit, doctor, products, stock = {}, photos = [] }:
+  { visit: VisitState; doctor: DoctorState; products: string[]; stock?: Record<string, number>; photos?: VisitPhoto[] }) {
   const router = useRouter();
   const [status, setStatus] = useState(visit.status);
   const [outcome, setOutcome] = useState(visit.outcome ?? "");
@@ -162,6 +163,11 @@ export function VisitForm({ visit, doctor, products, stock = {} }:
       <Button onClick={checkIn} busy={busy} className="w-full"><MapPin size={16} />Check in at clinic</Button>
     )}
     {locationNote && <Notice tone="success">{locationNote}</Notice>}
+
+    {/* Photos stay available after the visit is closed: a rep who completed the
+        call and then remembered the photo should not have to reopen anything.
+        Before check-in there is nothing to photograph, so the card is hidden. */}
+    {status !== "Planned" && <VisitPhotos visitId={visit._id} initial={photos} canAdd />}
 
     {!completed && status !== "Planned" && <>
       <Card className="space-y-4 p-4">

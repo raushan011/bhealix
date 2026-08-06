@@ -36,6 +36,9 @@ export async function middleware(request: NextRequest) {
   }
 }
 
-// /invoices is the printable bill, reached by both panels, so it is guarded for
-// a valid session but deliberately not confined to either one.
-export const config = { matcher: ["/admin/:path*", "/employee/:path*", "/invoices/:path*", "/api/:path*"] };
+// /invoices and /payslips are printable documents reached by both panels, so
+// they are guarded for a valid session but deliberately not confined to either
+// one. Which of them a person may open is decided by the page itself.
+export const config = {
+  matcher: ["/admin/:path*", "/employee/:path*", "/invoices/:path*", "/payslips/:path*", "/api/:path*"]
+};

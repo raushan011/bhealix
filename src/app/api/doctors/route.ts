@@ -5,6 +5,7 @@ import { Doctor } from "@/models/Doctor";
 import { apiSession } from "@/lib/auth/guard";
 import { can, usesFieldPanel } from "@/constants/access";
 import { fail, ok, pageParams } from "@/lib/api";
+import { record } from "@/lib/audit";
 import { callScheduleSchema } from "@/lib/doctors/call-schedule";
 import { DOCTOR_LIST_FIELDS } from "@/lib/doctors/fields";
 
@@ -105,6 +106,12 @@ export async function POST(request: Request) {
         ? { location: { type: "Point", coordinates: [longitude, latitude] } }
         : {})
     });
+
+    await record({
+      actor: auth.session.userId, action: "doctor.created", entityType: "Doctor", entityId: doctor._id,
+      metadata: { name: doctor.name, city: doctor.city, area: doctor.area }
+    });
+
     return ok(doctor, 201);
   } catch (error) {
     return fail(error);

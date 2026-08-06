@@ -24,6 +24,8 @@ Built for phones first — reps use it standing in a clinic corridor — and equ
 - Five tabs on the phone — Today, Plans, Doctors, Bills — with samples, history, leave and profile behind **More**.
 - The rep opens the app to today's route in visiting order, with call times, addresses, one-tap call and directions.
 - Check in (captures location), then log the outcome, products discussed, samples given with quantities, the doctor's interest, order value, notes and a follow-up date.
+- **Photographs of the call** — the clinic front, a prescription pad, a visiting card. Taken with the phone camera from inside the visit, up to eight per call, downscaled on the phone so the upload is quick on mobile data. They can be added after the visit is closed, for the rep who remembers on the way out.
+- **Photos delete themselves 30 days after they are added.** Not a job somebody has to remember to run: each photo is written with an expiry date and MongoDB removes it on its own, whether or not the application is up. Nothing is served past that date even in the minute before the sweep, and the visit, its remarks and its samples stay for good.
 - If the doctor gives a different call timing, the rep corrects it on the spot — future route plans use it immediately.
 
 **Billing**
@@ -51,9 +53,29 @@ Built for phones first — reps use it standing in a clinic corridor — and equ
 - **Attendance** as a month grid, one row per person. Most of it fills itself in: a completed visit means the rep was out working, approved leave marks itself, and company holidays apply to everybody — so only the exceptions are marked by hand. An unmarked day stays visibly blank rather than counting as an absence.
 - **Leave** — reps apply from their phone, HR approves or refuses, and balances come off the requests themselves. Overlapping requests and requests beyond the balance are refused when they are made, not after two approvals have spent it twice. Nobody can sign off their own leave.
 - A **holiday calendar** that excludes those days from everybody's working days.
+- **Employment records that follow a career** — standing (probation, confirmed, notice, exited), confirmation date, last working day and reason for leaving, alongside UAN, ESIC number and bank details. Somebody who leaves is recorded with a leaving date, never erased: their payroll history has to stay whole.
+
+**Payroll and payslips**
+- **A salary is a series of revisions, not a figure that gets edited.** Each carries the month it takes effect from, so a raise in July leaves June's payslip saying exactly what June paid, and "what were they earning last March" is a question with an answer.
+- Basic, HRA, conveyance, medical and special allowance, plus any allowance of the company's own. Standing recoveries — a salary advance, a loan instalment — and the employee's declared monthly TDS sit beside them.
+- **The month builds itself from the attendance already there.** A completed visit already marks a rep present, approved leave marks itself, and holidays apply to everybody — so payroll reads the same sheet rather than asking anybody to type the month twice.
+- **Loss of pay is only what somebody has actually said.** An absence costs a day and so does unpaid leave; approved paid leave costs nothing, and neither does half a day of it, because the other half was worked. A day nobody has marked is **not** an absence — an unmarked sheet must never dock a rep's salary.
+- **Joiners and leavers settle themselves.** Somebody who joined on the 18th is paid for thirteen days, somebody whose last day was the 9th for nine — divided by the whole month, which is what pro-rating means.
+- **Statutory deductions worked out properly** — provident fund at 12% of the basic actually paid, to the ₹15,000 ceiling or the whole basic where the company has agreed to that; ESI at 0.75% where the wage is within ₹21,000, with eligibility decided by the full salary so a month of leave cannot sweep somebody into the scheme; professional tax from **slabs you set**, because it is state law that changes on a state's own timetable and does not belong in code.
+- The employer's own contributions — the fund, the pension share, ESI, a gratuity provision — are **set out and never deducted**, so cost to company is honest and an employee can see what is paid on their behalf.
+- Every earning line is rounded and then summed, never the other way round, so **the parts of a payslip always add up to its total**.
+- **Prepared, approved, then paid.** A draft can be rebuilt as often as attendance is corrected; approval freezes the figures; a paid month cannot be reopened, because money that has left the bank is corrected by a later entry rather than by rewriting the month it left in.
+- **HR prepares the month; the administrator approves it.** One person able to both raise the figures and release them is the oldest hole in any set of books.
+- **Nobody is left out quietly.** Anybody the run cannot pay — no salary set, not on the rolls — is listed with the reason, on the preview before you commit and on the month afterwards.
+- Reps see **their own payslips** on their phone under **More**, once the month is approved, and print any of them as a PDF. A payslip carries the employment record as it stood on the day it was issued, so it still reads correctly after a transfer, a raise or a change of bank — and shows only the last four digits of the account.
 
 **Admin tracking**
-- Every visit with its outcome, samples and notes.
+- Every visit with its outcome, samples, notes and the photographs taken at it.
+- **A field record for each representative** at **Admin → Employees → Field activity**, over 7, 30 or 90 days or everything on record: how many doctors they met, visits completed and missed, completion rate, samples handed out and order value.
+  - **Every doctor they visited** — how many times, when they were last seen, the last outcome, the doctor's interest, samples given and orders taken.
+  - **Every visit in full** — the remarks the rep wrote, what was discussed, what was handed over, the follow-up date, where they checked in on a map, and the photos still held.
+  - **Everything they changed** — doctors added, call times corrected, visits checked into, completed and missed, photos attached and removed, in the order it happened. Kept as its own trail because a record only ever shows its latest state: a call time corrected three times looks exactly like one corrected once.
+- The employment record and the field record are separate screens. HR keeps the first; a rep's call notes are the administrator's alone to read.
 - Reports: completion rate per representative, sample distribution by product, visit outcomes and doctor interest.
 
 ## Roles
@@ -65,6 +87,10 @@ Built for phones first — reps use it standing in a clinic corridor — and equ
 | Reports | ✓ | | | |
 | Employee management | ✓ | ✓ | | |
 | Attendance, leave approval and holidays | ✓ | ✓ | | |
+| Set a salary and prepare a payroll month | ✓ | ✓ | | |
+| Approve payroll and release the money | ✓ | | | |
+| Read somebody else's salary and payslips | ✓ | ✓ | | |
+| Read their own payslips | ✓ | ✓ | ✓ | ✓ |
 | Add a doctor to the directory | ✓ | | ✓ | ✓ |
 | Plan their own round | | | ✓ | ✓ |
 | Apply for leave | ✓ | ✓ | ✓ | ✓ |
@@ -73,10 +99,14 @@ Built for phones first — reps use it standing in a clinic corridor — and equ
 | Read every bill and what is owed | ✓ | ✓ | | |
 | Inventory: receive stock and correct counts | ✓ | | | |
 | Own daily route and visits | | | ✓ | ✓ |
+| Attach photos to their own visit | | | ✓ | ✓ |
+| Read a representative's field record | ✓ | | | |
 | Own bills: collect payment and download | | | ✓ | ✓ |
 | Update a doctor's call time | ✓ | | ✓ | ✓ |
 
 Admin and HR use the desktop panel at `/admin`; MR and Sales use the mobile panel at `/employee`. Middleware keeps each role in its own panel, and every API route re-checks permission on the server — the UI never decides access on its own.
+
+Bills and payslips live outside both panels, at `/invoices/…/print` and `/payslips/…/print`, so one link serves a desk and a phone. They are guarded for a valid session, and the page itself decides who may open that particular document — a rep gets their own and nobody else's.
 
 ## Setup
 

@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { requireFieldPanel } from "@/lib/auth/guard";
 import { connectDb } from "@/lib/db/mongoose";
 import { Visit } from "@/models/Visit";
+import { VisitPhoto } from "@/models/VisitPhoto";
 import { Product } from "@/models/Catalog";
 import { VisitForm } from "@/components/visits/visit-form";
 import { stockFor } from "@/lib/samples/ledger";
@@ -28,10 +29,15 @@ export default async function VisitPage({ params }: { params: Promise<{ id: stri
   if (!OBJECT_ID.test(id)) notFound();
 
   await connectDb();
-  const [visit, products, stock] = await Promise.all([
+  const [visit, products, stock, photos] = await Promise.all([
     Visit.findById(id).populate("doctor", "name clinicName area city fullAddress phones location callSchedule").lean() as Promise<VisitDoc | null>,
     Product.find({ active: true }).select("name").sort({ name: 1 }).lean(),
-    stockFor(session.userId)
+    stockFor(session.userId),
+    // Metadata only — the bytes are fetched one image at a time. Anything past
+    // its thirty days is left out rather than waited on.
+    VisitPhoto.find({ visit: id, expiresAt: { $gt: new Date() } })
+      .select("caption createdAt expiresAt").sort({ createdAt: 1 }).lean() as
+      unknown as Promise<Array<{ _id: unknown; caption?: string; createdAt: Date; expiresAt: Date }>>
   ]);
 
   if (!visit) notFound();
@@ -68,6 +74,12 @@ export default async function VisitPage({ params }: { params: Promise<{ id: stri
       }}
       products={products.map(product => (product as unknown as { name: string }).name)}
       stock={Object.fromEntries(stock.map(row => [row.product, row.balance]))}
+      photos={photos.map(photo => ({
+        _id: String(photo._id),
+        caption: photo.caption,
+        createdAt: photo.createdAt.toISOString(),
+        expiresAt: photo.expiresAt.toISOString()
+      }))}
     />
   </div>;
 }

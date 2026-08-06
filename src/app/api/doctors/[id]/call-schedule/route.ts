@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { connectDb } from "@/lib/db/mongoose";
 import { Doctor } from "@/models/Doctor";
-import { AuditEvent } from "@/models/Catalog";
 import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
+import { record } from "@/lib/audit";
 import { callScheduleSchema } from "@/lib/doctors/call-schedule";
 
 const schema = z.object({ callSchedule: callScheduleSchema });
@@ -34,12 +34,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     if (!doctor) return badRequest("Doctor not found", 404);
 
-    await AuditEvent.create({
+    await record({
       actor: auth.session.userId,
       action: "doctor.call-schedule.updated",
       entityType: "Doctor",
       entityId: doctor._id,
-      metadata: { days: callSchedule.map(w => w.weekday) }
+      metadata: { name: doctor.name, days: callSchedule.map(w => w.weekday) }
     });
 
     return ok(doctor);

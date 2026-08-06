@@ -7,6 +7,7 @@ import { RoutePlan } from "@/models/RoutePlan";
 import { apiSession } from "@/lib/auth/guard";
 import { usesFieldPanel } from "@/constants/access";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
+import { record } from "@/lib/audit";
 import { syncDispenseLedger } from "@/lib/samples/ledger";
 
 const checkInSchema = z.object({
@@ -55,6 +56,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
       await visit.save();
       await RoutePlan.findByIdAndUpdate(visit.routePlan, { status: "In progress" });
+      await record({
+        actor: auth.session.userId, action: "visit.checked-in", entityType: "Visit", entityId: visit._id,
+        metadata: { doctor: String(visit.doctor), located: Boolean(visit.checkInLocation?.latitude) }
+      });
       return ok(visit);
     }
 
@@ -65,6 +70,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       await visit.save();
       // Nothing changed hands after all, so give the stock back to the rep.
       await syncDispenseLedger(visit);
+      await record({
+        actor: auth.session.userId, action: "visit.missed", entityType: "Visit", entityId: visit._id,
+        metadata: { doctor: String(visit.doctor), notes: input.notes }
+      });
       return ok(visit);
     }
 
@@ -96,6 +105,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const pending = await Visit.countDocuments({ routePlan: visit.routePlan, status: { $in: ["Planned", "In progress"] } });
       if (!pending) await RoutePlan.findByIdAndUpdate(visit.routePlan, { status: "Completed" });
     }
+
+    await record({
+      actor: auth.session.userId, action: "visit.completed", entityType: "Visit", entityId: visit._id,
+      metadata: {
+        doctor: String(visit.doctor),
+        outcome: input.outcome,
+        interest: input.interest,
+        samples: input.samples.reduce((total, sample) => total + sample.quantity, 0),
+        orderValue: input.orderValue ?? 0,
+        notes: input.notes
+      }
+    });
 
     return ok(visit);
   } catch (error) {

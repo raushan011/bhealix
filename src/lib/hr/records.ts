@@ -11,6 +11,15 @@ export type ResolvedDay = {
   status: AttendanceStatus | null;
   source: "Manual" | "Holiday" | "Leave" | "Auto" | null;
   note?: string;
+  /**
+   * Which kind of leave claimed the day, where leave did.
+   *
+   * Carried alongside the status because payroll has to tell paid leave from
+   * unpaid, and "On leave" alone cannot: casual leave is a paid day and unpaid
+   * leave is a day's salary lost. Reading it back out of the note would be
+   * guessing at a sentence written for a human.
+   */
+  leaveType?: LeaveType;
 };
 
 /**
@@ -95,6 +104,7 @@ export async function attendanceMonth(employeeIds: unknown[], year: number, mont
           date,
           status: (onLeave.halfDay ? "Half day" : "On leave") as AttendanceStatus,
           source: "Leave" as const,
+          leaveType: onLeave.type,
           note: `${onLeave.type} leave${onLeave.halfDay ? ` (${onLeave.halfDay})` : ""}`
         };
       }
