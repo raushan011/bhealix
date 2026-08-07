@@ -34,6 +34,7 @@ export const AUDIT_ACTIONS = {
   "salary.revised": "Set a salary",
   "salary.revision.deleted": "Removed a salary revision",
   "payroll.generated": "Prepared a payroll month",
+  "payroll.payslip.prepared": "Prepared one employee's payslip",
   "payroll.approved": "Approved a payroll month",
   "payroll.reopened": "Reopened a payroll month",
   "payroll.paid": "Marked payroll paid",

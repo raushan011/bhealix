@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, BadgeCheck, Banknote, FileText, RotateCcw, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BadgeCheck, Banknote, FileText, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { Badge, Button, Card, Field, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import { formatMoney } from "@/lib/billing/constants";
@@ -27,11 +27,21 @@ type Slip = {
   snapshot?: { name?: string; employeeId?: string; designation?: string; department?: string };
 };
 
+type PayrollMonth = {
+  run: Run; payslips: Slip[];
+  /**
+   * Why this draft no longer matches the rules in force — empty for a month
+   * that does, and for every month past draft.
+   */
+  staleReasons: string[];
+  mayRun: boolean; mayApprove: boolean;
+};
+
 /** One month of payroll: who is being paid what, and the decision to release it. */
 export default function PayrollMonthPage() {
   const id = String(useParams().id ?? "");
   const router = useRouter();
-  const [data, setData] = useState<{ run: Run; payslips: Slip[]; mayRun: boolean; mayApprove: boolean } | null>(null);
+  const [data, setData] = useState<PayrollMonth | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [paying, setPaying] = useState(false);
@@ -40,12 +50,33 @@ export default function PayrollMonthPage() {
 
   const load = useCallback(async () => {
     const response = await fetch(`/api/hr/payroll/${id}`);
-    const json = await response.json() as { error?: string; data?: { run: Run; payslips: Slip[]; mayRun: boolean; mayApprove: boolean } };
+    const json = await response.json() as { error?: string; data?: PayrollMonth };
     if (!response.ok || !json.data) { setError(json.error ?? "That payroll month could not be found"); setLoading(false); return; }
     setData(json.data);
     setLoading(false);
   }, [id]);
   useEffect(() => { load(); }, [load]);
+
+  /**
+   * Builds the month again from today's attendance, salaries and rules.
+   *
+   * The same call the payroll list makes, reached from where the problem is
+   * actually visible — a draft that says its figures are out of date and then
+   * makes somebody go and find the screen that fixes it is only half a warning.
+   */
+  async function prepareAgain(month: string) {
+    if (!window.confirm(`Work ${monthLabel(month)} out again? Every payslip in this draft is replaced.`)) return;
+    setBusy(true);
+    const response = await fetch("/api/hr/payroll", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ month, action: "generate" })
+    });
+    const json = await response.json() as { error?: string };
+    setBusy(false);
+    if (!response.ok) { setNotice({ tone: "error", text: json.error ?? "Could not prepare this month again" }); return; }
+    setNotice({ tone: "success", text: `${monthLabel(month)} has been worked out again.` });
+    load();
+  }
 
   async function act(body: Record<string, unknown>, text: string) {
     setBusy(true);
@@ -79,7 +110,7 @@ export default function PayrollMonthPage() {
     <Notice tone="error">{error || "That payroll month could not be found"}</Notice>
   </div>;
 
-  const { run, payslips, mayApprove } = data;
+  const { run, payslips, staleReasons, mayRun, mayApprove } = data;
   const negative = payslips.filter(slip => slip.netPay < 0);
 
   return <div className="space-y-5">
@@ -90,6 +121,11 @@ export default function PayrollMonthPage() {
     <PageTitle title={monthLabel(run.month)}
       subtitle={`${run.totals.employees} employee${run.totals.employees === 1 ? "" : "s"} · a day counted as ${run.lopBasis.toLowerCase()}`}
       actions={<>
+        {mayRun && run.status === "Draft" && (
+          <Button tone="secondary" busy={busy} onClick={() => prepareAgain(run.month)}>
+            <RefreshCw size={16} />Prepare again
+          </Button>
+        )}
         {mayApprove && run.status === "Draft" && (
           <Button busy={busy} onClick={() => act({ action: "approve" }, "This month is approved.")}>
             <BadgeCheck size={16} />Approve
@@ -108,7 +144,17 @@ export default function PayrollMonthPage() {
 
     {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
 
-    {run.status === "Draft" && (
+    {/* The rules moved after this draft was built. Said before anything else on
+        the page, because every figure below is worked out from them and looks
+        just as settled as a correct one. */}
+    {staleReasons.length > 0 && (
+      <Notice tone="warning">
+        These figures were worked out before {joinPhrases(staleReasons)}. A payslip keeps what it was prepared with
+        until the month is prepared again{mayRun ? " — do that with “Prepare again” above." : ", which the HR desk can do."}
+      </Notice>
+    )}
+
+    {run.status === "Draft" && !staleReasons.length && (
       <Notice tone="info">
         These figures are still a draft. Prepare the month again after correcting attendance or a salary; approving is
         what freezes them.
@@ -218,6 +264,12 @@ export default function PayrollMonthPage() {
     {paying && <MarkPaid busy={busy} onClose={() => setPaying(false)}
       onSubmit={body => act({ action: "pay", ...body }, "Recorded as paid.")} />}
   </div>;
+}
+
+/** "a" · "a and b" · "a, b and c" — a list that reads as a sentence. */
+function joinPhrases(phrases: string[]): string {
+  if (phrases.length <= 1) return phrases[0] ?? "";
+  return `${phrases.slice(0, -1).join(", ")} and ${phrases[phrases.length - 1]}`;
 }
 
 function MarkPaid({ busy, onClose, onSubmit }: {

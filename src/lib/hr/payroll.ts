@@ -43,6 +43,9 @@ export type LopBasis = (typeof LOP_BASES)[number];
 
 // ------------------------------------------------------------------- statutory
 
+/** The name the fund is deducted under, in one place so a payslip can be read for it. */
+export const PF_DEDUCTION_LABEL = "Provident fund";
+
 /** Provident fund is calculated on wages up to this, unless the company pays on the whole basic. */
 export const PF_WAGE_CEILING = 15_000;
 export const PF_EMPLOYEE_RATE = 0.12;
@@ -282,7 +285,7 @@ export function computePayslip(input: PayslipInput): ComputedPayslip {
     .filter(item => item.amount > 0);
 
   const deductions: NamedAmount[] = [
-    { name: "Provident fund", amount: employeePf },
+    { name: PF_DEDUCTION_LABEL, amount: employeePf },
     { name: "State insurance (ESI)", amount: employeeEsi },
     { name: "Professional tax", amount: pt },
     { name: "Income tax (TDS)", amount: tds },
@@ -355,6 +358,44 @@ export function monthBounds(month: string): { first: string; last: string } {
 export function onRollDates(days: string[], joiningDate?: string | null, exitDate?: string | null): string[] {
   return days.filter(date =>
     (!joiningDate || date >= joiningDate) && (!exitDate || date <= exitDate));
+}
+
+/**
+ * Whether a draft was worked out under rules the company has since changed.
+ *
+ * Payslips are stored, never recomputed on read — which is right, because an
+ * approved month must say the same thing for years. The cost is that a draft
+ * prepared last week can quietly go on showing a deduction that was switched
+ * off yesterday, and the figures look settled while being wrong. So the draft
+ * is compared against the settings in force and says so itself.
+ *
+ * The fund is checked against what the payslips actually deduct rather than
+ * only against the flag on the run, because a month prepared before the flag
+ * existed carries no flag and is exactly the month most likely to be stale.
+ *
+ * Returns one plain phrase per difference, ready to be read in a sentence.
+ */
+export function staleRules(
+  run: { lopBasis?: string; pfEnabled?: boolean },
+  payslips: Array<{ deductions?: NamedAmount[] }>,
+  settings: { lopBasis: string; pfEnabled: boolean }
+): string[] {
+  const reasons: string[] = [];
+
+  if (run.lopBasis && run.lopBasis !== settings.lopBasis) {
+    reasons.push(`a day is now counted as ${settings.lopBasis.toLowerCase()}`);
+  }
+
+  const deductsPf = payslips.some(slip =>
+    (slip.deductions ?? []).some(item => item.name === PF_DEDUCTION_LABEL && item.amount > 0));
+
+  if (!settings.pfEnabled && deductsPf) {
+    reasons.push("the company no longer operates a provident fund");
+  } else if (settings.pfEnabled && run.pfEnabled === false) {
+    reasons.push("the provident fund has since been switched on");
+  }
+
+  return reasons;
 }
 
 export const payrollTone = (status: PayrollStatus) =>

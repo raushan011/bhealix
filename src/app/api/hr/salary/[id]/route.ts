@@ -7,7 +7,7 @@ import { can } from "@/constants/access";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
 import { record } from "@/lib/audit";
 import { fullGrossOf } from "@/lib/hr/payroll";
-import { componentsOf } from "@/lib/hr/payroll-run";
+import { componentsOf, loadPayrollSettings } from "@/lib/hr/payroll-run";
 
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 const amount = z.number().min(0).max(10_000_000);
@@ -54,9 +54,12 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     }
 
     await connectDb();
-    const revisions = await SalaryStructure.find({ employee: id })
-      .populate("createdBy", "name")
-      .sort({ effectiveFrom: -1 }).lean() as unknown as Array<Record<string, unknown>>;
+    const [revisions, settings] = await Promise.all([
+      SalaryStructure.find({ employee: id })
+        .populate("createdBy", "name")
+        .sort({ effectiveFrom: -1 }).lean() as unknown as Promise<Array<Record<string, unknown>>>,
+      loadPayrollSettings()
+    ]);
 
     return ok({
       items: revisions.map(revision => ({
@@ -66,7 +69,10 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
         monthlyGross: fullGrossOf(componentsOf(revision as never)),
         annualGross: fullGrossOf(componentsOf(revision as never)) * 12
       })),
-      mayEdit: can.runPayroll(auth.session.role)
+      mayEdit: can.runPayroll(auth.session.role),
+      // So the screen says what will actually be deducted rather than what the
+      // record would ask for if the company were running a fund.
+      pfEnabled: settings.pfEnabled
     });
   } catch (error) {
     return fail(error);

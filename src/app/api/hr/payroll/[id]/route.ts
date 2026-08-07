@@ -5,7 +5,8 @@ import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
 import { record } from "@/lib/audit";
-import { PAY_MODES } from "@/lib/hr/payroll";
+import { PAY_MODES, staleRules } from "@/lib/hr/payroll";
+import { loadPayrollSettings } from "@/lib/hr/payroll-run";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -37,8 +38,18 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       .populate("employee", "name employeeId role")
       .sort({ "snapshot.name": 1 }).lean();
 
+    // A settled month is left alone: it says what it said when it was approved,
+    // and comparing it against today's rules would only invite somebody to
+    // restate figures the company has committed to.
+    const draft = (run as unknown as { status: string }).status === "Draft";
+    const settings = draft ? await loadPayrollSettings() : null;
+
     return ok({
       run, payslips,
+      staleReasons: settings
+        ? staleRules(run as unknown as { lopBasis?: string; pfEnabled?: boolean },
+          payslips as unknown as Array<{ deductions?: Array<{ name: string; amount: number }> }>, settings)
+        : [],
       mayRun: can.runPayroll(auth.session.role),
       mayApprove: can.approvePayroll(auth.session.role)
     });

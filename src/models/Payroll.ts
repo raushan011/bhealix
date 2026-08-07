@@ -62,6 +62,12 @@ const PayrollRunSchema = new Schema({
   status: { type: String, enum: PAYROLL_STATUSES, default: "Draft", index: true },
   /** Frozen onto the run, so a later change of policy cannot restate an old month. */
   lopBasis: { type: String, enum: LOP_BASES, required: true },
+  /**
+   * Whether the fund applied when this month was worked out. Frozen for the
+   * same reason as the basis above, and read back to tell an open draft that
+   * the rules have moved on under it.
+   */
+  pfEnabled: { type: Boolean, default: false },
 
   totals: {
     employees: { type: Number, default: 0 },
@@ -172,6 +178,12 @@ const PayrollSettingsSchema = new Schema({
   key: { type: String, default: "payroll", unique: true, index: true },
 
   lopBasis: { type: String, enum: LOP_BASES, default: "Calendar days" },
+  /**
+   * Whether the company operates a provident fund at all. Off by default: a
+   * fund is registered for and opted into, and no payroll should start
+   * withholding 12% of a basic because nobody said not to.
+   */
+  pfEnabled: { type: Boolean, default: false },
   /** The state's professional tax slabs, held as data because state budgets change them. */
   ptSlabs: { type: [new Schema({ upTo: { type: Number, default: null }, amount: { type: Number, default: 0 } }, { _id: false })],
     default: () => DEFAULT_PT_SLABS },

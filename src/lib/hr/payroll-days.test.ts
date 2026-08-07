@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { daysFor, lossOfPay } from "./payroll-run";
+import { daysFor, lossOfPay, statutoryOf } from "./payroll-run";
+import { DEFAULT_STATUTORY } from "./payroll";
 import type { ResolvedDay } from "./records";
 import type { AttendanceStatus } from "./attendance";
 import type { LeaveType } from "./leave";
@@ -119,5 +120,32 @@ describe("the days a month is divided by", () => {
   it("gives nobody any days when they were not on the rolls at all", () => {
     const counted = daysFor(month, "Calendar days", "2026-10-01");
     expect(counted.onRollDays).toBe(0);
+  });
+});
+
+describe("whether the provident fund applies", () => {
+  it("keeps everybody out of it while the company runs no fund", () => {
+    expect(statutoryOf({ ...DEFAULT_STATUTORY, pfApplicable: true }, false).pfApplicable).toBe(false);
+  });
+
+  it("assumes no fund when nobody has said", () => {
+    // The default matters: a settings document written before there was a
+    // switch must not be read as a company that deducts.
+    expect(statutoryOf({ ...DEFAULT_STATUTORY, pfApplicable: true }).pfApplicable).toBe(false);
+  });
+
+  it("puts somebody in it once the company runs one", () => {
+    expect(statutoryOf({ ...DEFAULT_STATUTORY, pfApplicable: true }, true).pfApplicable).toBe(true);
+  });
+
+  it("still leaves out somebody their own record excludes", () => {
+    expect(statutoryOf({ ...DEFAULT_STATUTORY, pfApplicable: false }, true).pfApplicable).toBe(false);
+  });
+
+  it("changes nothing else about the profile", () => {
+    const profile = statutoryOf({ ...DEFAULT_STATUTORY, monthlyTds: 1_200 }, false);
+    expect(profile.esiApplicable).toBe(true);
+    expect(profile.professionalTaxApplicable).toBe(true);
+    expect(profile.monthlyTds).toBe(1_200);
   });
 });

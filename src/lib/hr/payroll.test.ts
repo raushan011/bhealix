@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   computePayslip, DEFAULT_STATUTORY, EMPTY_COMPONENTS, ESI_WAGE_CEILING, fullGrossOf,
-  monthBounds, monthLabel, onRollDates, PF_WAGE_CEILING, previousMonth, professionalTax,
-  type PayslipInput, type SalaryComponents
+  monthBounds, monthLabel, onRollDates, PF_DEDUCTION_LABEL, PF_WAGE_CEILING, previousMonth,
+  professionalTax, staleRules, type PayslipInput, type SalaryComponents
 } from "./payroll";
 
 const components = (patch: Partial<SalaryComponents> = {}): SalaryComponents =>
@@ -295,5 +295,43 @@ describe("the salary on paper", () => {
     expect(slip.gross).toBe(0);
     expect(slip.netPay).toBe(0);
     expect(slip.costToCompany).toBe(0);
+  });
+});
+
+describe("a draft the rules have moved on from", () => {
+  const settled = { lopBasis: "Calendar days", pfEnabled: false };
+  const withPf = [{ deductions: [{ name: PF_DEDUCTION_LABEL, amount: 1_626 }, { name: "Professional tax", amount: 200 }] }];
+  const withoutPf = [{ deductions: [{ name: "Professional tax", amount: 200 }] }];
+
+  it("says nothing about a draft that still matches the rules in force", () => {
+    expect(staleRules({ lopBasis: "Calendar days", pfEnabled: false }, withoutPf, settled)).toEqual([]);
+  });
+
+  /**
+   * The case this exists for. A stored payslip is never recomputed, so a month
+   * prepared while the fund was on goes on deducting it however plainly the
+   * settings screen now says the company runs no fund.
+   */
+  it("catches a draft still deducting a fund the company has switched off", () => {
+    expect(staleRules({ lopBasis: "Calendar days", pfEnabled: true }, withPf, settled))
+      .toEqual(["the company no longer operates a provident fund"]);
+  });
+
+  /** A month prepared before the switch existed carries no flag to compare. */
+  it("catches it from the payslips alone when the run predates the setting", () => {
+    expect(staleRules({ lopBasis: "Calendar days" }, withPf, settled)).toHaveLength(1);
+  });
+
+  it("catches the fund being switched on after the month was prepared", () => {
+    expect(staleRules({ lopBasis: "Calendar days", pfEnabled: false }, withoutPf,
+      { lopBasis: "Calendar days", pfEnabled: true }))
+      .toEqual(["the provident fund has since been switched on"]);
+  });
+
+  it("catches a changed day basis, and both changes at once", () => {
+    expect(staleRules({ lopBasis: "Working days", pfEnabled: true }, withPf, settled)).toEqual([
+      "a day is now counted as calendar days",
+      "the company no longer operates a provident fund"
+    ]);
   });
 });

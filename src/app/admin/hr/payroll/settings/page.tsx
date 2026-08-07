@@ -10,7 +10,8 @@ import {
 } from "@/lib/hr/payroll";
 
 type Settings = {
-  lopBasis: LopBasis; ptSlabs: PtSlab[]; ptStateName?: string; ptFebruaryAmount?: number | null;
+  lopBasis: LopBasis; pfEnabled: boolean;
+  ptSlabs: PtSlab[]; ptStateName?: string; ptFebruaryAmount?: number | null;
   payDay: number; defaultPayMode?: PayMode; signatoryName?: string; payslipNote?: string;
 };
 
@@ -91,6 +92,27 @@ export default function PayrollSettingsPage() {
       </div>
     </Card>
 
+    {/* A company either runs a fund or it does not, and that is the answer for
+        everybody at once. Left to the individual salary records it would be
+        turned off one person at a time and back on by the next new joiner. */}
+    <Card className="space-y-3 p-5">
+      <h2 className="text-sm font-semibold">Provident fund</h2>
+      <label className="flex items-start gap-2.5 text-sm">
+        <input type="checkbox" checked={form.pfEnabled} disabled={!mayEdit}
+          className="mt-0.5 size-4 shrink-0 accent-[var(--brand)]"
+          onChange={event => set({ pfEnabled: event.target.checked })} />
+        <span className="min-w-0">This company operates a provident fund</span>
+      </label>
+      <p className="text-xs text-[var(--muted)]">
+        {form.pfEnabled
+          ? "Deducted from everybody whose salary record puts them in the fund, and the employer's share is shown as a "
+            + "cost to the company."
+          : "No payslip carries a fund deduction or an employer share, whatever an individual salary record says. Turn "
+            + "this on the month the company starts contributing. A month already prepared keeps the figures it was "
+            + "worked out from until it is prepared again, and says so on its own page."}
+      </p>
+    </Card>
+
     <Card className="space-y-4 p-5">
       <div>
         <h2 className="text-sm font-semibold">Professional tax</h2>
@@ -165,8 +187,9 @@ export default function PayrollSettingsPage() {
         <Row label="Gratuity provision" value="4.81% of basic, a company cost and never a deduction" />
       </dl>
       <p className="mt-3 text-xs text-[var(--muted)]">
-        Whether an individual is covered by the fund, and whether it is worked out on the whole basic or only up to the
-        ceiling, is set on their own salary record.
+        The fund only applies at all while the company operates one, set above. Beyond that, whether an individual is
+        covered and whether it is worked out on the whole basic or only up to the ceiling is set on their own salary
+        record.
       </p>
     </Card>
   </div>;

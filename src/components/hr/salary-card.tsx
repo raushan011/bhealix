@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { FileText, IndianRupee, Pencil, Plus, Wallet, X } from "lucide-react";
+import { FilePlus2, FileText, IndianRupee, Pencil, Plus, Wallet, X } from "lucide-react";
 import { Badge, Button, Card, Field, Notice, Spinner, Stat } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import { formatMoney } from "@/lib/billing/constants";
 import {
   EARNING_HEADS, ESI_WAGE_CEILING, monthLabel, PF_WAGE_CEILING,
-  payrollTone, type NamedAmount, type PayrollStatus
+  payrollTone, previousMonth, type NamedAmount, type PayrollStatus
 } from "@/lib/hr/payroll";
 
 type Revision = {
@@ -36,18 +36,24 @@ export function SalaryCard({ employeeId, employeeName, canEdit }: {
 }) {
   const [revisions, setRevisions] = useState<Revision[] | null>(null);
   const [payslips, setPayslips] = useState<Slip[]>([]);
+  /** Whether the company runs a fund at all — it overrides what a revision says. */
+  const [pfEnabled, setPfEnabled] = useState(false);
+  const [mayPrepare, setMayPrepare] = useState(false);
   const [editing, setEditing] = useState<Revision | "new" | null>(null);
+  const [preparing, setPreparing] = useState(false);
   const [notice, setNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
   const load = useCallback(async () => {
     const [salary, slips] = await Promise.all([
       fetch(`/api/hr/salary/${employeeId}`).then(response => response.json()) as
-        Promise<{ data?: { items: Revision[] } }>,
+        Promise<{ data?: { items: Revision[]; pfEnabled?: boolean } }>,
       fetch(`/api/hr/payslips?employee=${employeeId}`).then(response => response.json()) as
-        Promise<{ data?: { items: Slip[] } }>
+        Promise<{ data?: { items: Slip[]; mayPrepare?: boolean } }>
     ]);
     setRevisions(salary.data?.items ?? []);
+    setPfEnabled(Boolean(salary.data?.pfEnabled));
     setPayslips(slips.data?.items ?? []);
+    setMayPrepare(Boolean(slips.data?.mayPrepare));
   }, [employeeId]);
   useEffect(() => { load(); }, [load]);
 
@@ -100,8 +106,10 @@ export function SalaryCard({ employeeId, employeeName, canEdit }: {
       </dl>
 
       <div className="flex flex-wrap gap-1.5">
-        <Badge tone={current.pfApplicable ? "info" : "neutral"}>
-          {current.pfApplicable ? (current.pfOnFullBasic ? "PF on the whole basic" : "PF to the ceiling") : "Outside the fund"}
+        <Badge tone={pfEnabled && current.pfApplicable ? "info" : "neutral"}>
+          {!pfEnabled ? "No provident fund"
+            : current.pfApplicable ? (current.pfOnFullBasic ? "PF on the whole basic" : "PF to the ceiling")
+              : "Outside the fund"}
         </Badge>
         <Badge tone={current.esiApplicable ? "info" : "neutral"}>
           {current.esiApplicable ? "ESI where eligible" : "ESI not applicable"}
@@ -144,9 +152,26 @@ export function SalaryCard({ employeeId, employeeName, canEdit }: {
       </div>
     )}
 
-    {payslips.length > 0 && (
+    {(payslips.length > 0 || mayPrepare) && (
       <div className="border-t border-[var(--line)] pt-3">
-        <p className="mb-2 text-xs font-semibold text-[var(--ink-2)]">Payslips</p>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-xs font-semibold text-[var(--ink-2)]">Payslips</p>
+          {/* The month's run pays everybody and is still the ordinary way. This
+              is for the person that run could not pay — a salary set after the
+              month was prepared, a joiner added late — where rebuilding the
+              whole month would also restate payslips already checked. */}
+          {mayPrepare && current && (
+            <button onClick={() => setPreparing(true)}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand)]">
+              <FilePlus2 size={12} />Prepare a payslip
+            </button>
+          )}
+        </div>
+        {!payslips.length && (
+          <p className="text-sm text-[var(--muted)]">
+            None yet. {employeeName.split(" ")[0]} gets one when a month is prepared — or prepare a single month here.
+          </p>
+        )}
         <ul className="space-y-1.5">
           {payslips.slice(0, 12).map(slip => (
             <li key={slip._id} className="flex items-center justify-between gap-3 text-sm">
@@ -170,10 +195,102 @@ export function SalaryCard({ employeeId, employeeName, canEdit }: {
 
     {editing && (
       <ReviseSalary employeeId={employeeId} employeeName={employeeName} from={editing === "new" ? null : editing}
-        onClose={() => setEditing(null)}
+        pfEnabled={pfEnabled} onClose={() => setEditing(null)}
         onSaved={() => { setEditing(null); setNotice({ tone: "success", text: "Salary saved." }); load(); }} />
     )}
+
+    {preparing && (
+      <PreparePayslip employeeId={employeeId} employeeName={employeeName}
+        onClose={() => setPreparing(false)}
+        onDone={month => {
+          setPreparing(false);
+          setNotice({ tone: "success", text: `${monthLabel(month)} prepared. It sits in that month's draft run for approval.` });
+          load();
+        }} />
+    )}
   </Card>;
+}
+
+type Preview = {
+  month: string;
+  payslip: { gross: number; totalDeductions: number; netPay: number; paidDays: number; divisorDays: number; lopDays: number } | null;
+  reason: string | null;
+  incomplete: boolean;
+};
+
+/**
+ * One person's payslip for one month, worked out before it is written.
+ *
+ * The preview is the point. Preparing a payslip on its own steps outside the
+ * monthly run, so what it will pay — and how many days it counted — is shown
+ * plainly first, along with the reason when the answer is that it cannot.
+ */
+function PreparePayslip({ employeeId, employeeName, onClose, onDone }: {
+  employeeId: string; employeeName: string; onClose: () => void; onDone: (month: string) => void;
+}) {
+  const [month, setMonth] = useState(previousMonth());
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function send(action: "preview" | "generate") {
+    setBusy(true); setError("");
+    try {
+      const response = await fetch("/api/hr/payslips", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ employee: employeeId, month, action })
+      });
+      const json = await response.json() as { error?: string; data?: Preview };
+      if (!response.ok || !json.data) throw new Error(json.error ?? "Could not prepare this payslip");
+      if (action === "preview") setPreview(json.data);
+      else onDone(month);
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : "Could not prepare this payslip");
+    } finally { setBusy(false); }
+  }
+
+  return <Modal title="Prepare a payslip" description={employeeName} onClose={onClose}>
+    <div className="space-y-4">
+      <Field label="Month" hint="Worked out from this person's attendance and the salary in force that month.">
+        <input type="month" value={month} className="input"
+          onChange={event => { setMonth(event.target.value); setPreview(null); }} />
+      </Field>
+
+      {error && <Notice tone="error">{error}</Notice>}
+
+      {preview && <>
+        {preview.incomplete && (
+          <Notice tone="warning">
+            This month has not ended, so the days still to come are not in these figures.
+          </Notice>
+        )}
+        {preview.reason && <Notice tone="error">{preview.reason}</Notice>}
+
+        {preview.payslip && (
+          <Card className="grid grid-cols-2 gap-4 p-4">
+            <Stat label="Net pay" value={formatMoney(preview.payslip.netPay)} />
+            <Stat label="Gross" value={formatMoney(preview.payslip.gross)} />
+            <Stat label="Deductions" value={formatMoney(preview.payslip.totalDeductions)} />
+            <Stat label="Paid days" value={`${preview.payslip.paidDays} of ${preview.payslip.divisorDays}`} />
+          </Card>
+        )}
+      </>}
+
+      <Notice tone="info">
+        The payslip joins that month&apos;s run and waits there for the administrator&apos;s approval, like every other.
+        Preparing the whole month again later replaces it.
+      </Notice>
+
+      <div className="flex gap-2">
+        <Button tone="secondary" className="flex-1" busy={busy && !preview} onClick={() => send("preview")}>
+          {preview ? "Refresh" : "Work it out"}
+        </Button>
+        <Button className="flex-1" busy={busy} disabled={!preview?.payslip} onClick={() => send("generate")}>
+          Generate payslip
+        </Button>
+      </div>
+    </div>
+  </Modal>;
 }
 
 function Line({ label, value }: { label: string; value: string }) {
@@ -190,8 +307,8 @@ function nextMonth(month?: string): string {
   return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function ReviseSalary({ employeeId, employeeName, from, onClose, onSaved }: {
-  employeeId: string; employeeName: string; from: Revision | null;
+function ReviseSalary({ employeeId, employeeName, from, pfEnabled, onClose, onSaved }: {
+  employeeId: string; employeeName: string; from: Revision | null; pfEnabled: boolean;
   onClose: () => void; onSaved: () => void;
 }) {
   const [form, setForm] = useState({
@@ -290,11 +407,22 @@ function ReviseSalary({ employeeId, employeeName, from, onClose, onSaved }: {
 
       <div className="space-y-2 border-t border-[var(--line)] pt-4">
         <p className="text-[13px] font-medium text-[var(--ink-2)]">Statutory</p>
-        <Check label="In the provident fund" checked={form.pfApplicable}
-          onChange={value => set({ pfApplicable: value })} />
-        {form.pfApplicable && (
-          <Check label={`Calculate on the whole basic, not only the first ₹${PF_WAGE_CEILING.toLocaleString("en-IN")}`}
-            checked={form.pfOnFullBasic} onChange={value => set({ pfOnFullBasic: value })} />
+        {/* The company switch is the real answer, so asking about this person's
+            fund while there is no fund would only promise a deduction that
+            never comes. What is on the record is kept, ready for the day it
+            does. */}
+        {pfEnabled ? <>
+          <Check label="In the provident fund" checked={form.pfApplicable}
+            onChange={value => set({ pfApplicable: value })} />
+          {form.pfApplicable && (
+            <Check label={`Calculate on the whole basic, not only the first ₹${PF_WAGE_CEILING.toLocaleString("en-IN")}`}
+              checked={form.pfOnFullBasic} onChange={value => set({ pfOnFullBasic: value })} />
+          )}
+        </> : (
+          <p className="text-sm text-[var(--muted)]">
+            The company is not running a provident fund, so none is deducted from anybody. It is turned on in Payroll
+            settings.
+          </p>
         )}
         <Check label={`Covered by state insurance where the gross is within ₹${ESI_WAGE_CEILING.toLocaleString("en-IN")}`}
           checked={form.esiApplicable} onChange={value => set({ esiApplicable: value })} />
