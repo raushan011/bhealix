@@ -7,6 +7,7 @@ import { Visit } from "@/models/Visit";
 import { VisitPhoto } from "@/models/VisitPhoto";
 import { Product } from "@/models/Catalog";
 import { VisitForm } from "@/components/visits/visit-form";
+import type { PhotoLocation } from "@/components/visits/visit-photos";
 import { stockFor } from "@/lib/samples/ledger";
 import { OBJECT_ID } from "@/lib/api";
 import type { EditableWindow } from "@/components/doctors/call-schedule-editor";
@@ -36,8 +37,10 @@ export default async function VisitPage({ params }: { params: Promise<{ id: stri
     // Metadata only — the bytes are fetched one image at a time. Anything past
     // its thirty days is left out rather than waited on.
     VisitPhoto.find({ visit: id, expiresAt: { $gt: new Date() } })
-      .select("caption createdAt expiresAt").sort({ createdAt: 1 }).lean() as
-      unknown as Promise<Array<{ _id: unknown; caption?: string; createdAt: Date; expiresAt: Date }>>
+      .select("caption location createdAt expiresAt").sort({ createdAt: 1 }).lean() as
+      unknown as Promise<Array<{
+        _id: unknown; caption?: string; createdAt: Date; expiresAt: Date; location?: PhotoLocation;
+      }>>
   ]);
 
   if (!visit) notFound();
@@ -77,6 +80,10 @@ export default async function VisitPage({ params }: { params: Promise<{ id: stri
       photos={photos.map(photo => ({
         _id: String(photo._id),
         caption: photo.caption,
+        // A photo saved before this field existed, or with location switched
+        // off, has an empty object here rather than nothing — dropped, so the
+        // screen says "no location" instead of showing a point at 0°, 0°.
+        location: typeof photo.location?.latitude === "number" ? photo.location : undefined,
         createdAt: photo.createdAt.toISOString(),
         expiresAt: photo.expiresAt.toISOString()
       }))}

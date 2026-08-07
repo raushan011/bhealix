@@ -91,10 +91,13 @@ export function Stat({ label, value, tone }: { label: string; value: string | nu
   </div>;
 }
 
-export function Notice({ tone = "info", children }: { tone?: "info" | "success" | "error"; children: React.ReactNode }) {
+export function Notice({ tone = "info", children }: { tone?: "info" | "success" | "warning" | "error"; children: React.ReactNode }) {
   const styles = {
     info: "border-[var(--line)] bg-white text-[var(--ink-2)]",
     success: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    // For something that did work but not as well as it should have — a photo
+    // saved with no location. An error tone would read as "nothing was saved".
+    warning: "border-amber-200 bg-amber-50 text-amber-800",
     error: "border-rose-200 bg-rose-50 text-rose-800"
   }[tone];
   return <p role="status" className={`wrap-break-word rounded-[10px] border px-4 py-3 text-sm font-medium ${styles}`}>{children}</p>;

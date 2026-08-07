@@ -8,9 +8,30 @@ import { record } from "@/lib/audit";
 import {
   MAX_PHOTOS_PER_VISIT, MAX_PHOTO_BYTES, PHOTO_RETENTION_DAYS, PHOTO_TYPES, photoExpiryFrom
 } from "@/lib/visits";
+import { completeFix } from "@/lib/geo";
 
 const ACCEPTED: readonly string[] = PHOTO_TYPES;
-const METADATA = "contentType bytes caption createdAt expiresAt employee";
+const METADATA = "contentType bytes caption location createdAt expiresAt employee";
+
+/**
+ * The fix the phone reported when the photos were taken, as posted with them.
+ *
+ * A photo without one is still accepted — a rep in a basement clinic with no
+ * signal must not be stopped from recording the call — but a half fix, or a
+ * coordinate off the globe, is dropped rather than stored, so nothing that
+ * reads this back has to wonder whether it means anything.
+ */
+function fixFrom(form: FormData) {
+  const fix = completeFix({
+    latitude: Number(form.get("latitude")),
+    longitude: Number(form.get("longitude")),
+    accuracy: Number(form.get("accuracy"))
+  });
+  if (!fix) return undefined;
+
+  const text = (field: string, limit: number) => String(form.get(field) ?? "").trim().slice(0, limit);
+  return { ...fix, address: text("address", 250), area: text("area", 120), city: text("city", 120) };
+}
 
 /** Photos a rep can only ever reach on their own visit; the desk reads any of them. */
 async function reachable(id: string, session: { role: Role; userId: string }) {
@@ -79,6 +100,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!files.length) return badRequest("Choose at least one photo");
 
     const caption = String(form.get("caption") ?? "").trim().slice(0, 200);
+    const location = fixFrom(form);
     const now = new Date();
     const held = await VisitPhoto.countDocuments({ visit: id, expiresAt: { $gt: now } });
     if (held + files.length > MAX_PHOTOS_PER_VISIT) {
@@ -100,7 +122,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const expiresAt = photoExpiryFrom(now);
     const saved = await VisitPhoto.insertMany(prepared.map(photo => ({
-      ...photo, visit: id, doctor: visit.doctor, employee: auth.session.userId, caption, expiresAt
+      ...photo, visit: id, doctor: visit.doctor, employee: auth.session.userId,
+      caption, location, expiresAt
     })));
 
     await record({
@@ -108,13 +131,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       action: "visit.photo.added",
       entityType: "Visit",
       entityId: visit._id,
-      metadata: { count: saved.length, doctor: visit.doctor ? String(visit.doctor) : undefined }
+      // Whether the photos carried a position is worth keeping even though the
+      // photos themselves go in thirty days: an unlocated call is exactly the
+      // thing somebody asks about later, once the picture is gone.
+      metadata: {
+        count: saved.length,
+        doctor: visit.doctor ? String(visit.doctor) : undefined,
+        located: Boolean(location),
+        ...(location ? { at: `${location.latitude},${location.longitude}` } : {})
+      }
     });
 
     return ok({
       items: saved.map(photo => ({
         _id: photo._id, contentType: photo.contentType, bytes: photo.bytes,
-        caption: photo.caption, createdAt: photo.createdAt, expiresAt: photo.expiresAt
+        // `location` rather than `photo.location`: every photo in a batch was
+        // taken at the same spot, and Mongoose hands back an empty nested
+        // object for an unset one, which reads as located when it is not.
+        caption: photo.caption, location,
+        createdAt: photo.createdAt, expiresAt: photo.expiresAt
       })),
       retentionDays: PHOTO_RETENTION_DAYS
     }, 201);

@@ -25,6 +25,27 @@ const VisitPhotoSchema = new Schema({
   bytes: { type: Number, required: true },
   caption: { type: String, maxlength: 200 },
 
+  /**
+   * Where the phone was when the photo was taken, and the address that pair of
+   * coordinates resolved to. The same words are burnt across the bottom of the
+   * image before it is uploaded, so the picture and this record say the same
+   * thing — but the picture can be cropped and this cannot, and only this can
+   * be searched or read back into a map link.
+   *
+   * Absent on a photo taken with location switched off, and on every photo
+   * taken before this field existed. Both must keep displaying, so nothing here
+   * is required and the screens treat a missing fix as a stated fact rather
+   * than an empty space.
+   */
+  location: {
+    latitude: Number,
+    longitude: Number,
+    accuracy: Number,
+    address: String,
+    area: String,
+    city: String
+  },
+
   /** Set at upload to thirty days out. The TTL index below acts on this. */
   expiresAt: { type: Date, required: true }
 }, { timestamps: true });

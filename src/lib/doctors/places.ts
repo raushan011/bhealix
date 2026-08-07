@@ -32,6 +32,43 @@ export async function geocode(location: string, key: string): Promise<Centre> {
   return data.results[0].geometry.location;
 }
 
+type GeocodeResult = {
+  formatted_address?: string;
+  address_components?: Array<{ long_name?: string; types?: string[] }>;
+};
+
+export type PlaceName = { address: string; area: string; city: string };
+
+/**
+ * The street address a pair of coordinates sits at.
+ *
+ * Used to caption a visit photo, so it returns null rather than throwing when
+ * Google is unreachable or has nothing for the point: the coordinates are the
+ * proof of where the rep stood, and the address is only there to make them
+ * readable. Losing the wording must never cost the photo.
+ */
+export async function reverseGeocode(
+  latitude: number, longitude: number, key: string
+): Promise<PlaceName | null> {
+  const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
+  url.searchParams.set("latlng", `${latitude},${longitude}`);
+  url.searchParams.set("key", key);
+
+  const data = await fetch(url, { cache: "no-store" }).then(r => r.json()) as
+    { status?: string; results?: GeocodeResult[] };
+  const first = data.status === "OK" ? data.results?.[0] : undefined;
+  if (!first?.formatted_address) return null;
+
+  const part = (type: string) =>
+    first.address_components?.find(c => c.types?.includes(type))?.long_name ?? "";
+
+  return {
+    address: first.formatted_address,
+    area: part("sublocality_level_1") || part("sublocality") || part("neighborhood"),
+    city: part("locality") || part("administrative_area_level_2")
+  };
+}
+
 /** One Places text search. `pages` of 20 results each; bias is optional. */
 export async function searchText(query: string, key: string, options: {
   bias?: { centre: Centre; radiusM: number };
