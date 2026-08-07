@@ -159,7 +159,9 @@ export default async function FieldActivityPage({ params, searchParams }: {
       })}
     </div>
 
-    <Card className="grid grid-cols-2 gap-5 p-5 sm:grid-cols-4 lg:grid-cols-7">
+    {/* Seven across is only honest on a wide desktop — one of these is an order
+        value in rupees, and a 100px column cannot hold one. */}
+    <Card className="grid grid-cols-2 gap-5 p-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
       <Stat label="Doctors met" value={doctorsMet.length} />
       <Stat label="Visits completed" value={totals.completed} />
       <Stat label="Missed" value={totals.missed} tone={totals.missed ? "text-rose-600" : undefined} />

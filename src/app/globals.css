@@ -36,7 +36,16 @@
     font-size: 15px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    /*
+     * The app is full of strings with nowhere to break: email addresses, GSTINs,
+     * IFSC codes, bank references, Google Maps URLs. Left alone one of those in
+     * a narrow column is a single unbreakable word wider than a phone, and it
+     * takes the whole page sideways with it. Breaking mid-word is only ever
+     * reached when there is no space to break at, so ordinary prose is untouched.
+     */
+    overflow-wrap: break-word;
   }
+  img, svg, video, canvas { max-width: 100%; }
   button, a, input, select, textarea { font: inherit; color: inherit; }
   button, [role="button"], select, summary { cursor: pointer; }
   button:disabled { cursor: not-allowed; }
@@ -69,6 +78,13 @@
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: 14px;
+    /*
+     * A grid or flex item is `min-width: auto` by default, which means it
+     * refuses to be narrower than its content and widens its track instead.
+     * Cards laid out in a grid were doing exactly that — one long label pushed
+     * the whole row past the viewport rather than wrapping inside its own box.
+     */
+    min-width: 0;
   }
   .tap { min-height: 44px; min-width: 44px; }
 }

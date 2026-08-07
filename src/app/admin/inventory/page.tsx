@@ -77,7 +77,7 @@ export default function InventoryPage() {
     {loading && <Spinner label="Loading inventory…" />}
 
     {!loading && <>
-      <Card className="grid grid-cols-2 gap-5 p-5 sm:grid-cols-4">
+      <Card className="grid grid-cols-2 gap-5 p-5 lg:grid-cols-4">
         <Stat label="Units in stock" value={totals.units} />
         <Stat label="Stock value" value={formatMoney(totals.value)} />
         <Stat label="Low on stock" value={totals.low} tone={totals.low ? "text-amber-700" : undefined} />

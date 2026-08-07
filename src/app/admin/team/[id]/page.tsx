@@ -184,7 +184,7 @@ export default function EmployeeProfile() {
         <h2 className="text-sm font-semibold">Leave this year</h2>
         {mayEdit && <button onClick={() => setEditing("leave")} className="text-xs font-semibold text-[var(--brand)]">Set entitlement</button>}
       </div>
-      <div className="grid grid-cols-2 gap-4 p-5 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 p-5 sm:grid-cols-3 lg:grid-cols-5">
         {balances.map(balance => (
           <div key={balance.type} className="min-w-0">
             <p className="truncate text-xs text-[var(--muted)]">{balance.type}</p>
@@ -236,7 +236,9 @@ function Row({ label, value, icon: Icon }: {
     <dt className="flex shrink-0 items-center gap-1.5 text-[var(--muted)]">
       {Icon && <Icon size={13} />}{label}
     </dt>
-    <dd className="min-w-0 text-right font-medium">{value || <span className="text-[var(--line-2)]">Not recorded</span>}</dd>
+    {/* An email or a bank account number has nowhere to break on its own, and
+        left to itself pushed the card wider than the column holding it. */}
+    <dd className="min-w-0 wrap-break-word text-right font-medium">{value || <span className="text-[var(--line-2)]">Not recorded</span>}</dd>
   </div>;
 }
 

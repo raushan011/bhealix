@@ -115,9 +115,11 @@ export default function ProductsPage() {
 
     {!loading && products.length > 0 && (
       <Card className="divide-y divide-[var(--line)]">
+        {/* The name gets the whole width on a phone; the count and the three
+            controls sit beneath it rather than squeezing it into 90px. */}
         {products.map(product => (
-          <div key={product._id} className="flex items-center gap-3 px-5 py-3.5">
-            <div className="min-w-0 flex-1">
+          <div key={product._id} className="flex flex-wrap items-center gap-3 px-4 py-3.5 sm:px-5">
+            <div className="min-w-0 flex-1 basis-full sm:basis-auto">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="truncate text-sm font-semibold">{product.name}</p>
                 {!product.active && <Badge tone="warn">Retired</Badge>}
@@ -143,7 +145,7 @@ export default function ProductsPage() {
               </p>
               <p className="text-[11px] text-[var(--muted)]">available</p>
             </div>
-            {mayEdit && <>
+            {mayEdit && <div className="ml-auto flex shrink-0 items-center gap-1.5">
               <button onClick={() => setEditing(product)} aria-label={`Edit ${product.name}`}
                 className="grid size-9 shrink-0 place-items-center rounded-lg text-[var(--ink-2)] hover:bg-[var(--surface-2)]"><Pencil size={15} /></button>
               <Button tone="secondary" className="!min-h-[38px] !px-3 text-xs" onClick={() => toggleActive(product)}>
@@ -151,7 +153,7 @@ export default function ProductsPage() {
               </Button>
               <button onClick={() => remove(product)} aria-label={`Remove ${product.name}`}
                 className="grid size-9 shrink-0 place-items-center rounded-lg text-rose-600 hover:bg-rose-50"><Trash2 size={15} /></button>
-            </>}
+            </div>}
           </div>
         ))}
       </Card>

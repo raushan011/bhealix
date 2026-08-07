@@ -200,7 +200,7 @@ function PlanBuilder() {
 
     <Card className="p-5">
       <Step n={1} title="Day and timing" done={Boolean(date)} />
-      <div className="mt-4 grid gap-4 pl-8 sm:grid-cols-3">
+      <div className="mt-4 grid gap-4 sm:grid-cols-3 sm:pl-8">
         <Field label="Visit date" hint={WEEKDAYS[weekday]}>
           <div className="relative">
             <CalendarDays size={16} className="pointer-events-none absolute left-3 top-3.5 text-[var(--muted)]" />
@@ -219,7 +219,7 @@ function PlanBuilder() {
 
     <Card className="p-5">
       <Step n={2} title="Starting doctor" hint="The day begins here." done={Boolean(reference)} />
-      <div className="mt-4 pl-8">
+      <div className="mt-4 sm:pl-8">
         {reference ? (
           <div className="flex items-center gap-3 rounded-[10px] border border-[var(--brand)] bg-[var(--brand-soft)]/40 p-3">
             <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-white"><Navigation size={15} /></span>
@@ -247,7 +247,7 @@ function PlanBuilder() {
         <Button tone="secondary" onClick={() => fileRef.current?.click()} disabled={!reference}><Upload size={15} />Upload sheet</Button>
       </div>
 
-      <div className="mt-4 space-y-3 pl-8">
+      <div className="mt-4 space-y-3 sm:pl-8">
         <DoctorPicker weekday={weekday} excludeIds={excludeIds} onSelect={addDoctor} placeholder="Add a doctor to this route" />
 
         {selected.length ? (
@@ -285,7 +285,7 @@ function PlanBuilder() {
     {preview && <Card className="p-5">
       <Step n={4} title="Route and assignment" />
 
-      <div className="mt-4 space-y-4 pl-8">
+      <div className="mt-4 space-y-4 sm:pl-8">
         <div className="grid grid-cols-2 gap-4 rounded-[10px] border border-[var(--line)] bg-[var(--surface-2)] p-4 sm:grid-cols-4">
           <Stat label="Stops" value={preview.stops.length} />
           <Stat label="Distance" value={`${preview.totalDistanceKm} km`} />

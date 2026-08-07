@@ -70,7 +70,9 @@ export default function BillingPage() {
         <LinkButton href="/admin/billing/new"><Plus size={16} />New bill</LinkButton>
       </>} />
 
-    <Card className="grid grid-cols-2 gap-5 p-5 sm:grid-cols-4">
+    {/* Four across only once there is room for a twelve-character rupee total
+        in each column, which a tablet does not have. */}
+    <Card className="grid grid-cols-2 gap-5 p-5 lg:grid-cols-4">
       <Stat label="Billed" value={formatMoney(summary.billed)} />
       <Stat label="Collected" value={formatMoney(summary.collected)} tone="text-emerald-700" />
       <Stat label="Outstanding" value={formatMoney(summary.outstanding)} tone={summary.outstanding > 0 ? "text-amber-700" : undefined} />

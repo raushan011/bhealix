@@ -76,8 +76,8 @@ export default function TeamPage() {
     {!loading && members.length > 0 && (
       <Card className="divide-y divide-[var(--line)]">
         {members.map(member => (
-          <div key={member._id} className="flex flex-wrap items-center gap-3 px-5 py-4">
-            <Link href={`/admin/team/${member._id}`} className="min-w-0 flex-1">
+          <div key={member._id} className="flex flex-wrap items-center gap-3 px-4 py-4 sm:px-5">
+            <Link href={`/admin/team/${member._id}`} className="min-w-0 flex-1 basis-full sm:basis-auto">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="truncate text-sm font-semibold">{member.name}</p>
                 <Badge tone={roleTone(member.role)}>{ROLE_LABEL[member.role]}</Badge>
@@ -87,7 +87,13 @@ export default function TeamPage() {
                 {[member.employeeId, member.designation, member.department, member.email].filter(Boolean).join(" · ")}
               </p>
             </Link>
-            <div className="flex shrink-0 items-center gap-2">
+            {/*
+             * Five controls come to roughly 370px, which is wider than a phone
+             * once the row's padding is taken off. Wrapping them rather than
+             * refusing to shrink is what stops the whole card being dragged
+             * past the edge of the screen.
+             */}
+            <div className="flex flex-wrap items-center gap-2">
               {viewer === "ADMIN" && usesFieldPanel(member.role) && (
                 <Link href={`/admin/team/${member._id}/activity`} aria-label={`Field activity for ${member.name}`}
                   title="Field activity"

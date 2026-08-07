@@ -30,10 +30,15 @@ export function PageTitle({ title, subtitle, actions }:
   { title: string; subtitle?: string; actions?: React.ReactNode }) {
   return <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
     <div className="min-w-0">
-      <h1 className="text-[22px] sm:text-2xl">{title}</h1>
+      <h1 className="wrap-break-word text-[22px] sm:text-2xl">{title}</h1>
       {subtitle && <p className="mt-1 text-sm text-[var(--muted)]">{subtitle}</p>}
     </div>
-    {actions && <div className="flex shrink-0 flex-wrap gap-2">{actions}</div>}
+    {/*
+     * `max-w-full` rather than `shrink-0`: a title bar with three buttons is
+     * wider than a phone, and refusing to shrink pushed the whole page sideways
+     * instead of wrapping the row it was given.
+     */}
+    {actions && <div className="flex max-w-full flex-wrap gap-2 sm:justify-end">{actions}</div>}
   </header>;
 }
 
@@ -70,10 +75,19 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
   </label>;
 }
 
+/**
+ * One figure with its name above it.
+ *
+ * The value steps down a size on phones and is allowed to break: these tiles
+ * sit two or three to a row, and a rupee total runs to twelve characters, which
+ * at the desktop size is wider than the column it was given. Breaking a long
+ * figure onto a second line is ugly; pushing the card off the side of the screen
+ * is worse. The label truncates instead — it is the part that can be guessed.
+ */
 export function Stat({ label, value, tone }: { label: string; value: string | number; tone?: string }) {
   return <div className="min-w-0">
     <p className="truncate text-xs text-[var(--muted)]">{label}</p>
-    <p className={`mt-0.5 text-xl font-semibold ${tone ?? ""}`}>{value}</p>
+    <p className={`mt-0.5 wrap-break-word text-lg font-semibold leading-tight tabular-nums sm:text-xl ${tone ?? ""}`}>{value}</p>
   </div>;
 }
 
@@ -83,7 +97,7 @@ export function Notice({ tone = "info", children }: { tone?: "info" | "success" 
     success: "border-emerald-200 bg-emerald-50 text-emerald-800",
     error: "border-rose-200 bg-rose-50 text-rose-800"
   }[tone];
-  return <p role="status" className={`rounded-[10px] border px-4 py-3 text-sm font-medium ${styles}`}>{children}</p>;
+  return <p role="status" className={`wrap-break-word rounded-[10px] border px-4 py-3 text-sm font-medium ${styles}`}>{children}</p>;
 }
 
 export function EmptyState({ icon: Icon, title, description, action }:

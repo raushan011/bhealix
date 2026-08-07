@@ -46,7 +46,12 @@ export function InvoiceDocument({ invoice, settings }: { invoice: InvoiceRecord;
     gstin: settings.gstin
   };
 
-  return <article className="invoice-sheet mx-auto w-full max-w-[210mm] bg-white p-[10mm] text-neutral-900 shadow-sm print:max-w-none print:p-0 print:shadow-none">
+  /*
+   * A 10mm margin is right on paper and wrong on a 360px phone, where it eats a
+   * fifth of the screen before the sheet has drawn anything. The screen gets a
+   * smaller inset and paper gets its margin back at the width an A4 page needs.
+   */
+  return <article className="invoice-sheet mx-auto w-full max-w-[210mm] bg-white p-4 text-neutral-900 shadow-sm sm:p-[10mm] print:max-w-none print:p-0 print:shadow-none">
     {/* Title first: whoever picks the page up must see what the document is. */}
     <header className="text-center">
       <h1 className="text-[15px] font-bold uppercase tracking-[0.2em]">
@@ -113,8 +118,11 @@ export function InvoiceDocument({ invoice, settings }: { invoice: InvoiceRecord;
       </div>
     </div>
 
-    <div className="mt-2 overflow-x-auto">
-      <table className="w-full border-collapse text-[11px]">
+    {/* The line table has ten columns on a tax invoice. It scrolls sideways on a
+        phone rather than dragging the whole sheet with it; print ignores the
+        overflow because the page is wide enough to hold it. */}
+    <div className="mt-2 overflow-x-auto print:overflow-visible">
+      <table className="w-full min-w-[560px] border-collapse text-[11px] print:min-w-0">
         <thead>
           <tr className="bg-neutral-100 text-left">
             <th className={`${cell} w-8 text-center`}>#</th>

@@ -89,8 +89,8 @@ export default function CustomersPage() {
     {!loading && customers.length > 0 && (
       <Card className="divide-y divide-[var(--line)]">
         {customers.map(customer => (
-          <div key={customer._id} className="flex items-center gap-3 px-5 py-3.5">
-            <div className="min-w-0 flex-1">
+          <div key={customer._id} className="flex flex-wrap items-center gap-3 px-4 py-3.5 sm:px-5">
+            <div className="min-w-0 flex-1 basis-full sm:basis-auto">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="truncate text-sm font-semibold">{customerTitle(customer)}</p>
                 <Badge tone="info">{customer.type}</Badge>
@@ -105,20 +105,22 @@ export default function CustomersPage() {
               </p>
             </div>
 
-            <Link href={`/admin/billing?customer=${customer._id}`} aria-label={`Bills for ${customer.name}`}
-              className="grid size-9 shrink-0 place-items-center rounded-lg text-[var(--ink-2)] hover:bg-[var(--surface-2)]">
-              <Receipt size={15} />
-            </Link>
-            {mayManage && <>
-              <button onClick={() => setEditing(customer)} aria-label={`Edit ${customer.name}`}
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+              <Link href={`/admin/billing?customer=${customer._id}`} aria-label={`Bills for ${customer.name}`}
                 className="grid size-9 shrink-0 place-items-center rounded-lg text-[var(--ink-2)] hover:bg-[var(--surface-2)]">
-                <Pencil size={15} />
-              </button>
-              <button onClick={() => remove(customer)} aria-label={`Remove ${customer.name}`}
-                className="grid size-9 shrink-0 place-items-center rounded-lg text-rose-600 hover:bg-rose-50">
-                <Trash2 size={15} />
-              </button>
-            </>}
+                <Receipt size={15} />
+              </Link>
+              {mayManage && <>
+                <button onClick={() => setEditing(customer)} aria-label={`Edit ${customer.name}`}
+                  className="grid size-9 shrink-0 place-items-center rounded-lg text-[var(--ink-2)] hover:bg-[var(--surface-2)]">
+                  <Pencil size={15} />
+                </button>
+                <button onClick={() => remove(customer)} aria-label={`Remove ${customer.name}`}
+                  className="grid size-9 shrink-0 place-items-center rounded-lg text-rose-600 hover:bg-rose-50">
+                  <Trash2 size={15} />
+                </button>
+              </>}
+            </div>
           </div>
         ))}
       </Card>

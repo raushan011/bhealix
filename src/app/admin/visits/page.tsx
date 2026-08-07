@@ -70,8 +70,9 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
           return <div key={String(visit._id)} className="px-5 py-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
+                {/* `block`, because `truncate` does nothing to an inline box. */}
                 {visit.doctor ? (
-                  <Link href={`/admin/doctors/${visit.doctor._id}`} className="truncate text-sm font-semibold hover:text-[var(--brand)]">
+                  <Link href={`/admin/doctors/${visit.doctor._id}`} className="block truncate text-sm font-semibold hover:text-[var(--brand)]">
                     {visit.doctor.name}
                   </Link>
                 ) : <p className="text-sm font-semibold">Doctor removed</p>}

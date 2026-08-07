@@ -39,7 +39,9 @@ export default function MyBillsPage() {
   return <div className="space-y-4">
     <PageTitle title="My bills" subtitle="What your buyers owe, and when to ask for it" />
 
-    <Card className="grid grid-cols-3 gap-4 p-4">
+    {/* Two across on a phone: three rupee totals in 360px gave each column
+        88px, and a five-figure bill needs more than that. */}
+    <Card className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-3">
       <Stat label="Billed" value={formatMoney(summary.billed)} />
       <Stat label="Collected" value={formatMoney(summary.collected)} tone="text-emerald-700" />
       <Stat label="To collect" value={formatMoney(summary.outstanding)}

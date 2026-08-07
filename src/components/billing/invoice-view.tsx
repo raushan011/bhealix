@@ -127,7 +127,7 @@ export function InvoiceView({ invoiceId, backHref }: { invoiceId: string; backHr
       </Notice>
     )}
 
-    <Card className="grid grid-cols-2 gap-5 p-5 sm:grid-cols-4">
+    <Card className="grid grid-cols-2 gap-5 p-5 lg:grid-cols-4">
       <Stat label="Total" value={formatMoney(invoice.grandTotal)} />
       <Stat label="Received" value={formatMoney(invoice.amountPaid)} tone="text-emerald-700" />
       <Stat label="Outstanding" value={formatMoney(invoice.balanceDue)}

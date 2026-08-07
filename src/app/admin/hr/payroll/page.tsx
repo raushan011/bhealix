@@ -68,7 +68,7 @@ export default function PayrollPage() {
     {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
 
     {runs.length > 0 && (
-      <Card className="grid grid-cols-2 gap-5 p-5 sm:grid-cols-4">
+      <Card className="grid grid-cols-2 gap-5 p-5 lg:grid-cols-4">
         <Stat label="Months on record" value={runs.length} />
         <Stat label="Awaiting approval" value={runs.filter(run => run.status === "Draft").length} />
         <Stat label="Approved, not paid" value={runs.filter(run => run.status === "Approved").length} />

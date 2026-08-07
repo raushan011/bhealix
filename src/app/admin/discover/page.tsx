@@ -636,7 +636,12 @@ export default function DiscoverPage() {
 
       {mode === "area" && !searching && rows.length > 0 && (
         <>
-          <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-[var(--line)] bg-white px-3 py-2.5 lg:top-2">
+          {/*
+           * Below the app's own header rather than under it: the mobile bar is
+           * 56px tall and sticks at the top of the viewport, so a toolbar
+           * pinned to 0 slid behind it and could not be reached at all.
+           */}
+          <div className="sticky top-14 z-10 flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-[var(--line)] bg-white px-3 py-2.5 lg:top-2">
             <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold">
               <input
                 type="checkbox"

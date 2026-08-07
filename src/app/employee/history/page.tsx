@@ -44,7 +44,7 @@ export default async function HistoryPage() {
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 {visit.doctor ? (
-                  <Link href={`/employee/doctors/${visit.doctor._id}`} className="truncate text-sm font-semibold">{visit.doctor.name}</Link>
+                  <Link href={`/employee/doctors/${visit.doctor._id}`} className="block truncate text-sm font-semibold">{visit.doctor.name}</Link>
                 ) : <p className="text-sm font-semibold">Doctor removed</p>}
                 <p className="mt-0.5 text-xs text-[var(--muted)]">{formatDate(visit.plannedDate)}{visit.doctor?.area ? ` · ${visit.doctor.area}` : ""}</p>
               </div>

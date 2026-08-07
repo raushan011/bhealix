@@ -60,7 +60,7 @@ const rupee = (amount: number) =>
 function Detail({ label, value }: { label: string; value?: string | number | null }) {
   if (value === undefined || value === null || value === "") return null;
   return <div className="flex gap-1 text-[11px] leading-snug">
-    <span className="w-[34mm] shrink-0 text-neutral-600">{label}</span>
+    <span className="w-[26mm] shrink-0 text-neutral-600 sm:w-[34mm]">{label}</span>
     <span className="min-w-0 font-semibold">{value}</span>
   </div>;
 }
@@ -73,7 +73,12 @@ export function PayslipDocument({ payslip, company, meta }: {
   const rows = Math.max(payslip.earnings.length, payslip.deductions.length);
   const prorated = payslip.paidDays < payslip.divisorDays;
 
-  return <article className="payslip-sheet mx-auto w-full max-w-[210mm] bg-white p-[10mm] text-neutral-900 shadow-sm print:max-w-none print:p-0 print:shadow-none">
+  /*
+   * A 10mm margin is right on paper and wrong on a 360px phone, where it eats a
+   * fifth of the screen before the sheet has drawn anything. The screen gets a
+   * smaller inset and paper gets its margin back at the width an A4 page needs.
+   */
+  return <article className="payslip-sheet mx-auto w-full max-w-[210mm] bg-white p-4 text-neutral-900 shadow-sm sm:p-[10mm] print:max-w-none print:p-0 print:shadow-none">
     <header className="border border-neutral-400 px-3 py-2 text-center">
       <h1 className="text-[14px] font-bold uppercase tracking-[0.15em]">{employer}</h1>
       {(company.address || company.city) && (
@@ -92,8 +97,10 @@ export function PayslipDocument({ payslip, company, meta }: {
       )}
     </header>
 
+    {/* One column on a phone. Side by side, each half was about 150px wide and
+        the 34mm label left roughly nothing for the value beside it. */}
     <section className="mt-2 flex flex-wrap border border-neutral-400">
-      <div className="min-w-0 flex-1 space-y-0.5 border-r border-neutral-400 p-2.5">
+      <div className="min-w-0 basis-full space-y-0.5 border-b border-neutral-400 p-2.5 sm:flex-1 sm:basis-0 sm:border-b-0 sm:border-r">
         <Detail label="Name" value={who.name} />
         <Detail label="Employee ID" value={who.employeeId} />
         <Detail label="Designation" value={who.designation} />
@@ -102,7 +109,7 @@ export function PayslipDocument({ payslip, company, meta }: {
         <Detail label="Date of joining" value={who.joiningDate ? formatDate(who.joiningDate) : undefined} />
         <Detail label="Last working day" value={who.exitDate ? formatDate(who.exitDate) : undefined} />
       </div>
-      <div className="min-w-0 flex-1 space-y-0.5 p-2.5">
+      <div className="min-w-0 basis-full space-y-0.5 p-2.5 sm:flex-1 sm:basis-0">
         <Detail label="PAN" value={who.panNumber} />
         <Detail label="UAN" value={who.uan} />
         <Detail label="ESIC number" value={who.esicNumber} />
@@ -115,34 +122,39 @@ export function PayslipDocument({ payslip, company, meta }: {
       </div>
     </section>
 
-    <table className="mt-2 w-full border-collapse text-[11px]">
-      <thead>
-        <tr className="bg-neutral-100">
-          <th className={`${cell} text-left font-bold uppercase tracking-wider`}>Earnings</th>
-          <th className={`${cell} w-[28mm] text-right font-bold uppercase tracking-wider`}>Amount</th>
-          <th className={`${cell} text-left font-bold uppercase tracking-wider`}>Deductions</th>
-          <th className={`${cell} w-[28mm] text-right font-bold uppercase tracking-wider`}>Amount</th>
-        </tr>
-      </thead>
-      <tbody>
-        {Array.from({ length: rows }, (_, index) => {
-          const earning = payslip.earnings[index];
-          const deduction = payslip.deductions[index];
-          return <tr key={index}>
-            <td className={cell}>{earning?.name ?? ""}</td>
-            <td className={`${cell} text-right tabular-nums`}>{earning ? rupee(earning.amount) : ""}</td>
-            <td className={cell}>{deduction?.name ?? ""}</td>
-            <td className={`${cell} text-right tabular-nums`}>{deduction ? rupee(deduction.amount) : ""}</td>
-          </tr>;
-        })}
-        <tr className="bg-neutral-100 font-bold">
-          <td className={cell}>Gross earnings</td>
-          <td className={`${cell} text-right tabular-nums`}>{rupee(payslip.gross)}</td>
-          <td className={cell}>Total deductions</td>
-          <td className={`${cell} text-right tabular-nums`}>{rupee(payslip.totalDeductions)}</td>
-        </tr>
-      </tbody>
-    </table>
+    {/* Earnings and deductions side by side need about 520px between the four
+        columns. On a phone the pair scrolls rather than forcing the sheet wider
+        than the screen; on paper there is room and the wrapper does nothing. */}
+    <div className="mt-2 overflow-x-auto print:overflow-visible">
+      <table className="w-full min-w-[480px] border-collapse text-[11px] print:min-w-0">
+        <thead>
+          <tr className="bg-neutral-100">
+            <th className={`${cell} text-left font-bold uppercase tracking-wider`}>Earnings</th>
+            <th className={`${cell} w-[28mm] text-right font-bold uppercase tracking-wider`}>Amount</th>
+            <th className={`${cell} text-left font-bold uppercase tracking-wider`}>Deductions</th>
+            <th className={`${cell} w-[28mm] text-right font-bold uppercase tracking-wider`}>Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Array.from({ length: rows }, (_, index) => {
+            const earning = payslip.earnings[index];
+            const deduction = payslip.deductions[index];
+            return <tr key={index}>
+              <td className={cell}>{earning?.name ?? ""}</td>
+              <td className={`${cell} text-right tabular-nums`}>{earning ? rupee(earning.amount) : ""}</td>
+              <td className={cell}>{deduction?.name ?? ""}</td>
+              <td className={`${cell} text-right tabular-nums`}>{deduction ? rupee(deduction.amount) : ""}</td>
+            </tr>;
+          })}
+          <tr className="bg-neutral-100 font-bold">
+            <td className={cell}>Gross earnings</td>
+            <td className={`${cell} text-right tabular-nums`}>{rupee(payslip.gross)}</td>
+            <td className={cell}>Total deductions</td>
+            <td className={`${cell} text-right tabular-nums`}>{rupee(payslip.totalDeductions)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <section className="mt-2 border border-neutral-400">
       {payslip.roundOff !== 0 && (

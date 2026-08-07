@@ -130,7 +130,9 @@ export default function PayrollMonthPage() {
       </Notice>
     )}
 
-    <Card className="grid grid-cols-2 gap-5 p-5 sm:grid-cols-5">
+    {/* Four rupee figures and a status chip. Five across needs a wide desktop;
+        below that they are stacked rather than squeezed into 90px columns. */}
+    <Card className="grid grid-cols-2 gap-5 p-5 lg:grid-cols-3 xl:grid-cols-5">
       <Stat label="Gross" value={formatMoney(run.totals.gross)} />
       <Stat label="Deductions" value={formatMoney(run.totals.deductions)} />
       <Stat label="Net payable" value={formatMoney(run.totals.netPay)} />

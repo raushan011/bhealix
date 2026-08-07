@@ -58,7 +58,13 @@ export default async function DoctorDetail({ params }: { params: Promise<{ id: s
             <div><dt className="text-xs text-[var(--muted)]">Phone</dt>
               <dd className="mt-0.5 flex items-center gap-2 text-sm font-medium"><Phone size={14} className="text-[var(--muted)]" />{doctor.phones?.[0] ?? "Not available"}</dd></div>
             <div><dt className="text-xs text-[var(--muted)]">Email</dt>
-              <dd className="mt-0.5 flex items-center gap-2 truncate text-sm font-medium"><Mail size={14} className="shrink-0 text-[var(--muted)]" />{doctor.email ?? "Not available"}</dd></div>
+              {/* The truncation belongs on the text, not on the flex row around
+                  it — an address with no space in it would otherwise sit outside
+                  the card rather than being cut off inside it. */}
+              <dd className="mt-0.5 flex items-center gap-2 text-sm font-medium">
+                <Mail size={14} className="shrink-0 text-[var(--muted)]" />
+                <span className="truncate">{doctor.email ?? "Not available"}</span>
+              </dd></div>
             <div className="sm:col-span-2"><dt className="text-xs text-[var(--muted)]">Address</dt>
               <dd className="mt-0.5 flex items-start gap-2 text-sm font-medium"><MapPin size={14} className="mt-0.5 shrink-0 text-[var(--muted)]" />{doctor.fullAddress || [doctor.area, doctor.city].filter(Boolean).join(", ") || "Not recorded"}</dd></div>
             <div><dt className="text-xs text-[var(--muted)]">Coordinates</dt>

@@ -92,7 +92,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
       ))}
     </div>
 
-    <Card className="grid grid-cols-2 gap-5 p-5 sm:grid-cols-5">
+    <Card className="grid grid-cols-2 gap-5 p-5 sm:grid-cols-3 lg:grid-cols-5">
       <Stat label="Planned" value={totals.planned} />
       <Stat label="Completed" value={totals.completed} tone="text-emerald-700" />
       <Stat label="Missed" value={totals.missed} tone={totals.missed ? "text-rose-700" : undefined} />

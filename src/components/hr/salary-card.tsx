@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { FileText, IndianRupee, Pencil, Plus, Wallet, X } from "lucide-react";
-import { Badge, Button, Card, Field, Notice, Spinner } from "@/components/ui/kit";
+import { Badge, Button, Card, Field, Notice, Spinner, Stat } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import { formatMoney } from "@/lib/billing/constants";
 import {
@@ -80,19 +80,10 @@ export function SalaryCard({ employeeId, employeeName, canEdit }: {
     {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
 
     {current ? <>
-      <div className="grid grid-cols-2 gap-4 rounded-[10px] bg-[var(--surface-2)] p-4 sm:grid-cols-4">
-        <div className="min-w-0">
-          <p className="truncate text-xs text-[var(--muted)]">Monthly gross</p>
-          <p className="mt-0.5 text-xl font-semibold">{formatMoney(current.monthlyGross)}</p>
-        </div>
-        <div className="min-w-0">
-          <p className="truncate text-xs text-[var(--muted)]">A year</p>
-          <p className="mt-0.5 text-xl font-semibold">{formatMoney(current.annualGross)}</p>
-        </div>
-        <div className="min-w-0">
-          <p className="truncate text-xs text-[var(--muted)]">Basic</p>
-          <p className="mt-0.5 text-xl font-semibold">{formatMoney(current.basic)}</p>
-        </div>
+      <div className="grid grid-cols-2 gap-4 rounded-[10px] bg-[var(--surface-2)] p-4 lg:grid-cols-4">
+        <Stat label="Monthly gross" value={formatMoney(current.monthlyGross)} />
+        <Stat label="A year" value={formatMoney(current.annualGross)} />
+        <Stat label="Basic" value={formatMoney(current.basic)} />
         <div className="min-w-0">
           <p className="truncate text-xs text-[var(--muted)]">In force from</p>
           <p className="mt-0.5 text-sm font-semibold">{monthLabel(current.effectiveFrom)}</p>

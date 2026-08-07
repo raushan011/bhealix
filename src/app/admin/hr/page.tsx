@@ -69,7 +69,9 @@ export default function HrDashboard() {
       </Notice>
     )}
 
-    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
+    {/* Five across only on a desktop: at tablet width the tiles were narrower
+        than the word "Attendance", which then hung outside its own card. */}
+    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
       {[
         { href: "/admin/team", label: "Employees", icon: Users },
         { href: `/admin/hr/attendance?month=${month}`, label: "Attendance", icon: CalendarCheck },
@@ -77,8 +79,8 @@ export default function HrDashboard() {
         { href: "/admin/hr/holidays", label: "Holidays", icon: CalendarDays },
         { href: "/admin/hr/payroll", label: "Payroll", icon: Wallet }
       ].map(({ href, label, icon: Icon }) => (
-        <Link key={href} href={href} className="card tap flex items-center gap-2.5 px-4 text-sm font-semibold hover:bg-[var(--surface-2)]">
-          <Icon size={17} className="shrink-0 text-[var(--brand)]" />{label}
+        <Link key={href} href={href} className="card tap flex items-center gap-2.5 px-3.5 text-sm font-semibold hover:bg-[var(--surface-2)]">
+          <Icon size={17} className="shrink-0 text-[var(--brand)]" /><span className="truncate">{label}</span>
         </Link>
       ))}
     </div>
