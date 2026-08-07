@@ -299,14 +299,29 @@ export function InvoiceDocument({ invoice, settings }: { invoice: InvoiceRecord;
         {invoice.terms && <><p className="font-bold uppercase tracking-wider text-neutral-500">Terms</p>
           <p className="whitespace-pre-line">{invoice.terms}</p></>}
       </div>
-      <div className="w-[45mm] text-center text-[10px]">
-        <p className="font-semibold">For {settings.tradeName || settings.legalName}</p>
-        <div className="mt-10 border-t border-neutral-400 pt-1">{settings.signatoryName || "Authorised signatory"}</div>
+      {/* Two signature blocks, wrapping rather than shrinking: 45mm each is the
+          width a hand needs to sign, and on a phone they stack instead of
+          squeezing into something nobody could sign on a printout. */}
+      <div className="flex flex-wrap justify-end gap-4">
+        {settings.showReceiverSignature !== false && (
+          <div className="w-[45mm] text-center text-[10px]">
+            <p className="font-semibold">{settings.receiverSignatureLabel || "Received by"}</p>
+            <div className="mt-10 border-t border-neutral-400 pt-1 text-neutral-600">
+              Signature, name and date
+            </div>
+          </div>
+        )}
+        <div className="w-[45mm] text-center text-[10px]">
+          <p className="font-semibold">For {settings.tradeName || settings.legalName}</p>
+          <div className="mt-10 border-t border-neutral-400 pt-1">{settings.signatoryName || "Authorised signatory"}</div>
+        </div>
       </div>
     </div>
 
     <p className="mt-3 text-center text-[9px] text-neutral-500">
-      This is a computer-generated {taxed ? "invoice" : "bill"} and is valid without a physical signature.
+      {settings.showReceiverSignature !== false
+        ? `This ${taxed ? "invoice" : "bill"} is computer-generated and needs no signature from ${settings.tradeName || settings.legalName}. The receiver signs above to acknowledge the goods.`
+        : `This is a computer-generated ${taxed ? "invoice" : "bill"} and is valid without a physical signature.`}
     </p>
   </article>;
 }

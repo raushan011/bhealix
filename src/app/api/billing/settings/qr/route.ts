@@ -1,4 +1,5 @@
 import { connectDb } from "@/lib/db/mongoose";
+import { storedBytes } from "@/lib/db/bytes";
 import { BillingSettings } from "@/models/Settings";
 import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
@@ -26,19 +27,21 @@ export async function GET() {
     await connectDb();
     const settings = await BillingSettings.findOne({ key: "billing" })
       .select("+paymentQr paymentQrType paymentQrUpdatedAt").lean() as
-      { paymentQr?: Buffer; paymentQrType?: string; paymentQrUpdatedAt?: Date } | null;
+      { paymentQr?: unknown; paymentQrType?: string; paymentQrUpdatedAt?: Date } | null;
 
-    if (!settings?.paymentQr?.length) return badRequest("No payment QR has been uploaded yet", 404);
+    // Measured after unwrapping, not before: the stored value is a BSON wrapper
+    // whose own `length` is a method, so an emptiness check on it always passes.
+    const bytes = storedBytes(settings?.paymentQr);
+    if (!bytes.byteLength) return badRequest("No payment QR has been uploaded yet", 404);
 
-    const bytes = new Uint8Array(settings.paymentQr);
-    const type = settings.paymentQrType ?? "image/png";
+    const type = settings?.paymentQrType ?? "image/png";
     return new Response(bytes, {
       headers: {
         "content-type": type,
         "content-length": String(bytes.byteLength),
         "content-disposition": `inline; filename="payment-qr.${FILE_EXTENSION[type] ?? "png"}"`,
         "cache-control": "private, max-age=3600",
-        etag: `"qr-${settings.paymentQrUpdatedAt?.getTime() ?? 0}"`
+        etag: `"qr-${settings?.paymentQrUpdatedAt?.getTime() ?? 0}"`
       }
     });
   } catch (error) {

@@ -18,6 +18,7 @@ export type SellerSettings = {
   paymentQrType?: string; paymentQrBytes?: number; paymentQrUpdatedAt?: string | Date; paymentQrLabel?: string;
   invoicePrefix: string; defaultPaymentTerms: number; defaultGstRate: number;
   ratesIncludeTax: boolean; terms?: string; signatoryName?: string;
+  showReceiverSignature?: boolean; receiverSignatureLabel?: string;
 };
 
 /**

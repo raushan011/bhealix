@@ -1,4 +1,5 @@
 import { connectDb } from "@/lib/db/mongoose";
+import { storedBytes } from "@/lib/db/bytes";
 import { VisitPhoto } from "@/models/VisitPhoto";
 import { apiSession } from "@/lib/auth/guard";
 import { usesFieldPanel } from "@/constants/access";
@@ -30,14 +31,17 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     await connectDb();
     const photo = await VisitPhoto.findOne({ _id: photoId, visit: id, expiresAt: { $gt: new Date() } })
       .select("+data contentType employee createdAt").lean() as
-      { data?: Buffer; contentType: string; employee: unknown } | null;
+      { data?: unknown; contentType: string; employee: unknown } | null;
 
-    if (!photo?.data) return badRequest("This photo is no longer available", 404);
+    if (!photo) return badRequest("This photo is no longer available", 404);
     if (usesFieldPanel(auth.session.role) && String(photo.employee) !== auth.session.userId) {
       return badRequest("This photo belongs to another employee", 403);
     }
 
-    const bytes = new Uint8Array(photo.data);
+    // Unwrapped before it is measured — see lib/db/bytes for why the stored
+    // value cannot be handed to Uint8Array directly.
+    const bytes = storedBytes(photo.data);
+    if (!bytes.byteLength) return badRequest("This photo is no longer available", 404);
     return new Response(bytes, {
       headers: {
         "content-type": photo.contentType,

@@ -233,6 +233,12 @@ Screens that list or count read the metadata only (`bytes`, `contentType`, `uplo
 route per binary fetches the bytes with an explicit `.select("+field")`. Metadata is *also* copied
 onto the parent (e.g. `Invoice.payments[].proof`) so a list renders without a second query.
 
+Those three routes all read with `.lean()`, which skips Mongoose's casting and hands back the driver's
+BSON `Binary` wrapper — **not** a `Buffer`. Its `length` is a *method*, so `!doc.data?.length` is
+always false and `new Uint8Array(binary)` is silently empty: a 200 with the right content type and
+zero bytes, which a browser shows as a broken image. Always unwrap with `storedBytes()`
+(`lib/db/bytes.ts`) and check `bytes.byteLength`.
+
 ### 4.7 Calendar days are `"yyyy-mm-dd"` strings; months are `"yyyy-mm"`
 
 Leave dates, attendance dates, holidays, joining/exit dates and `effectiveFrom` are all strings. A
@@ -525,7 +531,9 @@ to "the doctor says they paid in March" years later.
 (`bankName`, `bankAccountName`, `bankAccountNo`, `bankIfsc`, `bankBranch`, `upiId`),
 QR block (`paymentQr: Buffer` **`select: false`**, `paymentQrType`, `paymentQrBytes`,
 `paymentQrUpdatedAt`, `paymentQrLabel`), and defaults (`invoicePrefix` `"BHX"`,
-`defaultPaymentTerms`, `defaultGstRate` 18, `ratesIncludeTax`, `terms`, `signatoryName`).
+`defaultPaymentTerms`, `defaultGstRate` 18, `ratesIncludeTax`, `terms`, `signatoryName`,
+`showReceiverSignature` (default **true**) + `receiverSignatureLabel` for the space the person taking
+delivery signs).
 
 `Counter`: `{ key (unique), value }`. Invoice numbers are claimed with an **atomic `$inc` inside
 `findOneAndUpdate`**, keyed `invoice:<SERIES>:<FY>` — never a read-then-write.
@@ -1036,6 +1044,7 @@ the control in the UI. Never invent an inline role check in a route.
 | Forgetting `recalculate()` | `amountPaid` / `balanceDue` / `status` drift away from `payments[]`. | Call it after any change to `payments`. |
 | Model not imported in `mongoose.ts` | `populate()` throws `MissingSchemaError` — but only on a cold server, so it looks intermittent. | Add the import. |
 | Selecting a `select: false` field by accident | A list route drags megabytes of image bytes per row. | Only the single-item byte-serving route uses `.select("+data")` / `+paymentQr`. |
+| `new Uint8Array(doc.data)` after `.lean()` | Lean returns a BSON `Binary`, not a `Buffer`, so the response is 200 with **zero bytes** and the QR, photo or proof shows as a broken image. | Unwrap with `storedBytes()` (`lib/db/bytes.ts`) and test `bytes.byteLength`, never `data.length`. |
 | Trusting `leaveDays` from the client | Somebody grants themselves a month. | It is recomputed on the server; keep it that way. |
 | Assuming an unmarked attendance day is an absence | Payroll would dock salary nobody authorised. | `status: null` means "nobody has said yet" and costs nothing. |
 | Letting one person prepare *and* approve payroll | The oldest hole in any set of books. | `runPayroll` ≠ `approvePayroll`. |

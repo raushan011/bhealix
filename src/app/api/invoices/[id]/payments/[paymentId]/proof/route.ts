@@ -1,5 +1,6 @@
 import { Types } from "mongoose";
 import { connectDb } from "@/lib/db/mongoose";
+import { storedBytes } from "@/lib/db/bytes";
 import { Invoice } from "@/models/Invoice";
 import { PaymentProof } from "@/models/PaymentProof";
 import { apiSession } from "@/lib/auth/guard";
@@ -66,10 +67,13 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
     const proof = await PaymentProof.findOne({ payment: paymentId, invoice: id })
       .select("+data contentType fileName").lean() as
-      { data?: Buffer; contentType: string; fileName?: string } | null;
-    if (!proof?.data) return badRequest("No proof is attached to this receipt", 404);
+      { data?: unknown; contentType: string; fileName?: string } | null;
 
-    const bytes = new Uint8Array(proof.data);
+    // Unwrapped before it is measured — see lib/db/bytes for why the stored
+    // value cannot be handed to Uint8Array directly.
+    const bytes = storedBytes(proof?.data);
+    if (!proof || !bytes.byteLength) return badRequest("No proof is attached to this receipt", 404);
+
     const name = proof.fileName || `payment-proof.${FILE_EXTENSION[proof.contentType] ?? "jpg"}`;
     return new Response(bytes, {
       headers: {

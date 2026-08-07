@@ -18,6 +18,7 @@ type Settings = {
   paymentQrType?: string; paymentQrBytes?: number; paymentQrUpdatedAt?: string; paymentQrLabel?: string;
   invoicePrefix?: string; defaultPaymentTerms?: number; defaultGstRate?: number;
   ratesIncludeTax?: boolean; terms?: string; signatoryName?: string;
+  showReceiverSignature?: boolean; receiverSignatureLabel?: string;
 };
 
 /**
@@ -189,6 +190,25 @@ export default function BillingSettingsPage() {
       <Field label="Authorised signatory">
         <input value={settings.signatoryName ?? ""} onChange={e => set({ signatoryName: e.target.value })} className="input" />
       </Field>
+
+      <div className="space-y-3 border-t border-[var(--line)] pt-4">
+        <label className="flex items-center gap-2.5 text-sm">
+          <input type="checkbox" checked={settings.showReceiverSignature !== false} className="size-4"
+            onChange={e => set({ showReceiverSignature: e.target.checked })} />
+          <span>Leave a space for the receiver to sign
+            <span className="block text-xs text-[var(--muted)]">
+              A ruled line beside your own signatory, for whoever takes delivery of the goods
+            </span>
+          </span>
+        </label>
+        {settings.showReceiverSignature !== false && (
+          <Field label="Wording above that line" hint="Left blank, the bill prints “Received by”">
+            <input value={settings.receiverSignatureLabel ?? ""} maxLength={60} className="input"
+              placeholder="Received by"
+              onChange={e => set({ receiverSignatureLabel: e.target.value })} />
+          </Field>
+        )}
+      </div>
     </Card>
 
     <div className="sticky bottom-0 -mx-4 border-t border-[var(--line)] bg-white/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">

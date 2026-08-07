@@ -59,7 +59,17 @@ const BillingSettingsSchema = new Schema({
   /** Whether prices are typed as what the doctor pays, tax already inside. */
   ratesIncludeTax: { type: Boolean, default: false },
   terms: String,
-  signatoryName: String
+  signatoryName: String,
+
+  /**
+   * Whether the bill prints a ruled space for the person receiving the goods to
+   * sign. Kept on by default: a signed copy is what settles an argument about
+   * whether a delivery arrived, and a bill that leaves no room for one is
+   * signed across the terms instead.
+   */
+  showReceiverSignature: { type: Boolean, default: true },
+  /** Printed above that line — "Received by", or wording the trade prefers. */
+  receiverSignatureLabel: String
 }, { timestamps: true });
 
 export const BillingSettings = models.BillingSettings ?? model("BillingSettings", BillingSettingsSchema);

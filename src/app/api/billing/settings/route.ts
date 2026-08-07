@@ -39,7 +39,9 @@ const schema = z.object({
   defaultGstRate: z.number().min(0).max(50).optional(),
   ratesIncludeTax: z.boolean().optional(),
   terms: optional(1000),
-  signatoryName: optional()
+  signatoryName: optional(),
+  showReceiverSignature: z.boolean().optional(),
+  receiverSignatureLabel: optional(60)
 });
 
 export async function GET() {
