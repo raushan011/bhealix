@@ -4,6 +4,7 @@ import { Doctor } from "@/models/Doctor";
 import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
 import { fail, ok } from "@/lib/api";
+import { createDoctor, highestDoctorSequence } from "@/lib/doctors/code";
 
 const itemSchema = z.object({
   googlePlaceId: z.string().optional(),
@@ -41,7 +42,9 @@ export async function POST(request: Request) {
 
     let created = 0, updated = 0;
     const savedIds: string[] = [];
-    let sequence = await Doctor.estimatedDocumentCount();
+    // Read once for the batch and carried forward, so five hundred rows do not
+    // ask the database five hundred times where the series has got to.
+    let sequence = await highestDoctorSequence();
 
     for (const value of doctors) {
       const match = value.googlePlaceId
@@ -76,10 +79,10 @@ export async function POST(request: Request) {
         continue;
       }
 
-      sequence++;
-      const doctor = await Doctor.create({ ...fields, code: `BHX-${String(sequence).padStart(5, "0")}` });
+      const saved = await createDoctor(fields, sequence);
+      sequence = saved.sequence;
       created++;
-      savedIds.push(String(doctor._id));
+      savedIds.push(String(saved.doctor._id));
     }
 
     return ok({ created, updated, total: doctors.length, savedIds }, 201);

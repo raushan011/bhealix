@@ -7,6 +7,7 @@ import { can, usesFieldPanel } from "@/constants/access";
 import { fail, ok, pageParams } from "@/lib/api";
 import { record } from "@/lib/audit";
 import { callScheduleSchema } from "@/lib/doctors/call-schedule";
+import { createDoctor } from "@/lib/doctors/code";
 import { DOCTOR_LIST_FIELDS } from "@/lib/doctors/fields";
 
 const createSchema = z.object({
@@ -96,12 +97,12 @@ export async function POST(request: Request) {
     await connectDb();
 
     const { latitude, longitude, ...value } = createSchema.parse(await request.json());
-    const count = await Doctor.estimatedDocumentCount();
-    const doctor = await Doctor.create({
+    const { doctor } = await createDoctor({
       ...value,
-      code: `BHX-${String(count + 1).padStart(5, "0")}`,
       source: "Manual",
       ...(usesFieldPanel(auth.session.role) ? { assignedTo: auth.session.userId } : {}),
+      // Left out entirely when there is no pair — a doctor typed in at the desk,
+      // or added by a rep with location switched off, has none yet.
       ...(latitude !== undefined && longitude !== undefined
         ? { location: { type: "Point", coordinates: [longitude, latitude] } }
         : {})

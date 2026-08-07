@@ -396,13 +396,13 @@ Account **and** employment record in one document.
 
 | Field | Type | Notes |
 |---|---|---|
-| `code` | String | required, unique — `BHX-00001` |
+| `code` | String | required, unique — `BHX-00001`, claimed through `lib/doctors/code.ts` |
 | `name` | String | required, indexed |
 | `specialties` | [String] | |
 | `clinicName`, `phones[]`, `email`, `website` | | |
 | `fullAddress`, `area`, `city`, `pinCode` | String | `area`, `city` indexed |
 | `state`, `stateCode`, `gstin` | String | billing identity, captured on first invoice |
-| `location` | GeoJSON Point | `coordinates: [longitude, latitude]` |
+| `location` | GeoJSON Point | `coordinates: [longitude, latitude]` — **whole or absent**, see below |
 | `googlePlaceId` | String | indexed, sparse — the dedupe key on import |
 | `googleMapsUrl`, `rating`, `reviewCount` | | |
 | `source` | enum | Google / Excel / Manual |
@@ -419,6 +419,20 @@ Embedded because it is ≤7 tiny entries always read with the doctor, and route 
 every doctor in one query.
 
 Indexes: `location: "2dsphere"`, `callSchedule.weekday`.
+
+**`location` is a complete point or it is not there at all.** The 2dsphere index skips a doctor with
+no location but rejects one holding half a point, *at insert time* — so `{ type: "Point" }` with no
+coordinates fails the entire save with "Can't extract geo keys". `location.type` therefore has **no
+schema default** (a default is written even when nothing else is), and `pre("save")` /
+`pre("findOneAndUpdate")` hooks run every write through `completePoint()` (`lib/doctors/location.ts`).
+A doctor typed in at the desk, or added by a rep with location switched off, has no coordinates yet
+and must still save.
+
+**Codes are claimed, not counted.** `createDoctor()` (`lib/doctors/code.ts`) reads the top of the
+series and retries past a code somebody else took — `estimatedDocumentCount() + 1` hands two people
+adding at the same moment the same number, and drifts from the series the first time a record goes.
+Both `/api/doctors` POST and `/api/doctors/bulk` go through it; bulk carries the sequence forward so
+500 rows are not 500 lookups.
 
 ### 6.3 `RoutePlan` — `models/RoutePlan.ts`
 
@@ -1044,6 +1058,7 @@ the control in the UI. Never invent an inline role check in a route.
 | Forgetting `recalculate()` | `amountPaid` / `balanceDue` / `status` drift away from `payments[]`. | Call it after any change to `payments`. |
 | Model not imported in `mongoose.ts` | `populate()` throws `MissingSchemaError` — but only on a cold server, so it looks intermittent. | Add the import. |
 | Selecting a `select: false` field by accident | A list route drags megabytes of image bytes per row. | Only the single-item byte-serving route uses `.select("+data")` / `+paymentQr`. |
+| A GeoJSON field with a `type` default | `{ type: "Point" }` and no coordinates is written on every new record, and the 2dsphere index fails the whole insert — the screen can only say "something went wrong". | No default on `location.type`; the model's hooks run every write through `completePoint()`. |
 | `new Uint8Array(doc.data)` after `.lean()` | Lean returns a BSON `Binary`, not a `Buffer`, so the response is 200 with **zero bytes** and the QR, photo or proof shows as a broken image. | Unwrap with `storedBytes()` (`lib/db/bytes.ts`) and test `bytes.byteLength`, never `data.length`. |
 | Trusting `leaveDays` from the client | Somebody grants themselves a month. | It is recomputed on the server; keep it that way. |
 | Assuming an unmarked attendance day is an absence | Payroll would dock salary nobody authorised. | `status: null` means "nobody has said yet" and costs nothing. |
