@@ -2,6 +2,7 @@ import { z } from "zod";
 import { connectDb } from "@/lib/db/mongoose";
 import { Invoice } from "@/models/Invoice";
 import { StockMovement } from "@/models/Inventory";
+import { PaymentProof } from "@/models/PaymentProof";
 import { User } from "@/models/User";
 import { apiSession } from "@/lib/auth/guard";
 import { can, usesFieldPanel, type Role } from "@/constants/access";
@@ -39,6 +40,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       .populate("customer", "code type name businessName address city pinCode phones gstin state stateCode")
       .populate("employee", "name employeeId email role")
       .populate("payments.receivedBy", "name")
+      .populate("payments.proof.uploadedBy", "name")
       .populate("createdBy", "name")
       .lean() as unknown as { employee?: { _id?: unknown } | null } | null;
     if (!invoice) return badRequest("Invoice not found", 404);
@@ -182,6 +184,10 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
     }
 
     await StockMovement.deleteMany({ invoice: id });
+    // Nothing has been received against this bill, so there should be no proofs
+    // to speak of; swept anyway, because bytes nobody can reach are the kind of
+    // thing that quietly outlives the record they belonged to.
+    await PaymentProof.deleteMany({ invoice: id });
     await Invoice.findByIdAndDelete(id);
     return ok({ deleted: true, invoiceNo: invoice.invoiceNo });
   } catch (error) {

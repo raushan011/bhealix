@@ -8,7 +8,14 @@ export type SellerSettings = {
   state?: string; stateCode?: string; pinCode?: string;
   gstin?: string; pan?: string; phone?: string; email?: string; website?: string;
   drugLicenceNo?: string;
-  bankName?: string; bankAccountName?: string; bankAccountNo?: string; bankIfsc?: string; upiId?: string;
+  bankName?: string; bankAccountName?: string; bankAccountNo?: string; bankIfsc?: string;
+  bankBranch?: string; upiId?: string;
+  /**
+   * The QR's description, never its bytes — `paymentQr` is `select: false`, so
+   * a screen knows a code exists and when it changed without carrying it. The
+   * timestamp doubles as the cache stamp on the URL that serves the image.
+   */
+  paymentQrType?: string; paymentQrBytes?: number; paymentQrUpdatedAt?: string | Date; paymentQrLabel?: string;
   invoicePrefix: string; defaultPaymentTerms: number; defaultGstRate: number;
   ratesIncludeTax: boolean; terms?: string; signatoryName?: string;
 };

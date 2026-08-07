@@ -29,7 +29,11 @@ const schema = z.object({
   bankAccountName: optional(),
   bankAccountNo: optional(40),
   bankIfsc: optional(20),
+  bankBranch: optional(),
   upiId: optional(),
+  // The QR image itself is not JSON — it is uploaded to ./qr. Only the caption
+  // printed under it travels with the rest of the settings.
+  paymentQrLabel: optional(120),
   invoicePrefix: z.string().trim().max(12).optional(),
   defaultPaymentTerms: z.number().int().min(0).max(365).optional(),
   defaultGstRate: z.number().min(0).max(50).optional(),

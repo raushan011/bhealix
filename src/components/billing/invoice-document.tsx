@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { amountInWords } from "@/lib/billing/gst";
 import { formatMoney } from "@/lib/billing/constants";
 import { formatDate } from "@/lib/time";
@@ -213,14 +214,35 @@ export function InvoiceDocument({ invoice, settings }: { invoice: InvoiceRecord;
           <p className="text-[11px] font-semibold">{amountInWords(invoice.grandTotal)}</p>
         </div>
 
-        {(settings.bankName || settings.upiId) && (
+        {(settings.bankName || settings.upiId || settings.paymentQrType) && (
           <div className={`${line} p-2 text-[10px] leading-relaxed`}>
             <p className="font-bold uppercase tracking-wider text-neutral-500">Payment details</p>
-            {settings.bankAccountName && <p>Account name: {settings.bankAccountName}</p>}
-            {settings.bankName && <p>Bank: {settings.bankName}</p>}
-            {settings.bankAccountNo && <p>A/c no: {settings.bankAccountNo}</p>}
-            {settings.bankIfsc && <p>IFSC: {settings.bankIfsc}</p>}
-            {settings.upiId && <p>UPI: {settings.upiId}</p>}
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                {settings.bankAccountName && <p>Account name: {settings.bankAccountName}</p>}
+                {settings.bankName && <p>Bank: {settings.bankName}</p>}
+                {settings.bankAccountNo && <p>A/c no: {settings.bankAccountNo}</p>}
+                {settings.bankIfsc && <p>IFSC: {settings.bankIfsc}</p>}
+                {settings.bankBranch && <p>Branch: {settings.bankBranch}</p>}
+                {settings.upiId && <p>UPI: {settings.upiId}</p>}
+              </div>
+              {settings.paymentQrType && (
+                /*
+                  Stamped with the upload time so a replaced code is never the
+                  one that prints, and unoptimized because these bytes sit
+                  behind the session — the optimiser would cache a copy of them
+                  with a lifetime of its own.
+                */
+                <div className="w-[24mm] shrink-0 text-center">
+                  <Image src={`/api/billing/settings/qr?v=${new Date(settings.paymentQrUpdatedAt ?? 0).getTime()}`}
+                    alt="Scan this code to pay" width={128} height={128} unoptimized
+                    className="h-[24mm] w-[24mm] object-contain" />
+                  <p className="mt-0.5 text-[8px] leading-tight text-neutral-600">
+                    {settings.paymentQrLabel || "Scan to pay"}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

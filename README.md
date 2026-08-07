@@ -36,6 +36,8 @@ Built for phones first — reps use it standing in a clinic corridor — and equ
 - Bill numbers run `BHX/2025-26/0001` and restart each financial year.
 - Every bill names the **representative it belongs to**, when the money is due, and when to follow up.
 - **Part payments**: record each receipt as it comes in, by cash, UPI, cheque, card or transfer. The balance and the status follow from the receipts, so removing one entered by mistake corrects the bill by itself.
+- **Your payment details and QR print on every bill.** Account name, bank, account number, IFSC, branch, UPI ID and a payment QR uploaded once under **Admin → Billing → Settings**, so a doctor can scan and pay without asking how.
+- **Proof of every receipt.** A UPI screenshot, a photograph of a cheque or a bank advice as PDF, attached the moment the payment is recorded — the phone taking the payment is the one holding the evidence — or afterwards from the bill. A rep may correct their own; only an administrator replaces somebody else's, because evidence anyone can quietly swap proves nothing. Removing a receipt takes its proof with it.
 - Reps see their own bills on their phone, collect against them, and **download any of them as a PDF**.
 - Raised in error? Cancel keeps the number in the books; delete is available only before anything has been received.
 

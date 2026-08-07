@@ -9,6 +9,7 @@ import {
 import { Badge, Button, Card, Field, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import { PaymentForm } from "@/components/billing/payment-form";
+import { PaymentProof } from "@/components/billing/payment-proof";
 import { invoiceLabel, invoiceTone } from "@/components/billing/invoice-row";
 import { formatDate, toDateInput } from "@/lib/time";
 import { can, usesFieldPanel, type Role } from "@/constants/access";
@@ -60,6 +61,13 @@ export function InvoiceView({ invoiceId, backHref }: { invoiceId: string; backHr
   const mayCollect = role !== null && can.recordPayment(role)
     && (mayManage || (usesFieldPanel(role) && owned))
     && invoice.status !== "Paid" && invoice.status !== "Cancelled";
+  /**
+   * Attaching the proof of a receipt, which is not the same as taking one: a
+   * bill settled in full accepts no more payments, and the screenshot of the
+   * transfer that settled it usually turns up afterwards.
+   */
+  const mayEvidence = role !== null && can.recordPayment(role)
+    && (mayManage || (usesFieldPanel(role) && owned));
 
   const label = invoiceLabel(invoice);
 
@@ -226,13 +234,16 @@ export function InvoiceView({ invoiceId, backHref }: { invoiceId: string; backHr
       {invoice.payments.length ? (
         <div className="divide-y divide-[var(--line)]">
           {invoice.payments.map(payment => (
-            <div key={payment._id} className="flex items-center gap-3 px-5 py-3">
+            <div key={payment._id} className="flex items-start gap-3 px-5 py-3">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold">{formatMoney(payment.amount)} · {payment.mode}</p>
                 <p className="truncate text-xs text-[var(--muted)]">
                   {[formatDate(payment.paidAt), payment.reference, payment.receivedBy?.name && `received by ${payment.receivedBy.name}`, payment.notes]
                     .filter(Boolean).join(" · ")}
                 </p>
+                <PaymentProof invoiceId={invoiceId} payment={payment} userId={userId}
+                  mayAttach={mayEvidence} mayManage={mayManage}
+                  onChanged={next => { setNotice(next); load(); }} />
               </div>
               {mayManage && (
                 <button aria-label="Remove this payment"

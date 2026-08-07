@@ -1,5 +1,6 @@
 import { Schema, model, models } from "mongoose";
 import { DEFAULT_INVOICE_PREFIX } from "@/lib/billing/numbering";
+import { QR_TYPES } from "@/lib/billing/attachments";
 
 /**
  * The seller's own details, as they must appear on a tax invoice. One document,
@@ -28,7 +29,28 @@ const BillingSettingsSchema = new Schema({
   bankAccountName: String,
   bankAccountNo: String,
   bankIfsc: String,
+  bankBranch: String,
   upiId: String,
+
+  /**
+   * The payment QR, held as bytes in this document rather than as a file.
+   *
+   * There is one of them, it changes about once a year, and it has to appear on
+   * a printed bill — a bucket to configure and a second set of credentials to
+   * keep would all be spent on a picture the size of an email signature.
+   *
+   * `select: false` on the bytes: every billing screen and every print reads
+   * these settings for the address and the GSTIN, and none of them want the
+   * image dragged along. Only the one route that serves it asks for `+paymentQr`.
+   * The three fields beside it are ordinary, so anything reading the settings
+   * can still tell that a QR exists and when it was last replaced.
+   */
+  paymentQr: { type: Buffer, select: false },
+  paymentQrType: { type: String, enum: QR_TYPES },
+  paymentQrBytes: Number,
+  paymentQrUpdatedAt: Date,
+  /** Printed under the code — "Scan with any UPI app", or the payee's name. */
+  paymentQrLabel: String,
 
   invoicePrefix: { type: String, default: DEFAULT_INVOICE_PREFIX },
   /** Default credit period in days, used to propose a due date. */

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Button, Card, Field, Notice, PageTitle, Spinner } from "@/components/ui/kit";
+import { PaymentQr } from "@/components/billing/payment-qr";
 import { formatInvoiceNo, financialYear } from "@/lib/billing/numbering";
 import { isGstin, stateCodeOfGstin, stateName, STATES } from "@/lib/billing/constants";
 
@@ -11,7 +12,10 @@ type Settings = {
   legalName: string; tradeName?: string; address?: string; city?: string;
   state?: string; stateCode?: string; pinCode?: string;
   gstin?: string; pan?: string; phone?: string; email?: string; website?: string; drugLicenceNo?: string;
-  bankName?: string; bankAccountName?: string; bankAccountNo?: string; bankIfsc?: string; upiId?: string;
+  bankName?: string; bankAccountName?: string; bankAccountNo?: string; bankIfsc?: string;
+  bankBranch?: string; upiId?: string;
+  /** Set by the QR upload, which travels on its own — see components/billing/payment-qr. */
+  paymentQrType?: string; paymentQrBytes?: number; paymentQrUpdatedAt?: string; paymentQrLabel?: string;
   invoicePrefix?: string; defaultPaymentTerms?: number; defaultGstRate?: number;
   ratesIncludeTax?: boolean; terms?: string; signatoryName?: string;
 };
@@ -156,8 +160,24 @@ export default function BillingSettingsPage() {
         <Field label="Bank"><input value={settings.bankName ?? ""} onChange={e => set({ bankName: e.target.value })} className="input" /></Field>
         <Field label="Account number"><input value={settings.bankAccountNo ?? ""} onChange={e => set({ bankAccountNo: e.target.value })} className="input" /></Field>
         <Field label="IFSC"><input value={settings.bankIfsc ?? ""} onChange={e => set({ bankIfsc: e.target.value.toUpperCase() })} className="input" /></Field>
+        <Field label="Branch" hint="Optional"><input value={settings.bankBranch ?? ""} onChange={e => set({ bankBranch: e.target.value })} className="input" /></Field>
+        <Field label="UPI ID"><input value={settings.upiId ?? ""} onChange={e => set({ upiId: e.target.value })} className="input" placeholder="bhealix@okhdfcbank" /></Field>
       </div>
-      <Field label="UPI ID"><input value={settings.upiId ?? ""} onChange={e => set({ upiId: e.target.value })} className="input" /></Field>
+
+      <div className="border-t border-[var(--line)] pt-4">
+        {/* The image is uploaded the moment it is chosen — it does not wait for
+            Save at the foot of the page, and says so rather than leaving an
+            administrator wondering which half of this card is saved. */}
+        <PaymentQr initialType={settings.paymentQrType} initialBytes={settings.paymentQrBytes}
+          initialUpdatedAt={settings.paymentQrUpdatedAt} />
+        <div className="mt-4">
+          <Field label="Caption under the QR" hint="Saved with the rest of these settings">
+            <input value={settings.paymentQrLabel ?? ""} maxLength={120} className="input"
+              placeholder="Scan with any UPI app"
+              onChange={e => set({ paymentQrLabel: e.target.value })} />
+          </Field>
+        </div>
+      </div>
     </Card>
 
     <Card className="space-y-4 p-5">

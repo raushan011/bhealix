@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { Paperclip, X } from "lucide-react";
 import { Button, Field, Notice } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import { todayIso } from "@/lib/time";
 import { formatMoney, PAYMENT_MODES, type PaymentMode } from "@/lib/billing/constants";
+import { formatBytes, MAX_PROOF_BYTES, PROOF_TYPES, sizeLimitText } from "@/lib/billing/attachments";
+
+const ACCEPTED: readonly string[] = PROOF_TYPES;
 
 /**
  * Recording money against a bill. Used at the desk and on the rep's phone: the
@@ -28,8 +32,17 @@ export function PaymentForm({ invoiceId, balanceDue, onClose, onSaved }: {
   const [reference, setReference] = useState("");
   const [paidAt, setPaidAt] = useState(todayIso);
   const [notes, setNotes] = useState("");
+  const [proof, setProof] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const input = useRef<HTMLInputElement>(null);
+
+  function chooseProof(file: File | undefined) {
+    if (!file) return;
+    if (!ACCEPTED.includes(file.type)) { setError("Attach a JPEG, PNG or WebP image, or a PDF"); return; }
+    if (file.size > MAX_PROOF_BYTES) { setError(`The proof must be ${sizeLimitText(MAX_PROOF_BYTES)}`); return; }
+    setError(""); setProof(file);
+  }
 
   async function submit() {
     if (amount <= 0) { setError("Enter the amount received"); return; }
@@ -43,12 +56,32 @@ export function PaymentForm({ invoiceId, balanceDue, onClose, onSaved }: {
           notes: notes.trim() || undefined
         })
       });
-      const json = await response.json() as { error?: string; data?: { balanceDue: number } };
+      const json = await response.json() as { error?: string; data?: { balanceDue: number; payment?: string } };
       if (!response.ok) throw new Error(json.error ?? "Could not record this payment");
+
       const left = json.data?.balanceDue ?? 0;
-      onSaved(left > 0
+      const recorded = left > 0
         ? `${formatMoney(amount)} recorded. ${formatMoney(left)} still outstanding.`
-        : `${formatMoney(amount)} recorded. This bill is settled in full.`);
+        : `${formatMoney(amount)} recorded. This bill is settled in full.`;
+
+      /*
+        The file is a second request, sent once the receipt it belongs to
+        exists. A failure here is reported rather than thrown: the money has
+        already been recorded and re-submitting the form to retry the upload
+        would record it twice. The proof can be attached from the bill itself.
+      */
+      let attached = "";
+      if (proof && json.data?.payment) {
+        const body = new FormData();
+        body.append("proof", proof, proof.name);
+        const upload = await fetch(`/api/invoices/${invoiceId}/payments/${json.data.payment}/proof`, { method: "POST", body });
+        const result = await upload.json() as { error?: string };
+        attached = upload.ok
+          ? " Proof attached."
+          : ` The payment is saved, but the proof did not upload — ${result.error ?? "try attaching it from the bill"}.`;
+      }
+
+      onSaved(recorded + attached);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Could not record this payment");
       setBusy(false);
@@ -95,6 +128,37 @@ export function PaymentForm({ invoiceId, balanceDue, onClose, onSaved }: {
       <Field label="Reference" hint="Cheque number, UPI reference or transaction ID">
         <input value={reference} onChange={e => setReference(e.target.value)} className="input" />
       </Field>
+
+      {/*
+        Attached here rather than only afterwards, because this is the one
+        moment somebody is holding the evidence: the UPI screen is still open
+        on the phone that is recording the payment.
+      */}
+      <div>
+        <p className="mb-1.5 text-[13px] font-medium text-[var(--ink-2)]">Proof of payment</p>
+        {proof ? (
+          <div className="flex items-center gap-2 rounded-[10px] border border-[var(--line-2)] px-3 py-2.5">
+            <Paperclip size={14} className="shrink-0 text-[var(--muted)]" />
+            <span className="min-w-0 flex-1 truncate text-sm">{proof.name}</span>
+            <span className="shrink-0 text-xs text-[var(--muted)]">{formatBytes(proof.size)}</span>
+            <button type="button" aria-label="Remove this file" onClick={() => setProof(null)}
+              className="grid size-7 shrink-0 place-items-center rounded-lg text-[var(--muted)] hover:bg-[var(--surface-2)]">
+              <X size={14} />
+            </button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => input.current?.click()}
+            className="flex w-full items-center gap-2 rounded-[10px] border border-dashed border-[var(--line-2)] px-3 py-2.5 text-sm text-[var(--muted)]">
+            <Paperclip size={14} />Attach a screenshot, photo or PDF
+          </button>
+        )}
+        <span className="mt-1 block text-xs text-[var(--muted)]">
+          Optional, but a transfer is far easier to trace later with the screenshot on it.
+        </span>
+        <input ref={input} type="file" accept={ACCEPTED.join(",")} className="hidden"
+          onChange={event => chooseProof(event.target.files?.[0])} />
+      </div>
+
       <Field label="Notes (optional)">
         <textarea value={notes} onChange={e => setNotes(e.target.value)} className="textarea" />
       </Field>

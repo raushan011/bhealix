@@ -25,6 +25,19 @@ export type InvoiceItem = {
   total: number;
 };
 
+/**
+ * The file evidencing a receipt, as the screens read it. The bytes are fetched
+ * from the proof route when somebody actually opens one; this is what the list
+ * needs to say the money has been evidenced and by whom.
+ */
+export type PaymentProofRef = {
+  contentType: string;
+  bytes: number;
+  fileName?: string;
+  uploadedAt: string;
+  uploadedBy?: { _id: string; name: string } | null;
+};
+
 export type InvoicePayment = {
   _id: string;
   amount: number;
@@ -33,6 +46,7 @@ export type InvoicePayment = {
   paidAt: string;
   receivedBy?: { name: string } | null;
   notes?: string;
+  proof?: PaymentProofRef | null;
 };
 
 export type PartyDetails = {

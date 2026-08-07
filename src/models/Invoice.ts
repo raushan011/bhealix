@@ -29,6 +29,23 @@ const ItemSchema = new Schema({
 }, { _id: false });
 
 /**
+ * What is kept of the file proving a receipt — a UPI screenshot, a cheque, a
+ * bank advice.
+ *
+ * The bytes are not here. They live in their own collection (models/PaymentProof)
+ * because a page listing a hundred invoices reads their payments, and none of
+ * those screens want a megabyte of screenshots behind every line. This is only
+ * enough to say that a proof exists, describe it, and know who to hold to it.
+ */
+const ProofSchema = new Schema({
+  contentType: { type: String, required: true },
+  bytes: { type: Number, required: true },
+  fileName: String,
+  uploadedAt: { type: Date, default: Date.now },
+  uploadedBy: { type: Schema.Types.ObjectId, ref: "User" }
+}, { _id: false });
+
+/**
  * One receipt against the invoice. An invoice is settled in as many parts as the
  * doctor pays in, and the balance is always the total less the sum of these —
  * so deleting a receipt entered by mistake corrects the invoice by itself.
@@ -41,7 +58,9 @@ const PaymentSchema = new Schema({
   /** Who took the money — usually the representative standing in the clinic. */
   receivedBy: { type: Schema.Types.ObjectId, ref: "User" },
   recordedBy: { type: Schema.Types.ObjectId, ref: "User" },
-  notes: String
+  notes: String,
+  /** Absent until somebody attaches one; at most one file per receipt. */
+  proof: { type: ProofSchema, default: undefined }
 }, { timestamps: true });
 
 const TaxSummarySchema = new Schema({

@@ -15,9 +15,30 @@ import { Printer } from "lucide-react";
 export function PrintButton() {
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("auto") !== "1") return;
-    // A moment's grace so the sheet is laid out before the dialog measures it.
-    const timer = setTimeout(() => window.print(), 400);
-    return () => clearTimeout(timer);
+
+    let done = false;
+    const print = () => { if (!done) { done = true; window.print(); } };
+
+    /*
+      A moment's grace so the sheet is laid out before the dialog measures it,
+      and then the payment QR: an image still in flight when the dialog opens
+      comes out of the PDF as a blank square, and a bill with a hole where the
+      code should be is worse than one printed a second later. The timer is the
+      backstop for an image that never arrives at all.
+    */
+    const settled = Array.from(document.images).map(image => image.complete
+      ? Promise.resolve()
+      : new Promise<void>(resolve => {
+          image.addEventListener("load", () => resolve(), { once: true });
+          image.addEventListener("error", () => resolve(), { once: true });
+        }));
+
+    let timer = setTimeout(print, 2500);
+    Promise.all(settled).then(() => {
+      clearTimeout(timer);
+      timer = setTimeout(print, 400);
+    });
+    return () => { done = true; clearTimeout(timer); };
   }, []);
 
   return <button onClick={() => window.print()}

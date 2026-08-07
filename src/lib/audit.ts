@@ -18,6 +18,16 @@ export const AUDIT_ACTIONS = {
   "visit.photo.added": "Attached a photo",
   "visit.photo.deleted": "Removed a photo",
 
+  /**
+   * Money received, and the evidence for it. A receipt whose proof appeared and
+   * then quietly changed is precisely the thing an audit asks about, so both
+   * halves leave a line naming who did it.
+   */
+  "invoice.payment.proof.added": "Attached proof of a payment",
+  "invoice.payment.proof.removed": "Removed proof of a payment",
+  "billing.qr.updated": "Updated the payment QR",
+  "billing.qr.removed": "Removed the payment QR",
+
   // Payroll. Every one of these moves money or decides what somebody is paid,
   // so each leaves a line naming who did it — that is the whole point of a
   // trail on this part of the system.

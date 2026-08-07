@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { connectDb } from "@/lib/db/mongoose";
 import { Invoice } from "@/models/Invoice";
+import { PaymentProof } from "@/models/PaymentProof";
 import { apiSession } from "@/lib/auth/guard";
 import { can, usesFieldPanel } from "@/constants/access";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
@@ -64,9 +65,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     recalculate(invoice);
     await invoice.save();
 
+    // The new receipt's own id goes back with the totals: the form that recorded
+    // it may have a screenshot of the transfer waiting to be attached to it, and
+    // that upload needs somewhere to go.
+    const added = invoice.payments[invoice.payments.length - 1];
+
     return ok({
       status: invoice.status, amountPaid: invoice.amountPaid, balanceDue: invoice.balanceDue,
-      payments: invoice.payments.length
+      payments: invoice.payments.length, payment: String(added._id)
     }, 201);
   } catch (error) {
     return fail(error);
@@ -92,6 +98,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
     recalculate(invoice);
     await invoice.save();
+    // The proof only ever existed to evidence this receipt. With the receipt
+    // gone it has nothing left to point at, so it goes too rather than sitting
+    // in the collection unreachable.
+    await PaymentProof.deleteOne({ payment: paymentId });
     return ok({ status: invoice.status, amountPaid: invoice.amountPaid, balanceDue: invoice.balanceDue });
   } catch (error) {
     return fail(error);
