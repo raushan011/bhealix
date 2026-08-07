@@ -1,15 +1,18 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { Camera, Crosshair, MapPin, Navigation, ShieldCheck, Trash2 } from "lucide-react";
+import {
+  Camera, Crosshair, ImageIcon, Loader2, MapPin, Navigation, RefreshCw, ShieldCheck, Trash2
+} from "lucide-react";
 import { Button, Card, Notice } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import { daysLeft, MAX_PHOTOS_PER_VISIT, PHOTO_RETENTION_DAYS } from "@/lib/visits";
 import {
-  completeFix, formatAccuracy, formatLatitude, formatLongitude, mapsPointUrl, placeLabel, stampLines,
+  formatAccuracy, formatLatitude, formatLongitude, mapsPointUrl, placeLabel, stampLines,
   type Fix, type PlaceName
 } from "@/lib/geo";
+import { FIX_MESSAGE, requestFix } from "@/lib/geo-fix";
 
 export type PhotoLocation = Fix & PlaceName;
 export type VisitPhoto = {
@@ -20,28 +23,8 @@ export type VisitPhoto = {
 const MAX_EDGE = 1600;
 const QUALITY = 0.72;
 
-/** Long enough for a cold GPS start in a clinic doorway, short enough not to strand the rep. */
-const FIX_TIMEOUT_MS = 12_000;
-/** A fix from the last half minute is the same doorway; taking it saves a wait per photo. */
-const FIX_MAX_AGE_MS = 30_000;
-
-/**
- * The position the phone is at, or null if it will not say.
- *
- * Never rejects. A refused permission, a switched-off GPS and a timeout are all
- * the same thing here — a photo with no fix, which is still worth uploading and
- * is stamped as unlocated so nobody later mistakes it for a located one.
- */
-function currentFix(): Promise<Fix | null> {
-  if (typeof navigator === "undefined" || !navigator.geolocation) return Promise.resolve(null);
-  return new Promise(resolve => {
-    navigator.geolocation.getCurrentPosition(
-      position => resolve(completeFix(position.coords) ?? null),
-      () => resolve(null),
-      { enableHighAccuracy: true, timeout: FIX_TIMEOUT_MS, maximumAge: FIX_MAX_AGE_MS }
-    );
-  });
-}
+/** Past this the rep has moved on, and the fix is worth taking again before uploading. */
+const FIX_STALE_MS = 3 * 60_000;
 
 /**
  * The area and street address for a fix. Resolved on the server, where the Maps
@@ -157,8 +140,8 @@ const placeSummary = (location?: PhotoLocation | null) =>
 
 const isLocated = (photo: VisitPhoto) => typeof photo.location?.latitude === "number";
 
-/** A fix and the place it resolved to, held between opening the camera and uploading. */
-type Armed = { fix: Fix; place: PlaceName };
+/** A fix, the place it resolved to, and when it was taken. */
+type Located = { fix: Fix; place: PlaceName; at: number };
 
 export function VisitPhotos({ visitId, initial, canAdd }: {
   visitId: string; initial: VisitPhoto[]; canAdd: boolean;
@@ -167,47 +150,70 @@ export function VisitPhotos({ visitId, initial, canAdd }: {
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState("");
   const [error, setError] = useState("");
-  const [armed, setArmed] = useState<Armed | null>(null);
+  const [located, setLocated] = useState<Located | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState("");
   const [viewing, setViewing] = useState<VisitPhoto | null>(null);
-  const input = useRef<HTMLInputElement>(null);
+  const camera = useRef<HTMLInputElement>(null);
+  const gallery = useRef<HTMLInputElement>(null);
 
   const full = photos.length >= MAX_PHOTOS_PER_VISIT;
 
   /**
-   * Finds the position first, and only then opens the camera.
+   * Finds where the rep is, ahead of them needing it.
    *
-   * The location is not decoration on a visit photo, it is the evidence — a
-   * clinic front proves nothing unless it says which clinic front. Asking
-   * before the shutter rather than after means a rep never takes a photo that
-   * then has to be thrown away, and the address has resolved by the time they
-   * have framed it.
+   * Started as soon as the card appears rather than when the camera button is
+   * pressed, for two reasons that both bite on a phone.
+   *
+   * A fix in a clinic can take twenty seconds — the permission prompt runs on
+   * the same clock, and indoors the first answer often comes from the network
+   * rather than GPS. Made to wait for that after tapping the button, a rep
+   * concludes the app is broken. Started on arrival, it is nearly always ready
+   * before they are.
+   *
+   * And a file input has to be opened inside the tap that asked for it. Opening
+   * it after an await spends the browser's user-gesture, and on a phone the
+   * camera then simply never appears — no error, no camera, nothing.
    */
-  async function armAndOpenCamera() {
-    setBusy(true); setError(""); setStage("Finding your location…");
-    try {
-      const fix = await currentFix();
-      if (!fix) {
-        setError("Your location is needed before a photo can be taken. Switch location on for this site in your browser settings, step outside if the signal is weak, and try again.");
-        return;
-      }
-      // One fix covers the batch: they come off the same camera in the same
-      // doorway seconds apart.
-      setArmed({ fix, place: await placeNameFor(fix) });
-      input.current?.click();
-    } finally {
-      setBusy(false); setStage("");
+  const findLocation = useCallback(async () => {
+    setLocating(true); setLocationError("");
+    const result = await requestFix();
+    if (!result.fix) {
+      setLocated(null);
+      setLocationError(FIX_MESSAGE[result.reason]);
+      setLocating(false);
+      return;
     }
-  }
+    setLocated({ fix: result.fix, place: await placeNameFor(result.fix), at: Date.now() });
+    setLocating(false);
+  }, []);
+
+  useEffect(() => { if (canAdd && !full) findLocation(); }, [canAdd, full, findLocation]);
 
   async function upload(files: FileList | null) {
     if (!files?.length) return;
-    if (!armed) { setError("Take the photo with the camera button above, so it can be stamped."); return; }
+    if (!located) { setError("Your location has not been found yet, so a photo cannot be stamped."); return; }
 
     setBusy(true); setError("");
     try {
       const room = MAX_PHOTOS_PER_VISIT - photos.length;
       const chosen = Array.from(files).slice(0, room);
-      const { fix, place } = armed;
+
+      // Taken again if the rep has been standing here a while — a fix from
+      // three minutes ago may be the last clinic rather than this one. If it
+      // cannot be refreshed the one in hand still stamps the photo, which is
+      // far better than losing the shot they have just taken.
+      let current = located;
+      if (Date.now() - located.at > FIX_STALE_MS) {
+        setStage("Checking your location…");
+        const again = await requestFix();
+        if (again.fix) {
+          current = { fix: again.fix, place: await placeNameFor(again.fix), at: Date.now() };
+          setLocated(current);
+        }
+      }
+
+      const { fix, place } = current;
       const lines = stampLines({ fix, place, takenAt: new Date() });
 
       setStage("Stamping the location on…");
@@ -237,9 +243,9 @@ export function VisitPhotos({ visitId, initial, canAdd }: {
     } finally {
       setBusy(false);
       setStage("");
-      // The next photo gets its own fix; the rep may be at the next clinic.
-      setArmed(null);
-      if (input.current) input.current.value = "";
+      // Cleared so choosing the same file twice still fires a change event.
+      if (camera.current) camera.current.value = "";
+      if (gallery.current) gallery.current.value = "";
     }
   }
 
@@ -267,20 +273,34 @@ export function VisitPhotos({ visitId, initial, canAdd }: {
           {photos.length ? `${photos.length} of ${MAX_PHOTOS_PER_VISIT} attached` : "The clinic, a prescription pad, a visiting card — whatever proves the call."}
         </p>
       </div>
-      {canAdd && (
-        <Button tone="secondary" className="!min-h-9 shrink-0 !px-3 text-xs" busy={busy} disabled={full}
-          onClick={armAndOpenCamera}>
-          <Camera size={14} />Add
-        </Button>
-      )}
     </div>
 
-    {/* Opened only by the button above, once a fix is in hand — `capture` starts
-        the camera on a phone, and is ignored on a desktop where a file is
-        picked instead. Either way the stamp comes from the fix taken a moment
-        earlier, at the clinic. */}
-    <input ref={input} type="file" accept="image/*" capture="environment" multiple className="hidden"
-      onChange={event => upload(event.target.files)} />
+    {canAdd && <>
+      {/* Two inputs rather than one. `capture` is what makes a phone open the
+          camera instead of offering a choice — which is right for the shot
+          being taken now, and wrong for the one already in the gallery, taken
+          minutes ago at the same clinic. A single input can only do one. */}
+      <input ref={camera} type="file" accept="image/*" capture="environment" multiple className="hidden"
+        onChange={event => upload(event.target.files)} />
+      <input ref={gallery} type="file" accept="image/*" multiple className="hidden"
+        onChange={event => upload(event.target.files)} />
+
+      <div className="grid grid-cols-2 gap-2">
+        {/* No await between the tap and the click: a file input has to open
+            inside the gesture that asked for it, or a phone quietly ignores it.
+            That is why the location is found ahead of time rather than here. */}
+        <Button tone="secondary" className="text-sm" busy={busy} disabled={full || !located}
+          onClick={() => camera.current?.click()}>
+          <Camera size={15} />Take a photo
+        </Button>
+        <Button tone="secondary" className="text-sm" busy={busy} disabled={full || !located}
+          onClick={() => gallery.current?.click()}>
+          <ImageIcon size={15} />From gallery
+        </Button>
+      </div>
+
+      <LocationStrip located={located} locating={locating} error={locationError} onRetry={findLocation} />
+    </>}
 
     {busy && stage && <p className="text-xs font-medium text-[var(--brand)]">{stage}</p>}
 
@@ -310,8 +330,8 @@ export function VisitPhotos({ visitId, initial, canAdd }: {
     {canAdd && (
       <p className="flex items-start gap-1.5 text-xs text-[var(--muted)]">
         <MapPin size={13} className="mt-0.5 shrink-0" />
-        The camera opens once your location is found. Every photo is stamped with the area, the exact coordinates and
-        the time it was taken.
+        Every photo is stamped with where you are now — the area, the exact coordinates and the time — whether it is
+        taken here or picked from the gallery.
       </p>
     )}
 
@@ -340,6 +360,48 @@ export function VisitPhotos({ visitId, initial, canAdd }: {
       </Modal>
     )}
   </Card>;
+}
+
+/**
+ * Where the rep is, said out loud before a photo is taken.
+ *
+ * Somebody who can see "Koramangala, Bengaluru · ±12 m" knows the stamp will be
+ * right, and somebody who can see it still looking knows to wait rather than
+ * concluding the buttons are broken. When it fails, the message says which of
+ * the several different failures it was, and offers the only thing worth
+ * offering: another go.
+ */
+function LocationStrip({ located, locating, error, onRetry }: {
+  located: Located | null; locating: boolean; error: string; onRetry: () => void;
+}) {
+  if (locating) {
+    return <p className="flex items-center gap-1.5 rounded-[10px] bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--muted)]">
+      <Loader2 size={13} className="shrink-0 animate-spin" />Finding your location…
+    </p>;
+  }
+
+  if (!located) {
+    return <div className="rounded-[10px] border border-amber-200 bg-amber-50 p-3">
+      <p className="flex items-start gap-1.5 text-xs font-medium text-amber-900">
+        <Crosshair size={13} className="mt-0.5 shrink-0" />
+        {error || "Your location has not been found yet."}
+      </p>
+      <button onClick={onRetry}
+        className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-amber-900 underline">
+        <RefreshCw size={12} />Try again
+      </button>
+    </div>;
+  }
+
+  const accuracy = formatAccuracy(located.fix.accuracy);
+  return <p className="flex items-start gap-1.5 rounded-[10px] bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+    <MapPin size={13} className="mt-0.5 shrink-0" />
+    <span className="min-w-0">
+      <span className="font-semibold">{placeLabel(located.place, located.fix)}</span>
+      {accuracy ? ` · ${accuracy}` : ""}
+      <button onClick={onRetry} className="ml-1.5 font-semibold underline">Refresh</button>
+    </span>
+  </p>;
 }
 
 /**

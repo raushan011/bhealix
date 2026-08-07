@@ -7,22 +7,7 @@ import { MapPin, Plus, Stethoscope, UserPlus } from "lucide-react";
 import { Button, Notice } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import { DoctorPicker, placeOf, type PickableDoctor } from "@/components/doctors/doctor-picker";
-import { completeFix, type Fix } from "@/lib/geo";
-
-/** Long enough for a cold start in a doorway, short enough not to strand the rep. */
-const FIX_TIMEOUT_MS = 10_000;
-
-/** The rep's own position, or null. A missing one never blocks the call itself. */
-function currentFix(): Promise<Fix | null> {
-  if (typeof navigator === "undefined" || !navigator.geolocation) return Promise.resolve(null);
-  return new Promise(resolve => {
-    navigator.geolocation.getCurrentPosition(
-      position => resolve(completeFix(position.coords) ?? null),
-      () => resolve(null),
-      { enableHighAccuracy: true, timeout: FIX_TIMEOUT_MS, maximumAge: 30_000 }
-    );
-  });
-}
+import { requestFix } from "@/lib/geo-fix";
 
 /**
  * Recording a call the day's plan did not contain.
@@ -78,8 +63,9 @@ function RegisterSheet({ chosen, onClose, onDone }: {
     setBusy(true); setError(""); setStage("Finding your location…");
     try {
       // Taken here rather than on the visit screen: the rep is standing at the
-      // clinic now, and this is the moment the arrival is worth recording.
-      const fix = await currentFix();
+      // clinic now, and this is the moment the arrival is worth recording. A
+      // phone that will not say does not stop the call being registered.
+      const { fix } = await requestFix();
       setStage("Starting the visit…");
       const response = await fetch("/api/visits", {
         method: "POST", headers: { "content-type": "application/json" },

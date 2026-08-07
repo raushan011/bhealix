@@ -8,6 +8,7 @@ import { Modal } from "@/components/ui/modal";
 import { CallScheduleEditor, type EditableWindow } from "@/components/doctors/call-schedule-editor";
 import { VisitPhotos, type VisitPhoto } from "@/components/visits/visit-photos";
 import { summariseCallSchedule } from "@/lib/doctors/call-schedule";
+import { requestFix } from "@/lib/geo-fix";
 import { toDisplayTime, todayIso } from "@/lib/time";
 import { INTEREST_LEVELS, VISIT_OUTCOMES } from "@/lib/visits";
 
@@ -49,28 +50,27 @@ export function VisitForm({ visit, doctor, products, stock = {}, photos = [] }:
     return json;
   }
 
-  function checkIn() {
+  /**
+   * Arriving at the clinic.
+   *
+   * The position is asked for through the shared helper, which waits long
+   * enough for the permission prompt to be read and falls back to the network
+   * when GPS cannot see the sky. A short high-accuracy request instead records
+   * most check-ins with no location at all — indoors it is the ordinary
+   * outcome, not the exception — and a check-in that cannot say where it
+   * happened is most of the point of having one.
+   */
+  async function checkIn() {
     setBusy(true); setError("");
-    const finish = async (coords?: GeolocationCoordinates) => {
-      try {
-        await send({
-          action: "check-in",
-          ...(coords ? { latitude: coords.latitude, longitude: coords.longitude, accuracy: coords.accuracy } : {})
-        });
-        setStatus("In progress");
-        setLocationNote(coords ? "Location recorded at check-in." : "Checked in without location.");
-        router.refresh();
-      } catch (problem) {
-        setError(problem instanceof Error ? problem.message : "Could not check in");
-      } finally { setBusy(false); }
-    };
-
-    if (!navigator.geolocation) { finish(); return; }
-    navigator.geolocation.getCurrentPosition(
-      position => finish(position.coords),
-      () => finish(),
-      { enableHighAccuracy: true, timeout: 8000 }
-    );
+    try {
+      const { fix } = await requestFix();
+      await send({ action: "check-in", ...(fix ?? {}) });
+      setStatus("In progress");
+      setLocationNote(fix ? "Location recorded at check-in." : "Checked in without location.");
+      router.refresh();
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : "Could not check in");
+    } finally { setBusy(false); }
   }
 
   async function complete() {
