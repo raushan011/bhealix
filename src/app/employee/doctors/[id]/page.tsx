@@ -7,6 +7,7 @@ import { Doctor } from "@/models/Doctor";
 import { Visit } from "@/models/Visit";
 import { Badge, Card, PageTitle, statusTone } from "@/components/ui/kit";
 import { DoctorCallTimeCard } from "@/components/doctors/doctor-call-time-card";
+import { RegisterVisit } from "@/components/visits/register-visit";
 import { OBJECT_ID } from "@/lib/api";
 import { formatDate } from "@/lib/time";
 import type { EditableWindow } from "@/components/doctors/call-schedule-editor";
@@ -65,6 +66,14 @@ export default async function FieldDoctorDetail({ params }: { params: Promise<{ 
         )}
       </div>
     </Card>
+
+    {/* Where a rep lands after adding a doctor from the field, so the call they
+        are standing in the middle of can be recorded without going back to the
+        dashboard to find them again. */}
+    <RegisterVisit doctor={{
+      _id: String(doctor._id), name: doctor.name, clinicName: doctor.clinicName,
+      area: doctor.area, city: doctor.city
+    }} />
 
     <DoctorCallTimeCard doctorId={String(doctor._id)} doctorName={doctor.name} initial={doctor.callSchedule ?? []} />
 

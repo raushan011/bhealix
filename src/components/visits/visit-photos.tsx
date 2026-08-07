@@ -7,10 +7,11 @@ import { Button, Card, Notice } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import { daysLeft, MAX_PHOTOS_PER_VISIT, PHOTO_RETENTION_DAYS } from "@/lib/visits";
 import {
-  completeFix, formatAccuracy, formatLatitude, formatLongitude, mapsPointUrl, stampLines, type Fix
+  completeFix, formatAccuracy, formatLatitude, formatLongitude, mapsPointUrl, placeLabel, stampLines,
+  type Fix, type PlaceName
 } from "@/lib/geo";
 
-export type PhotoLocation = Fix & { address?: string; area?: string; city?: string };
+export type PhotoLocation = Fix & PlaceName;
 export type VisitPhoto = {
   _id: string; createdAt: string; expiresAt: string; caption?: string; location?: PhotoLocation;
 };
@@ -43,15 +44,16 @@ function currentFix(): Promise<Fix | null> {
 }
 
 /**
- * The street address for a fix. Resolved on the server, where the Maps key
- * lives; anything that goes wrong leaves the coordinates to speak for
- * themselves rather than holding up the upload.
+ * The area and street address for a fix. Resolved on the server, where the Maps
+ * key lives; anything that goes wrong leaves the coordinates to speak for
+ * themselves rather than stopping the photo. The coordinates are what prove
+ * where the rep stood — the wording only makes them readable.
  */
-async function placeNameFor(fix: Fix): Promise<Partial<PhotoLocation>> {
+async function placeNameFor(fix: Fix): Promise<PlaceName> {
   try {
     const response = await fetch(`/api/google/reverse?lat=${fix.latitude}&lng=${fix.longitude}`);
     if (!response.ok) return {};
-    const json = await response.json() as { data?: { address?: string; area?: string; city?: string } };
+    const json = await response.json() as { data?: PlaceName };
     return json.data ?? {};
   } catch {
     return {};
@@ -149,15 +151,14 @@ async function prepare(file: File, lines: string[]): Promise<Blob> {
   }
 }
 
-/** The one line under a thumbnail, and in the audit: where this was taken. */
-function placeSummary(location?: PhotoLocation | null): string {
-  if (!location || typeof location.latitude !== "number") return "";
-  return location.address?.trim()
-    || [location.area, location.city].filter(Boolean).join(", ")
-    || `${formatLatitude(location.latitude)}, ${formatLongitude(location.longitude)}`;
-}
+/** Where a photo was taken, named the way the stamp on it names the place. */
+const placeSummary = (location?: PhotoLocation | null) =>
+  location && typeof location.latitude === "number" ? placeLabel(location, location) : "";
 
 const isLocated = (photo: VisitPhoto) => typeof photo.location?.latitude === "number";
+
+/** A fix and the place it resolved to, held between opening the camera and uploading. */
+type Armed = { fix: Fix; place: PlaceName };
 
 export function VisitPhotos({ visitId, initial, canAdd }: {
   visitId: string; initial: VisitPhoto[]; canAdd: boolean;
@@ -166,41 +167,61 @@ export function VisitPhotos({ visitId, initial, canAdd }: {
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState("");
   const [error, setError] = useState("");
-  const [warning, setWarning] = useState("");
+  const [armed, setArmed] = useState<Armed | null>(null);
   const [viewing, setViewing] = useState<VisitPhoto | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
   const full = photos.length >= MAX_PHOTOS_PER_VISIT;
 
+  /**
+   * Finds the position first, and only then opens the camera.
+   *
+   * The location is not decoration on a visit photo, it is the evidence — a
+   * clinic front proves nothing unless it says which clinic front. Asking
+   * before the shutter rather than after means a rep never takes a photo that
+   * then has to be thrown away, and the address has resolved by the time they
+   * have framed it.
+   */
+  async function armAndOpenCamera() {
+    setBusy(true); setError(""); setStage("Finding your location…");
+    try {
+      const fix = await currentFix();
+      if (!fix) {
+        setError("Your location is needed before a photo can be taken. Switch location on for this site in your browser settings, step outside if the signal is weak, and try again.");
+        return;
+      }
+      // One fix covers the batch: they come off the same camera in the same
+      // doorway seconds apart.
+      setArmed({ fix, place: await placeNameFor(fix) });
+      input.current?.click();
+    } finally {
+      setBusy(false); setStage("");
+    }
+  }
+
   async function upload(files: FileList | null) {
     if (!files?.length) return;
-    setBusy(true); setError(""); setWarning("");
+    if (!armed) { setError("Take the photo with the camera button above, so it can be stamped."); return; }
+
+    setBusy(true); setError("");
     try {
       const room = MAX_PHOTOS_PER_VISIT - photos.length;
       const chosen = Array.from(files).slice(0, room);
+      const { fix, place } = armed;
+      const lines = stampLines({ fix, place, takenAt: new Date() });
 
-      // The fix is taken now, with the rep still standing where the photo was
-      // taken, and one fix covers the batch — they came off the same camera in
-      // the same doorway seconds apart.
-      setStage("Finding your location…");
-      const fix = await currentFix();
-      const place = fix ? await placeNameFor(fix) : {};
-      const lines = stampLines({ fix, address: place.address, takenAt: new Date() });
-
-      setStage(fix ? "Stamping the location on…" : "Preparing…");
+      setStage("Stamping the location on…");
       const body = new FormData();
       for (const file of chosen) {
         const blob = await prepare(file, lines);
         body.append("photo", blob, file.name.replace(/\.[^.]+$/, "") + ".jpg");
       }
-      if (fix) {
-        body.append("latitude", String(fix.latitude));
-        body.append("longitude", String(fix.longitude));
-        if (fix.accuracy !== undefined) body.append("accuracy", String(fix.accuracy));
-        if (place.address) body.append("address", place.address);
-        if (place.area) body.append("area", place.area);
-        if (place.city) body.append("city", place.city);
-      }
+      body.append("latitude", String(fix.latitude));
+      body.append("longitude", String(fix.longitude));
+      if (fix.accuracy !== undefined) body.append("accuracy", String(fix.accuracy));
+      if (place.address) body.append("address", place.address);
+      if (place.area) body.append("area", place.area);
+      if (place.city) body.append("city", place.city);
 
       setStage("Uploading…");
       const response = await fetch(`/api/visits/${visitId}/photos`, { method: "POST", body });
@@ -208,9 +229,6 @@ export function VisitPhotos({ visitId, initial, canAdd }: {
       if (!response.ok) throw new Error(json.error ?? "Could not upload that photo");
       setPhotos(current => [...current, ...(json.data?.items ?? [])]);
 
-      if (!fix) {
-        setWarning("Saved without a location — your phone did not share one. Turn on location for this site and add the photo again if you need it stamped.");
-      }
       if (chosen.length < files.length) {
         setError(`Only ${room} more photo${room === 1 ? "" : "s"} could be added to this visit.`);
       }
@@ -219,6 +237,8 @@ export function VisitPhotos({ visitId, initial, canAdd }: {
     } finally {
       setBusy(false);
       setStage("");
+      // The next photo gets its own fix; the rep may be at the next clinic.
+      setArmed(null);
       if (input.current) input.current.value = "";
     }
   }
@@ -249,14 +269,16 @@ export function VisitPhotos({ visitId, initial, canAdd }: {
       </div>
       {canAdd && (
         <Button tone="secondary" className="!min-h-9 shrink-0 !px-3 text-xs" busy={busy} disabled={full}
-          onClick={() => input.current?.click()}>
+          onClick={armAndOpenCamera}>
           <Camera size={14} />Add
         </Button>
       )}
     </div>
 
-    {/* `capture` opens the camera straight away on a phone; a file can still be
-        picked on a desktop, where the attribute is ignored. */}
+    {/* Opened only by the button above, once a fix is in hand — `capture` starts
+        the camera on a phone, and is ignored on a desktop where a file is
+        picked instead. Either way the stamp comes from the fix taken a moment
+        earlier, at the clinic. */}
     <input ref={input} type="file" accept="image/*" capture="environment" multiple className="hidden"
       onChange={event => upload(event.target.files)} />
 
@@ -284,12 +306,12 @@ export function VisitPhotos({ visitId, initial, canAdd }: {
     {!photos.length && !canAdd && <p className="text-sm text-[var(--muted)]">No photos were attached to this visit.</p>}
 
     {error && <Notice tone="error">{error}</Notice>}
-    {warning && <Notice tone="warning">{warning}</Notice>}
 
     {canAdd && (
       <p className="flex items-start gap-1.5 text-xs text-[var(--muted)]">
         <MapPin size={13} className="mt-0.5 shrink-0" />
-        Every photo is stamped with the address, the exact coordinates and the time it was taken.
+        The camera opens once your location is found. Every photo is stamped with the area, the exact coordinates and
+        the time it was taken.
       </p>
     )}
 
@@ -327,6 +349,7 @@ export function VisitPhotos({ visitId, initial, canAdd }: {
  */
 function PhotoPlace({ location }: { location?: PhotoLocation }) {
   if (!location || typeof location.latitude !== "number") {
+    // Only a photo taken before the location became compulsory can reach this.
     return <p className="mt-3 flex items-start gap-1.5 rounded-[10px] bg-[var(--surface-2)] p-3 text-xs text-[var(--muted)]">
       <Crosshair size={13} className="mt-0.5 shrink-0" />
       No location was recorded with this photo.
@@ -334,11 +357,15 @@ function PhotoPlace({ location }: { location?: PhotoLocation }) {
   }
 
   const accuracy = formatAccuracy(location.accuracy);
+  const address = location.address?.trim();
+  const label = placeSummary(location);
+
   return <div className="mt-3 space-y-1.5 rounded-[10px] bg-[var(--surface-2)] p-3">
     <p className="flex items-start gap-1.5 text-[13px] font-semibold">
       <MapPin size={14} className="mt-0.5 shrink-0 text-[var(--brand)]" />
-      {placeSummary(location)}
+      {label}
     </p>
+    {address && address !== label && <p className="text-xs text-[var(--ink-2)]">{address}</p>}
     <p className="font-mono text-xs text-[var(--ink-2)]">
       Lat {formatLatitude(location.latitude)} · Long {formatLongitude(location.longitude)}
     </p>

@@ -6,13 +6,14 @@ import { Visit } from "@/models/Visit";
 import { RoutePlan } from "@/models/RoutePlan";
 import { Badge, Card, EmptyState, LinkButton, PageTitle, statusTone } from "@/components/ui/kit";
 import { formatDate, toDisplayTime, WEEKDAYS } from "@/lib/time";
+import { RegisterVisit } from "@/components/visits/register-visit";
 import { callTimeOn } from "@/lib/doctors/call-schedule";
 import type { EditableWindow } from "@/components/doctors/call-schedule-editor";
 
 export const dynamic = "force-dynamic";
 
 type VisitDoc = {
-  _id: unknown; plannedStart?: string; status: string;
+  _id: unknown; plannedStart?: string; status: string; routePlan?: unknown;
   doctor?: {
     _id: unknown; name?: string; clinicName?: string; area?: string; city?: string;
     phones?: string[]; fullAddress?: string; location?: { coordinates?: number[] }; callSchedule?: EditableWindow[];
@@ -99,6 +100,11 @@ export default async function TodayPage() {
       </section>
     )}
 
+    {/* Above the day's list, not buried under it: a rep reaches for this while
+        standing outside a clinic that is not on the plan, and half the value is
+        lost if they have to scroll past the plan to find it. */}
+    <RegisterVisit />
+
     <section>
       <h2 className="mb-2 text-[15px] font-semibold">Today&apos;s route</h2>
       {visits.length ? (
@@ -114,6 +120,10 @@ export default async function TodayPage() {
                 <p className="truncate text-xs text-[var(--muted)]">{[visit.doctor?.clinicName, visit.doctor?.area].filter(Boolean).join(" · ") || "—"}</p>
                 <p className="mt-0.5 flex items-center gap-1 text-xs text-[var(--brand)]">
                   <Clock size={11} />{visit.plannedStart ? toDisplayTime(visit.plannedStart) : "No time set"}
+                  {/* No route plan behind it is what makes a visit unplanned —
+                      nothing else creates one, so there is no second field to
+                      keep in step with this. */}
+                  {!visit.routePlan && <span className="text-[var(--muted)]"> · unplanned</span>}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -125,7 +135,7 @@ export default async function TodayPage() {
         </div>
       ) : (
         <EmptyState icon={CalendarCheck} title="Nothing scheduled today"
-          description="When your administrator assigns you a route plan, your day appears here in visiting order."
+          description="When your administrator assigns you a route plan, your day appears here in visiting order. A call you make without one can be registered above."
           action={<LinkButton tone="secondary" href="/employee/plans"><Route size={16} />See my plans</LinkButton>} />
       )}
     </section>

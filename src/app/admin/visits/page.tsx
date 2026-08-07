@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Camera, ClipboardList, Package } from "lucide-react";
+import { Camera, ClipboardList, MapPin, Package } from "lucide-react";
 import { requireAdminPanel } from "@/lib/auth/guard";
 import { connectDb } from "@/lib/db/mongoose";
 import { Visit } from "@/models/Visit";
@@ -8,17 +8,24 @@ import { VisitPhoto } from "@/models/VisitPhoto";
 import { Badge, Card, EmptyState, PageTitle, statusTone } from "@/components/ui/kit";
 import { formatDate, toDisplayTime } from "@/lib/time";
 import { daysLeft } from "@/lib/visits";
+import { placeLabel } from "@/lib/geo";
+import type { PhotoLocation } from "@/components/visits/visit-photos";
 
 export const dynamic = "force-dynamic";
 
+/** The named places a visit's photos were taken, each said once. */
+const placesOf = (photos: PhotoDoc[]) => [...new Set(photos
+  .filter(photo => typeof photo.location?.latitude === "number")
+  .map(photo => placeLabel(photo.location!, photo.location!)))];
+
 type VisitDoc = {
   _id: unknown; plannedDate: Date; plannedStart?: string; status: string; outcome?: string;
-  interest?: string; notes?: string; orderValue?: number;
+  interest?: string; notes?: string; orderValue?: number; routePlan?: unknown;
   samples?: Array<{ product: string; quantity: number }>; productsDiscussed?: string[];
   doctor?: { _id: unknown; name?: string; area?: string; city?: string };
   employee?: { name?: string };
 };
-type PhotoDoc = { _id: unknown; visit: unknown; expiresAt: Date };
+type PhotoDoc = { _id: unknown; visit: unknown; expiresAt: Date; location?: PhotoLocation };
 
 export default async function VisitsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   await requireAdminPanel();
@@ -35,7 +42,7 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
   // days. The bytes are fetched by the browser one image at a time.
   const photos = await VisitPhoto.find({
     visit: { $in: visits.map(visit => visit._id) }, expiresAt: { $gt: new Date() }
-  }).select("visit expiresAt").sort({ createdAt: 1 }).lean() as unknown as PhotoDoc[];
+  }).select("visit expiresAt location").sort({ createdAt: 1 }).lean() as unknown as PhotoDoc[];
 
   const photosByVisit = new Map<string, PhotoDoc[]>();
   for (const photo of photos) {
@@ -84,6 +91,9 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">
                 <Badge tone={statusTone(visit.status)}>{visit.status}</Badge>
+                {/* Nothing but a route plan schedules a visit, so a visit
+                    without one was a call the rep made on their own account. */}
+                {!visit.routePlan && <Badge tone="neutral">Unplanned</Badge>}
                 {visit.interest && <Badge tone={statusTone(visit.interest)}>{visit.interest}</Badge>}
               </div>
             </div>
@@ -105,6 +115,15 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
                 <p className="mb-1.5 flex items-center gap-1.5 text-xs text-[var(--muted)]">
                   <Camera size={12} />{attached.length} photo{attached.length === 1 ? "" : "s"} · oldest removed in {daysLeft(attached[0].expiresAt)} days
                 </p>
+                {/* Where the phone was standing when they were taken, which is
+                    the point of stamping them. Distinct places only: a visit's
+                    photos are nearly always all from the one doorway. */}
+                {placesOf(attached).length > 0 && (
+                  <p className="mb-1.5 flex items-start gap-1.5 text-xs font-medium text-[var(--ink-2)]">
+                    <MapPin size={12} className="mt-0.5 shrink-0 text-[var(--brand)]" />
+                    {placesOf(attached).join(" · ")}
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2">
                   {attached.map(photo => (
                     <a key={String(photo._id)} href={`/api/visits/${visit._id}/photos/${photo._id}`}
@@ -124,7 +143,7 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
       </Card>
     ) : (
       <EmptyState icon={ClipboardList} title="No visits here"
-        description="Visits appear once a route plan is assigned to a representative." />
+        description="Visits appear once a route plan is assigned to a representative, or when one registers a call they made without a plan." />
     )}
   </div>;
 }

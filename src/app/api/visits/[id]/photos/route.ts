@@ -16,10 +16,9 @@ const METADATA = "contentType bytes caption location createdAt expiresAt employe
 /**
  * The fix the phone reported when the photos were taken, as posted with them.
  *
- * A photo without one is still accepted — a rep in a basement clinic with no
- * signal must not be stopped from recording the call — but a half fix, or a
- * coordinate off the globe, is dropped rather than stored, so nothing that
- * reads this back has to wonder whether it means anything.
+ * A half fix, or a coordinate off the globe, is no fix at all — it would read
+ * as located on every screen that shows it while pointing somewhere in the Gulf
+ * of Guinea. The caller is refused rather than quietly saving the good half.
  */
 function fixFrom(form: FormData) {
   const fix = completeFix({
@@ -100,7 +99,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!files.length) return badRequest("Choose at least one photo");
 
     const caption = String(form.get("caption") ?? "").trim().slice(0, 200);
+
+    // Where it was taken is not an extra on a visit photo, it is the evidence:
+    // one clinic front looks like another, and a photo that cannot say which
+    // one settles nothing. The phone is asked before the camera opens, so
+    // reaching here without a fix means something bypassed that screen.
     const location = fixFrom(form);
+    if (!location) {
+      return badRequest("A photo has to carry the location it was taken at. Allow location for this site and take it again.");
+    }
+
     const now = new Date();
     const held = await VisitPhoto.countDocuments({ visit: id, expiresAt: { $gt: now } });
     if (held + files.length > MAX_PHOTOS_PER_VISIT) {
@@ -131,14 +139,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       action: "visit.photo.added",
       entityType: "Visit",
       entityId: visit._id,
-      // Whether the photos carried a position is worth keeping even though the
-      // photos themselves go in thirty days: an unlocated call is exactly the
-      // thing somebody asks about later, once the picture is gone.
+      // Where the photos were taken outlives the photos, which go in thirty
+      // days — and where a rep was on a given afternoon is exactly what somebody
+      // asks about later, once the pictures are gone.
       metadata: {
         count: saved.length,
         doctor: visit.doctor ? String(visit.doctor) : undefined,
-        located: Boolean(location),
-        ...(location ? { at: `${location.latitude},${location.longitude}` } : {})
+        at: `${location.latitude},${location.longitude}`,
+        place: location.area || location.city || location.address || undefined
       }
     });
 

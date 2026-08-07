@@ -12,6 +12,7 @@ import { AuditEvent } from "@/models/Catalog";
 export const AUDIT_ACTIONS = {
   "doctor.created": "Added a doctor",
   "doctor.call-schedule.updated": "Corrected a call time",
+  "visit.registered": "Registered an unplanned visit",
   "visit.checked-in": "Checked in at a clinic",
   "visit.completed": "Completed a visit",
   "visit.missed": "Marked a visit missed",
