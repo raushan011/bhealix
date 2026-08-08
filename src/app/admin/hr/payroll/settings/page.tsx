@@ -139,7 +139,7 @@ export default function PayrollSettingsPage() {
             <input type="number" min={0} value={slab.amount} className="input w-28 shrink-0" disabled={!mayEdit}
               onChange={event => setSlab(index, { amount: Number(event.target.value) || 0 })} />
             {mayEdit && form.ptSlabs.length > 1 && (
-              <button type="button" aria-label="Remove this slab" className="tap grid shrink-0 place-items-center rounded-[10px] text-rose-600"
+              <button type="button" aria-label="Remove this slab" className="tap grid shrink-0 place-items-center rounded-[10px] text-[var(--danger-ink)]"
                 onClick={() => set({ ptSlabs: form.ptSlabs.filter((_, i) => i !== index) })}><X size={16} /></button>
             )}
           </div>;

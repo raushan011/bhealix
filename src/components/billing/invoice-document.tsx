@@ -37,6 +37,13 @@ function Address({ title, party, extra }: { title: string; party: Record<string,
 
 export function InvoiceDocument({ invoice, settings }: { invoice: InvoiceRecord; settings: SellerSettings }) {
   const taxed = invoice.taxed;
+  /*
+   * The scheme column earns its place only when there is a scheme on the bill.
+   * A tax invoice already carries ten columns on A4; an eleventh reading zero
+   * all the way down would cost every other column the width it needs.
+   */
+  const hasFreeGoods = invoice.items.some(item => (item.freeQuantity ?? 0) > 0);
+  const freeUnits = invoice.items.reduce((total, item) => total + (item.freeQuantity ?? 0), 0);
   const seller = {
     name: settings.tradeName || settings.legalName,
     address: settings.address,
@@ -130,6 +137,7 @@ export function InvoiceDocument({ invoice, settings }: { invoice: InvoiceRecord;
             <th className={cell}>Product</th>
             {taxed && <th className={`${cell} w-16`}>HSN</th>}
             <th className={`${cell} w-16 text-right`}>Qty</th>
+            {hasFreeGoods && <th className={`${cell} w-14 text-right`}>Free</th>}
             <th className={`${cell} w-20 text-right`}>Rate</th>
             <th className={`${cell} w-24 text-right`}>Discount</th>
             <th className={`${cell} w-24 text-right`}>Taxable</th>
@@ -151,6 +159,11 @@ export function InvoiceDocument({ invoice, settings }: { invoice: InvoiceRecord;
               </td>
               {taxed && <td className={cell}>{item.hsnCode || "—"}</td>}
               <td className={`${cell} text-right`}>{item.quantity}</td>
+              {hasFreeGoods && (
+                <td className={`${cell} text-right`}>
+                  {item.freeQuantity ? <span className="font-semibold">+{item.freeQuantity}</span> : "—"}
+                </td>
+              )}
               <td className={`${cell} text-right`}>{item.rate.toFixed(2)}</td>
               <td className={`${cell} text-right`}>
                 {item.discount > 0 ? <>
@@ -213,6 +226,20 @@ export function InvoiceDocument({ invoice, settings }: { invoice: InvoiceRecord;
           <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-500">Amount in words</p>
           <p className="text-[11px] font-semibold">{amountInWords(invoice.grandTotal)}</p>
         </div>
+
+        {/* Said in words as well as in the column, so the scheme is not something
+            a doctor has to work out by comparing what arrived against what was
+            charged. */}
+        {hasFreeGoods && (
+          <div className={`${line} p-2 text-[10px]`}>
+            <p className="font-bold uppercase tracking-wider text-neutral-500">Free goods</p>
+            <p className="mt-0.5">
+              {freeUnits} unit{freeUnits === 1 ? "" : "s"} supplied free of charge under scheme —{" "}
+              {invoice.items.filter(item => item.freeQuantity)
+                .map(item => `${item.name} ${item.quantity}+${item.freeQuantity}`).join(", ")}.
+            </p>
+          </div>
+        )}
 
         {(settings.bankName || settings.upiId || settings.paymentQrType) && (
           <div className={`${line} p-2 text-[10px] leading-relaxed`}>

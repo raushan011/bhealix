@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  amountInWords, balanceOf, computeInvoice, computeLine, isOverdue, money, statusFor
+  amountInWords, balanceOf, computeInvoice, computeLine, isOverdue, money, statusFor, unitsSupplied
 } from "./gst";
 import { dueDateFrom, financialYear, formatInvoiceNo } from "./numbering";
 import { isGstin, stateCodeOfGstin } from "./constants";
@@ -130,6 +130,48 @@ describe("computeInvoice", () => {
   it("reports zeroes rather than NaN for an invoice with no lines yet", () => {
     const { totals } = computeInvoice([], INTRA);
     expect(totals).toMatchObject({ subtotal: 0, taxableValue: 0, taxTotal: 0, grandTotal: 0 });
+  });
+});
+
+describe("free goods under a scheme", () => {
+  /**
+   * A 10+1 is eleven bottles delivered and ten charged for. Everything on the
+   * invoice — the taxable value, the GST, the total — is about the ten.
+   */
+  it("changes no figure on the bill", () => {
+    const charged = computeLine(line({ quantity: 10 }), INTRA);
+    const scheme = computeLine(line({ quantity: 10, freeQuantity: 1 }), INTRA);
+    expect(scheme).toEqual(charged);
+  });
+
+  it("survives pricing, so the bill can print the scheme it was given", () => {
+    const { lines: priced } = computeInvoice([line({ quantity: 10, freeQuantity: 2 })], INTRA);
+    expect(priced[0].freeQuantity).toBe(2);
+  });
+
+  it("leaves the totals alone", () => {
+    const plain = computeInvoice([line({ quantity: 10, rate: 100 })], INTRA).totals;
+    const withFree = computeInvoice([line({ quantity: 10, rate: 100, freeQuantity: 5 })], INTRA).totals;
+    expect(withFree).toEqual(plain);
+  });
+});
+
+describe("unitsSupplied", () => {
+  /** What leaves the warehouse: the billed units and the scheme ones together. */
+  it("counts the free goods off the same shelf as the billed ones", () => {
+    expect(unitsSupplied({ quantity: 10, freeQuantity: 1 })).toBe(11);
+  });
+
+  it("is just the quantity when there is no scheme", () => {
+    expect(unitsSupplied({ quantity: 10 })).toBe(10);
+    expect(unitsSupplied({ quantity: 10, freeQuantity: 0 })).toBe(10);
+  });
+
+  /** Nothing here may hand the ledger a NaN, or the whole balance becomes one. */
+  it("ignores rubbish rather than passing it on to the stock ledger", () => {
+    expect(unitsSupplied({ quantity: undefined, freeQuantity: undefined })).toBe(0);
+    expect(unitsSupplied({ quantity: "eight", freeQuantity: -3 })).toBe(0);
+    expect(unitsSupplied({ quantity: 2.7, freeQuantity: 1.9 })).toBe(3);
   });
 });
 

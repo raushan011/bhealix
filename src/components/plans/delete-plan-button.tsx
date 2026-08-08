@@ -33,7 +33,7 @@ export function DeletePlanButton({ planId, planName, redirectTo }: {
   }
 
   return <button onClick={remove} disabled={busy} aria-label={`Delete ${planName}`}
-    className="grid size-9 shrink-0 place-items-center rounded-lg text-rose-600 hover:bg-rose-50 disabled:opacity-50">
+    className="grid size-9 shrink-0 place-items-center rounded-lg text-[var(--danger-ink)] hover:bg-[var(--danger-bg)] disabled:opacity-50">
     {busy ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
   </button>;
 }

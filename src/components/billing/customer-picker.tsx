@@ -64,7 +64,7 @@ export function CustomerPicker({ onSelect, placeholder = "Search stockist, distr
 
     {open && (
       <ul id={listId} role="listbox"
-        className="absolute z-30 mt-1.5 max-h-80 w-full overflow-y-auto rounded-[10px] border border-[var(--line)] bg-white py-1 shadow-lg">
+        className="absolute z-30 mt-1.5 max-h-80 w-full overflow-y-auto rounded-[10px] border border-[var(--line)] bg-[var(--surface)] py-1 shadow-lg">
         {items.length ? items.map((customer, index) => (
           <li key={customer._id} role="option" aria-selected={index === active}>
             <button type="button" onMouseEnter={() => setActive(index)} onClick={() => choose(customer)}

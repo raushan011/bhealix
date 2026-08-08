@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { CalendarCheck, LayoutGrid, LogOut, Receipt, Route, Stethoscope } from "lucide-react";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { BrandMark } from "@/components/ui/brand";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { ROLE_LABEL, type Role } from "@/constants/access";
 
 /**
@@ -45,7 +46,7 @@ export function FieldShell({ user, children }: { user: { name: string; role: Rol
   }
 
   return <div className="min-h-[100dvh] pb-[calc(68px+env(safe-area-inset-bottom))]">
-    <header className="sticky top-0 z-20 border-b border-[var(--line)] bg-white/95 backdrop-blur">
+    <header className="sticky top-0 z-20 border-b border-[var(--line)] bg-[var(--surface-veil)] backdrop-blur">
       <div className="mx-auto flex h-14 max-w-2xl items-center justify-between px-4">
         <div className="flex min-w-0 items-center gap-2.5">
           <BrandMark size={30} />
@@ -54,7 +55,10 @@ export function FieldShell({ user, children }: { user: { name: string; role: Rol
             <p className="truncate text-[11px] text-[var(--muted)]">{ROLE_LABEL[user.role]}</p>
           </div>
         </div>
-        <button onClick={signOut} aria-label="Sign out" className="tap grid shrink-0 place-items-center rounded-[10px] text-[var(--muted)] hover:bg-[var(--surface-2)]"><LogOut size={18} /></button>
+        <div className="flex shrink-0 items-center">
+          <ThemeToggle />
+          <button onClick={signOut} aria-label="Sign out" className="tap grid shrink-0 place-items-center rounded-[10px] text-[var(--muted)] hover:bg-[var(--surface-2)]"><LogOut size={18} /></button>
+        </div>
       </div>
     </header>
 
@@ -64,7 +68,7 @@ export function FieldShell({ user, children }: { user: { name: string; role: Rol
       {children}
     </main>
 
-    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--line)] bg-white pb-[env(safe-area-inset-bottom)]">
+    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--line)] bg-[var(--surface)] pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto grid h-[68px] max-w-2xl grid-cols-5">
         {TABS.map(({ href, label, icon: Icon }) => {
           const active = isActive(pathname, href);

@@ -369,7 +369,7 @@ export default function DiscoverPage() {
         }
       />
 
-      <div className="flex gap-1.5 rounded-[10px] border border-[var(--line)] bg-white p-1">
+      <div className="flex gap-1.5 rounded-[10px] border border-[var(--line)] bg-[var(--surface)] p-1">
         {(
           [
             ["area", "Search an area", Search],
@@ -383,7 +383,7 @@ export default function DiscoverPage() {
             aria-pressed={mode === value}
             className={`flex min-h-[40px] flex-1 items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors ${
               mode === value
-                ? "bg-[var(--brand)] text-white"
+                ? "bg-[var(--brand)] text-[var(--on-brand)]"
                 : "text-[var(--ink-2)] hover:bg-[var(--surface-2)]"
             }`}
           >
@@ -488,8 +488,8 @@ export default function DiscoverPage() {
                     aria-pressed={on}
                     className={`min-h-[36px] rounded-full border px-3 text-xs font-semibold transition-colors ${
                       on
-                        ? "border-[var(--brand)] bg-[var(--brand)] text-white"
-                        : "border-[var(--line-2)] bg-white text-[var(--ink-2)] hover:bg-[var(--surface-2)]"
+                        ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--on-brand)]"
+                        : "border-[var(--line-2)] bg-[var(--surface)] text-[var(--ink-2)] hover:bg-[var(--surface-2)]"
                     }`}
                   >
                     {type}
@@ -614,7 +614,7 @@ export default function DiscoverPage() {
                   </div>
                 </div>
                 {isAdded ? (
-                  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-[10px] bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-[10px] bg-[var(--ok-bg)] px-3 py-2 text-xs font-semibold text-[var(--ok-ink)]">
                     <Check size={14} />
                     Added
                   </span>
@@ -641,7 +641,7 @@ export default function DiscoverPage() {
            * 56px tall and sticks at the top of the viewport, so a toolbar
            * pinned to 0 slid behind it and could not be reached at all.
            */}
-          <div className="sticky top-14 z-10 flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-[var(--line)] bg-white px-3 py-2.5 lg:top-2">
+          <div className="sticky top-14 z-10 flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-[var(--line)] bg-[var(--surface)] px-3 py-2.5 lg:top-2">
             <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold">
               <input
                 type="checkbox"
@@ -730,7 +730,7 @@ export default function DiscoverPage() {
                       {row.phone || "Not published by Google"}
                     </p>
                     {(!row.latitude || !row.longitude) && (
-                      <p className="text-amber-700">
+                      <p className="text-[var(--warn-ink)]">
                         No coordinates — cannot be route-planned
                       </p>
                     )}
@@ -781,7 +781,7 @@ export default function DiscoverPage() {
             </Button>
           }
         >
-          <div className="mb-3 flex items-center gap-2 text-sm font-medium text-emerald-700">
+          <div className="mb-3 flex items-center gap-2 text-sm font-medium text-[var(--ok-ink)]">
             <CheckCircle2 size={17} />
             {saved.names.length} doctor{saved.names.length === 1 ? "" : "s"}{" "}
             written to your directory

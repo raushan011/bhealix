@@ -79,7 +79,7 @@ export default function SamplesPage() {
     {!loading && <>
       <Card className="grid grid-cols-2 gap-5 p-5 sm:grid-cols-4">
         <Stat label="Issued to reps" value={totalIssued} />
-        <Stat label="Given to doctors" value={totalDispensed} tone="text-emerald-700" />
+        <Stat label="Given to doctors" value={totalDispensed} tone="text-[var(--ok-ink)]" />
         <Stat label="Still with reps" value={totalBalance} />
         <Stat label="Reaching doctors" value={`${utilisation(totalIssued, totalDispensed)}%`} />
       </Card>
@@ -96,7 +96,7 @@ export default function SamplesPage() {
         {TABS.map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setTab(key)}
             className={`inline-flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-full border px-4 text-xs font-semibold ${
-              tab === key ? "border-[var(--brand)] bg-[var(--brand)] text-white" : "border-[var(--line-2)] bg-white text-[var(--ink-2)]"
+              tab === key ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--on-brand)]" : "border-[var(--line-2)] bg-[var(--surface)] text-[var(--ink-2)]"
             }`}><Icon size={14} />{label}</button>
         ))}
       </div>
@@ -145,9 +145,9 @@ function RepStock({ rep }: { rep: TeamStock }) {
       </div>
       <div className="flex shrink-0 gap-5 text-right">
         <div><p className="text-xs text-[var(--muted)]">Issued</p><p className="text-sm font-semibold">{rep.issued}</p></div>
-        <div><p className="text-xs text-[var(--muted)]">Given out</p><p className="text-sm font-semibold text-emerald-700">{rep.dispensed}</p></div>
+        <div><p className="text-xs text-[var(--muted)]">Given out</p><p className="text-sm font-semibold text-[var(--ok-ink)]">{rep.dispensed}</p></div>
         <div><p className="text-xs text-[var(--muted)]">In hand</p>
-          <p className={`text-sm font-semibold ${rep.balance < 0 ? "text-rose-700" : ""}`}>{rep.balance}</p></div>
+          <p className={`text-sm font-semibold ${rep.balance < 0 ? "text-[var(--danger-ink)]" : ""}`}>{rep.balance}</p></div>
       </div>
     </div>
     {/*
@@ -162,7 +162,7 @@ function RepStock({ rep }: { rep: TeamStock }) {
             {row.issued} issued · {row.dispensed} given{row.returned ? ` · ${row.returned} returned` : ""}
             {row.adjusted ? ` · ${row.adjusted > 0 ? "+" : ""}${row.adjusted} adjusted` : ""}
           </span>
-          <span className={`w-14 shrink-0 text-right font-semibold ${row.balance < 0 ? "text-rose-700" : ""}`}>{row.balance}</span>
+          <span className={`w-14 shrink-0 text-right font-semibold ${row.balance < 0 ? "text-[var(--danger-ink)]" : ""}`}>{row.balance}</span>
         </div>
       ))}
     </div>
@@ -272,12 +272,12 @@ function RecordMovement({ type, people, products, onClose, onSaved }: {
                   aria-label="Quantity" className="input w-20 shrink-0" />
                 {lines.length > 1 && (
                   <button type="button" onClick={() => setLines(current => current.filter((_, i) => i !== index))}
-                    aria-label="Remove line" className="tap grid shrink-0 place-items-center rounded-[10px] text-rose-600"><X size={16} /></button>
+                    aria-label="Remove line" className="tap grid shrink-0 place-items-center rounded-[10px] text-[var(--danger-ink)]"><X size={16} /></button>
                 )}
               </div>
 
               {type === "ISSUE" && line.product && (
-                <p className={`mt-1.5 text-xs ${short ? "font-semibold text-rose-700" : "text-[var(--muted)]"}`}>
+                <p className={`mt-1.5 text-xs ${short ? "font-semibold text-[var(--danger-ink)]" : "text-[var(--muted)]"}`}>
                   {available ?? 0} available in company stock
                   {short ? " — issuing this many will take it below zero" : ""}
                 </p>

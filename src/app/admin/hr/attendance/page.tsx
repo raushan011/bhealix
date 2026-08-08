@@ -19,10 +19,10 @@ type Row = {
 };
 
 const cellTone: Record<AttendanceStatus, string> = {
-  "Present": "bg-emerald-100 text-emerald-800",
-  "Absent": "bg-rose-100 text-rose-700",
-  "Half day": "bg-amber-100 text-amber-900",
-  "On leave": "bg-sky-100 text-sky-800",
+  "Present": "bg-[var(--ok-bg)] text-[var(--ok-ink)]",
+  "Absent": "bg-[var(--danger-bg)] text-[var(--danger-ink)]",
+  "Half day": "bg-[var(--warn-bg)] text-[var(--warn-ink)]",
+  "On leave": "bg-[var(--info-bg)] text-[var(--info-ink)]",
   "Week off": "bg-[var(--surface-2)] text-[var(--muted)]",
   "Holiday": "bg-[var(--brand-soft)] text-[var(--ink-2)]"
 };
@@ -102,10 +102,10 @@ export default function AttendancePage() {
     <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
       <div className="flex items-center gap-2">
         <button onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Previous month"
-          className="tap grid place-items-center rounded-[10px] border border-[var(--line-2)] bg-white"><ChevronLeft size={16} /></button>
+          className="tap grid place-items-center rounded-[10px] border border-[var(--line-2)] bg-[var(--surface)]"><ChevronLeft size={16} /></button>
         <input type="month" value={month} onChange={e => setMonth(e.target.value)} aria-label="Month" className="input !min-h-[40px] w-auto" />
         <button onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Next month"
-          className="tap grid place-items-center rounded-[10px] border border-[var(--line-2)] bg-white"><ChevronRight size={16} /></button>
+          className="tap grid place-items-center rounded-[10px] border border-[var(--line-2)] bg-[var(--surface)]"><ChevronRight size={16} /></button>
       </div>
       <p className="text-sm font-semibold">{label}</p>
     </Card>
@@ -144,7 +144,7 @@ export default function AttendancePage() {
             <tbody>
               {rows.map(row => (
                 <tr key={row.employee} className="border-t border-[var(--line)]">
-                  <td className="sticky left-0 z-10 bg-white px-3 py-2">
+                  <td className="sticky left-0 z-10 bg-[var(--surface)] px-3 py-2">
                     <Link href={`/admin/team/${row.employee}`} className="block min-w-0">
                       <span className="block truncate font-semibold">{row.name}</span>
                       <span className="block truncate text-[11px] text-[var(--muted)]">{row.employeeId}</span>
@@ -158,7 +158,7 @@ export default function AttendancePage() {
                         title={`${formatDate(day.date)} — ${day.status ?? "not marked"}${day.note ? ` (${day.note})` : ""}`}
                         aria-label={`${row.name} on ${day.date}: ${day.status ?? "not marked"}`}
                         className={`grid size-7 w-full place-items-center rounded font-bold disabled:cursor-default ${
-                          day.status ? cellTone[day.status] : "bg-white text-[var(--line-2)]"
+                          day.status ? cellTone[day.status] : "bg-[var(--surface)] text-[var(--line-2)]"
                         } ${mayMark ? "hover:ring-2 hover:ring-[var(--brand)]" : ""}`}>
                         {day.status ? ATTENDANCE_INITIAL[day.status] : "·"}
                       </button>
@@ -210,7 +210,7 @@ function MarkDay({ row, day, onClose, onSave }: {
           {ATTENDANCE_STATUSES.map(value => (
             <button key={value} type="button" onClick={() => setStatus(value)}
               className={`rounded-[10px] border px-3 py-2.5 text-left text-sm font-semibold ${
-                status === value ? "border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--line-2)] bg-white"
+                status === value ? "border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--line-2)] bg-[var(--surface)]"
               }`}>
               <Badge tone={ATTENDANCE_TONE[value]}>{ATTENDANCE_INITIAL[value]}</Badge>
               <span className="mt-1 block">{value}</span>

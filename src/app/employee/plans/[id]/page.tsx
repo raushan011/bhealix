@@ -69,7 +69,7 @@ export default async function MyPlanDetail({ params }: { params: Promise<{ id: s
     )}
 
     {conflicts > 0 && (
-      <div className="flex items-start gap-2.5 rounded-[10px] border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+      <div className="flex items-start gap-2.5 rounded-[10px] border border-[var(--warn-line)] bg-[var(--warn-bg)] p-3 text-sm text-[var(--warn-ink)]">
         <TriangleAlert size={16} className="mt-0.5 shrink-0" />
         <p>{conflicts} stop{conflicts === 1 ? "" : "s"} fall outside the doctor&apos;s usual call window. Call ahead before you travel.</p>
       </div>
@@ -81,9 +81,9 @@ export default async function MyPlanDetail({ params }: { params: Promise<{ id: s
         {stops.map(stop => {
           const visit = stop.doctor ? visitByDoctor.get(String(stop.doctor._id)) : undefined;
           const maps = directionsUrl(stop.doctor);
-          return <li key={stop.sequence} className={`card p-3.5 ${stop.withinCallTime ? "" : "border-amber-300 bg-amber-50"}`}>
+          return <li key={stop.sequence} className={`card p-3.5 ${stop.withinCallTime ? "" : "border-[var(--warn-line)] bg-[var(--warn-bg)]"}`}>
             <div className="flex items-start gap-3">
-              <span className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-[11px] font-bold text-white">{stop.sequence}</span>
+              <span className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-[11px] font-bold text-[var(--on-brand)]">{stop.sequence}</span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{stop.doctor?.name ?? "Doctor removed"}</p>
                 <p className="truncate text-xs text-[var(--muted)]">{[stop.doctor?.clinicName, stop.doctor?.area].filter(Boolean).join(" · ") || "—"}</p>
@@ -99,7 +99,7 @@ export default async function MyPlanDetail({ params }: { params: Promise<{ id: s
             <div className="mt-3 flex gap-2">
               {visit ? (
                 <Link href={`/employee/visits/${visit._id}`}
-                  className="tap flex flex-1 items-center justify-center rounded-[10px] bg-[var(--brand)] text-sm font-semibold text-white">
+                  className="tap flex flex-1 items-center justify-center rounded-[10px] bg-[var(--brand)] text-sm font-semibold text-[var(--on-brand)]">
                   {visit.status === "Completed" || visit.status === "Missed" ? "View visit" : "Open visit"}
                 </Link>
               ) : (

@@ -191,7 +191,7 @@ export default function PayrollMonthPage() {
 
     {run.skipped?.length > 0 && (
       <Card className="p-5">
-        <p className="flex items-center gap-1.5 text-sm font-semibold text-amber-800">
+        <p className="flex items-center gap-1.5 text-sm font-semibold text-[var(--warn-ink)]">
           <AlertTriangle size={15} />{run.skipped.length} employee{run.skipped.length === 1 ? "" : "s"} left out of this month
         </p>
         <ul className="mt-2 space-y-1 text-sm text-[var(--ink-2)]">
@@ -234,11 +234,11 @@ export default function PayrollMonthPage() {
                 </td>
                 <td className="px-5 py-3">
                   {slip.paidDays} <span className="text-[var(--muted)]">of {slip.divisorDays}</span>
-                  {slip.lopDays > 0 && <p className="text-xs text-amber-700">{slip.lopDays} lost</p>}
+                  {slip.lopDays > 0 && <p className="text-xs text-[var(--warn-ink)]">{slip.lopDays} lost</p>}
                 </td>
                 <td className="px-5 py-3 text-right tabular-nums">{formatMoney(slip.gross)}</td>
                 <td className="px-5 py-3 text-right tabular-nums">{formatMoney(slip.totalDeductions)}</td>
-                <td className={`px-5 py-3 text-right font-semibold tabular-nums ${slip.netPay < 0 ? "text-rose-600" : ""}`}>
+                <td className={`px-5 py-3 text-right font-semibold tabular-nums ${slip.netPay < 0 ? "text-[var(--danger-ink)]" : ""}`}>
                   {formatMoney(slip.netPay)}
                 </td>
                 <td className="px-5 py-3 text-right">

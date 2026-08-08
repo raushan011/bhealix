@@ -511,9 +511,15 @@ read the whole of `billTo` as a string field.
 
 **Tax** — `placeOfSupply {state, code}`, `interState`, `ratesIncludeTax`.
 
-**Lines** — `items[]`: `product`, `name` (req), `hsnCode`, `unit`, `quantity`, `rate`,
-`discountType` PERCENT|AMOUNT, `discountValue`, `gstRate`, then the server-computed
+**Lines** — `items[]`: `product`, `name` (req), `hsnCode`, `unit`, `quantity`, `freeQuantity`,
+`rate`, `discountType` PERCENT|AMOUNT, `discountValue`, `gstRate`, then the server-computed
 `gross`, `discount`, `taxableValue`, `cgst`, `sgst`, `igst`, `taxAmount`, `total`.
+
+`freeQuantity` is **scheme goods** — the "+1" of a 10+1. It changes **no figure on the invoice**:
+every total is about what was charged for. What it does change is stock, because free goods come off
+the same shelf — `unitsSupplied()` (`lib/billing/gst.ts`) adds the two together and is the only way
+`syncInvoiceStock` and the bill form's shortage warning count units. The printed sheet grows a Free
+column, and a line in words under the totals, **only when a bill actually carries a scheme**.
 `taxSummary[]`: `{hsnCode, gstRate, taxableValue, cgst, sgst, igst}` — the rate-wise block a GST
 invoice must print.
 
@@ -706,7 +712,7 @@ Rejects a reference doctor not in the list, unknown doctors, and doctors without
   placeOfSupplyCode?: <state code>,
   billTo?: { name?, clinicName?, type?, gstin?, address?, city?, pinCode?, phone? },
   saveDoctorDetails = true,
-  items: [{ product?, name, hsnCode?, unit?, quantity>0, rate≥0,
+  items: [{ product?, name, hsnCode?, unit?, quantity>0, freeQuantity: int ≥0 = 0, rate≥0,
             discountType: "PERCENT"|"AMOUNT" = "PERCENT", discountValue ≥0 = 0, gstRate 0..50 = 0 }]≥1,
   notes?, terms?,
   payment?: { amount>0, mode, reference?, paidAt? }
@@ -923,6 +929,25 @@ Also `Modal` (`ui/modal.tsx`, has a test), `BrandMark`/`Brand`, `PasswordInput`.
 
 Use these rather than raw Tailwind for anything that already exists here.
 
+### 9.2a Colour: tokens only — `app/globals.css`
+
+**Never write a raw colour in a screen.** Every surface, line, ink and status colour is a CSS custom
+property defined twice in `globals.css`: once on `:root` and once for dark. Names say what a colour
+is *for*, so the same class works in both palettes — `--bg`, `--surface`, `--surface-2`,
+`--surface-veil` (translucent, for sticky bars), `--overlay`, `--brand`, `--brand-hover`,
+`--brand-soft`, `--on-brand` (**text on a brand fill** — the brand inverts to a light tan in dark,
+so `text-white` on it is unreadable), `--ink`, `--ink-2`, `--muted`, `--line`, `--line-2`,
+`--placeholder`, `--focus-ring`, and `--{ok,warn,danger,info}-{bg,ink,line}` for status.
+
+Three theme states: `data-theme="dark"` and `data-theme="light"` on `<html>` beat the
+`prefers-color-scheme` block, and no attribute at all follows the device. `lib/theme.ts` owns the
+choice; `THEME_SCRIPT` runs **blocking in `<head>`** (see `app/layout.tsx`) because restoring the
+theme in an effect flashes cream before hydration. `ThemeToggle` (`components/ui/theme-toggle.tsx`)
+sits in both shells and on the login page.
+
+The two print documents are the deliberate exception: they paint in fixed light ink because paper is
+light whatever the screen is (§9.5). So do the badge over a visit photograph and the rating star.
+
 ### 9.3 Shells
 
 `AdminShell` (`app/admin/layout.tsx`) — desktop sidebar navigation.
@@ -1058,6 +1083,8 @@ the control in the UI. Never invent an inline role check in a route.
 | Forgetting `recalculate()` | `amountPaid` / `balanceDue` / `status` drift away from `payments[]`. | Call it after any change to `payments`. |
 | Model not imported in `mongoose.ts` | `populate()` throws `MissingSchemaError` — but only on a cold server, so it looks intermittent. | Add the import. |
 | Selecting a `select: false` field by accident | A list route drags megabytes of image bytes per row. | Only the single-item byte-serving route uses `.select("+data")` / `+paymentQr`. |
+| A raw Tailwind colour in a screen | `bg-white` / `text-neutral-500` / `bg-amber-50` do not follow the theme, so the screen is unreadable in dark — and `text-white` on `bg-[var(--brand)]` is unreadable the moment the brand inverts. | Paint with the tokens (§9.2a). Text on a brand fill is `text-[var(--on-brand)]`. |
+| Counting billed units for stock | Scheme goods leave the warehouse and are on no total, so the shelf silently runs ahead of reality. | `unitsSupplied()` — the only counter `syncInvoiceStock` and the shortage warning use. |
 | A GeoJSON field with a `type` default | `{ type: "Point" }` and no coordinates is written on every new record, and the 2dsphere index fails the whole insert — the screen can only say "something went wrong". | No default on `location.type`; the model's hooks run every write through `completePoint()`. |
 | `new Uint8Array(doc.data)` after `.lean()` | Lean returns a BSON `Binary`, not a `Buffer`, so the response is 200 with **zero bytes** and the QR, photo or proof shows as a broken image. | Unwrap with `storedBytes()` (`lib/db/bytes.ts`) and test `bytes.byteLength`, never `data.length`. |
 | Trusting `leaveDays` from the client | Somebody grants themselves a month. | It is recomputed on the server; keep it that way. |

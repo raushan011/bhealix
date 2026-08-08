@@ -122,11 +122,11 @@ export default function PlanMyRoute() {
       </div>
       {reference ? (
         <div className="flex items-center gap-3 rounded-[10px] border border-[var(--brand)] bg-[var(--brand-soft)]/40 p-3">
-          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-white"><Navigation size={15} /></span>
+          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-[var(--on-brand)]"><Navigation size={15} /></span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold">{reference.name}</p>
             <p className="truncate text-xs text-[var(--muted)]">{placeOf(reference)}</p>
-            <p className={`mt-0.5 flex items-center gap-1 text-xs font-medium ${callTimeOn(reference, weekday) ? "text-[var(--brand)]" : "text-amber-700"}`}>
+            <p className={`mt-0.5 flex items-center gap-1 text-xs font-medium ${callTimeOn(reference, weekday) ? "text-[var(--brand)]" : "text-[var(--warn-ink)]"}`}>
               <Clock size={11} />{callTimeOn(reference, weekday) ?? `No call time on ${WEEKDAYS[weekday]}`}
             </p>
           </div>
@@ -158,13 +158,13 @@ export default function PlanMyRoute() {
               <MapPin size={14} className="shrink-0 text-[var(--brand)]" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{doctor.name}</p>
-                <p className={`flex items-center gap-1 truncate text-xs ${callTime ? "text-[var(--muted)]" : "text-amber-700"}`}>
+                <p className={`flex items-center gap-1 truncate text-xs ${callTime ? "text-[var(--muted)]" : "text-[var(--warn-ink)]"}`}>
                   <Clock size={11} />{callTime ?? `No call time on ${WEEKDAYS[weekday]}`}
                 </p>
               </div>
               <button onClick={() => { reset(); setSelected(current => current.filter(d => d._id !== doctor._id)); }}
                 aria-label={`Remove ${doctor.name}`}
-                className="tap grid shrink-0 place-items-center rounded-[10px] text-rose-600"><Trash2 size={14} /></button>
+                className="tap grid shrink-0 place-items-center rounded-[10px] text-[var(--danger-ink)]"><Trash2 size={14} /></button>
             </li>;
           })}
         </ul>
@@ -190,7 +190,7 @@ export default function PlanMyRoute() {
       </div>
 
       {preview.outsideCallTimeCount > 0 && (
-        <div className="flex items-start gap-2.5 rounded-[10px] border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        <div className="flex items-start gap-2.5 rounded-[10px] border border-[var(--warn-line)] bg-[var(--warn-bg)] p-3 text-sm text-[var(--warn-ink)]">
           <TriangleAlert size={16} className="mt-0.5 shrink-0" />
           <p><strong>{preview.outsideCallTimeCount}</strong> cannot be reached inside their call window. Start earlier,
             give each doctor less time, or leave them for another day.</p>
@@ -200,12 +200,12 @@ export default function PlanMyRoute() {
       <ol className="space-y-2">
         {preview.stops.map(stop => (
           <li key={stop.doctor._id}
-            className={`flex items-center gap-3 rounded-[10px] border p-3 ${stop.withinCallTime ? "border-[var(--line)]" : "border-amber-300 bg-amber-50"}`}>
-            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-[11px] font-bold text-white">{stop.sequence}</span>
+            className={`flex items-center gap-3 rounded-[10px] border p-3 ${stop.withinCallTime ? "border-[var(--line)]" : "border-[var(--warn-line)] bg-[var(--warn-bg)]"}`}>
+            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-[11px] font-bold text-[var(--on-brand)]">{stop.sequence}</span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold">{stop.doctor.name}</p>
               <p className="truncate text-xs text-[var(--muted)]">{placeOf(stop.doctor)}</p>
-              {!stop.withinCallTime && <p className="text-xs font-medium text-amber-800">Outside their call window</p>}
+              {!stop.withinCallTime && <p className="text-xs font-medium text-[var(--warn-ink)]">Outside their call window</p>}
               {stop.waitMinutes > 0 && <p className="text-xs text-[var(--muted)]">Wait {formatDuration(stop.waitMinutes)}</p>}
             </div>
             <div className="shrink-0 text-right">
@@ -221,7 +221,7 @@ export default function PlanMyRoute() {
       </ol>
 
       {link && <a href={link} target="_blank" rel="noreferrer"
-        className="tap flex items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-white text-sm font-semibold">
+        className="tap flex items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-[var(--surface)] text-sm font-semibold">
         <ExternalLink size={15} />Open the whole route in Maps
       </a>}
 

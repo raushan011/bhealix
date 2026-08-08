@@ -26,7 +26,7 @@ export function ConnectionStatus() {
 
   if (!offline) return null;
 
-  return <div role="status" className="flex items-center justify-center gap-2 bg-amber-100 px-4 py-2 text-[13px] font-medium text-amber-900">
+  return <div role="status" className="flex items-center justify-center gap-2 bg-[var(--warn-bg)] px-4 py-2 text-[13px] font-medium text-[var(--warn-ink)]">
     <CloudOff size={14} />You&apos;re offline — changes won&apos;t save until you reconnect.
   </div>;
 }

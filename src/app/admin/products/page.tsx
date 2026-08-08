@@ -87,7 +87,7 @@ export default function ProductsPage() {
       <Card className="grid grid-cols-3 gap-5 p-5">
         <Stat label="Products on offer" value={live.length} />
         <Stat label="Units available" value={unitsHeld} />
-        <Stat label="Need restocking" value={shortages.length} tone={shortages.length ? "text-amber-700" : undefined} />
+        <Stat label="Need restocking" value={shortages.length} tone={shortages.length ? "text-[var(--warn-ink)]" : undefined} />
       </Card>
     )}
 
@@ -140,7 +140,7 @@ export default function ProductsPage() {
 
             {/* The one pool: what is left after samples and bills have taken theirs. */}
             <div className="shrink-0 text-right">
-              <p className={`text-sm font-semibold ${(product.stock ?? 0) < 0 ? "text-rose-700" : ""}`}>
+              <p className={`text-sm font-semibold ${(product.stock ?? 0) < 0 ? "text-[var(--danger-ink)]" : ""}`}>
                 {product.stock ?? 0}
               </p>
               <p className="text-[11px] text-[var(--muted)]">available</p>
@@ -152,7 +152,7 @@ export default function ProductsPage() {
                 {product.active ? "Retire" : "Restore"}
               </Button>
               <button onClick={() => remove(product)} aria-label={`Remove ${product.name}`}
-                className="grid size-9 shrink-0 place-items-center rounded-lg text-rose-600 hover:bg-rose-50"><Trash2 size={15} /></button>
+                className="grid size-9 shrink-0 place-items-center rounded-lg text-[var(--danger-ink)] hover:bg-[var(--danger-bg)]"><Trash2 size={15} /></button>
             </div>}
           </div>
         ))}

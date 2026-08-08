@@ -144,7 +144,7 @@ export function SalaryCard({ employeeId, employeeName, canEdit }: {
               </span>
               {canEdit && (
                 <button onClick={() => removeRevision(revision)} aria-label={`Remove the revision from ${revision.effectiveFrom}`}
-                  className="shrink-0 text-[var(--muted)] hover:text-rose-600"><X size={14} /></button>
+                  className="shrink-0 text-[var(--muted)] hover:text-[var(--danger-ink)]"><X size={14} /></button>
               )}
             </li>
           ))}
@@ -479,7 +479,7 @@ function NamedRows({ label, hint, placeholder, rows, onChange, disabled }: {
               <input type="number" min={0} value={row.amount} className="input pl-7" aria-label={`${label} amount`}
                 onChange={event => onChange(rows.map((item, i) => i === index ? { ...item, amount: Number(event.target.value) || 0 } : item))} />
             </div>
-            <button type="button" aria-label="Remove" className="tap grid shrink-0 place-items-center rounded-[10px] text-rose-600"
+            <button type="button" aria-label="Remove" className="tap grid shrink-0 place-items-center rounded-[10px] text-[var(--danger-ink)]"
               onClick={() => onChange(rows.filter((_, i) => i !== index))}><X size={16} /></button>
           </div>
         ))}

@@ -57,8 +57,8 @@ export default function HrDashboard() {
 
     <Card className="grid grid-cols-2 gap-5 p-5 sm:grid-cols-4">
       <Stat label="On the payroll" value={data.headcount.active} />
-      <Stat label="In today" value={data.presentToday} tone="text-emerald-700" />
-      <Stat label="On leave" value={data.onLeave.length} tone={data.onLeave.length ? "text-amber-700" : undefined} />
+      <Stat label="In today" value={data.presentToday} tone="text-[var(--ok-ink)]" />
+      <Stat label="On leave" value={data.onLeave.length} tone={data.onLeave.length ? "text-[var(--warn-ink)]" : undefined} />
       <Stat label="Not yet marked" value={data.unmarked} tone={data.unmarked ? "text-[var(--muted)]" : undefined} />
     </Card>
 

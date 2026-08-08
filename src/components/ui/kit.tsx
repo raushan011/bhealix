@@ -3,10 +3,10 @@ import { Loader2 } from "lucide-react";
 
 type ButtonTone = "primary" | "secondary" | "ghost" | "danger";
 const buttonTone: Record<ButtonTone, string> = {
-  primary: "bg-[var(--brand)] text-white hover:bg-[var(--brand-hover)] disabled:opacity-50",
-  secondary: "bg-white text-[var(--ink)] border border-[var(--line-2)] hover:bg-[var(--surface-2)] disabled:opacity-50",
+  primary: "bg-[var(--brand)] text-[var(--on-brand)] hover:bg-[var(--brand-hover)] disabled:opacity-50",
+  secondary: "bg-[var(--surface)] text-[var(--ink)] border border-[var(--line-2)] hover:bg-[var(--surface-2)] disabled:opacity-50",
   ghost: "text-[var(--ink-2)] hover:bg-[var(--surface-2)] disabled:opacity-50",
-  danger: "bg-white text-rose-600 border border-rose-200 hover:bg-rose-50 disabled:opacity-50"
+  danger: "bg-[var(--surface)] text-[var(--danger-ink)] border border-[var(--danger-line)] hover:bg-[var(--danger-bg)] disabled:opacity-50"
 };
 const buttonBase = "inline-flex items-center justify-center gap-2 rounded-[10px] px-4 min-h-[44px] text-sm font-semibold transition-colors disabled:cursor-not-allowed";
 
@@ -45,11 +45,11 @@ export function PageTitle({ title, subtitle, actions }:
 type BadgeTone = "neutral" | "brand" | "success" | "warn" | "danger" | "info";
 const badgeTone: Record<BadgeTone, string> = {
   neutral: "bg-[var(--brand-soft)] text-[var(--ink-2)]",
-  brand: "bg-[var(--brand)] text-white",
-  success: "bg-emerald-50 text-emerald-800",
-  warn: "bg-amber-100 text-amber-900",
-  danger: "bg-rose-50 text-rose-700",
-  info: "bg-sky-50 text-sky-800"
+  brand: "bg-[var(--brand)] text-[var(--on-brand)]",
+  success: "bg-[var(--ok-bg)] text-[var(--ok-ink)]",
+  warn: "bg-[var(--warn-bg)] text-[var(--warn-ink)]",
+  danger: "bg-[var(--danger-bg)] text-[var(--danger-ink)]",
+  info: "bg-[var(--info-bg)] text-[var(--info-ink)]"
 };
 export function Badge({ tone = "neutral", children }: { tone?: BadgeTone; children: React.ReactNode }) {
   return <span className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${badgeTone[tone]}`}>{children}</span>;
@@ -93,12 +93,12 @@ export function Stat({ label, value, tone }: { label: string; value: string | nu
 
 export function Notice({ tone = "info", children }: { tone?: "info" | "success" | "warning" | "error"; children: React.ReactNode }) {
   const styles = {
-    info: "border-[var(--line)] bg-white text-[var(--ink-2)]",
-    success: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    info: "border-[var(--line)] bg-[var(--surface)] text-[var(--ink-2)]",
+    success: "border-[var(--ok-line)] bg-[var(--ok-bg)] text-[var(--ok-ink)]",
     // For something that did work but not as well as it should have — a photo
     // saved with no location. An error tone would read as "nothing was saved".
-    warning: "border-amber-200 bg-amber-50 text-amber-800",
-    error: "border-rose-200 bg-rose-50 text-rose-800"
+    warning: "border-[var(--warn-line)] bg-[var(--warn-bg)] text-[var(--warn-ink)]",
+    error: "border-[var(--danger-line)] bg-[var(--danger-bg)] text-[var(--danger-ink)]"
   }[tone];
   return <p role="status" className={`wrap-break-word rounded-[10px] border px-4 py-3 text-sm font-medium ${styles}`}>{children}</p>;
 }

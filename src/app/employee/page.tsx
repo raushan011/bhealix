@@ -59,7 +59,7 @@ export default async function TodayPage() {
         </div>
         <div className="grid size-14 shrink-0 place-items-center rounded-full"
           style={{ background: `conic-gradient(var(--brand) ${progress}%, var(--line) 0)` }}>
-          <span className="grid size-11 place-items-center rounded-full bg-white text-xs font-bold">{progress}%</span>
+          <span className="grid size-11 place-items-center rounded-full bg-[var(--surface)] text-xs font-bold">{progress}%</span>
         </div>
       </Card>
     )}
@@ -67,34 +67,34 @@ export default async function TodayPage() {
     {next?.doctor && (
       <section>
         <h2 className="mb-2 text-[15px] font-semibold">Up next</h2>
-        <div className="rounded-[14px] bg-[var(--brand)] p-4 text-white">
+        <div className="rounded-[14px] bg-[var(--brand)] p-4 text-[var(--on-brand)]">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate font-semibold">{next.doctor.name}</p>
-              <p className="mt-0.5 truncate text-sm text-white/75">{[next.doctor.clinicName, next.doctor.area].filter(Boolean).join(" · ") || "—"}</p>
+              <p className="mt-0.5 truncate text-sm text-[var(--on-brand)]/75">{[next.doctor.clinicName, next.doctor.area].filter(Boolean).join(" · ") || "—"}</p>
             </div>
-            {next.plannedStart && <span className="shrink-0 rounded-full bg-white/15 px-2.5 py-1 text-xs font-bold">{toDisplayTime(next.plannedStart)}</span>}
+            {next.plannedStart && <span className="shrink-0 rounded-full bg-[var(--on-brand)]/15 px-2.5 py-1 text-xs font-bold">{toDisplayTime(next.plannedStart)}</span>}
           </div>
 
-          <p className="mt-3 flex items-center gap-1.5 text-sm text-white/85">
+          <p className="mt-3 flex items-center gap-1.5 text-sm text-[var(--on-brand)]/85">
             <Clock size={14} />{callTimeOn(next.doctor as never, weekday) ?? `No call time for ${WEEKDAYS[weekday]}`}
           </p>
-          <p className="mt-1 flex items-start gap-1.5 text-sm text-white/75">
+          <p className="mt-1 flex items-start gap-1.5 text-sm text-[var(--on-brand)]/75">
             <MapPin size={14} className="mt-0.5 shrink-0" /><span className="line-clamp-2">{next.doctor.fullAddress || [next.doctor.area, next.doctor.city].filter(Boolean).join(", ") || "Address not recorded"}</span>
           </p>
 
           <div className="mt-4 grid grid-cols-[1fr_48px_48px] gap-2">
             <Link href={`/employee/visits/${next._id}`}
-              className="tap flex items-center justify-center gap-2 rounded-[10px] bg-white font-semibold text-[var(--brand)]">
+              className="tap flex items-center justify-center gap-2 rounded-[10px] bg-[var(--surface)] font-semibold text-[var(--brand)]">
               {next.status === "In progress" ? "Continue visit" : "Start visit"}
             </Link>
             {next.doctor.phones?.[0] ? (
-              <a href={`tel:${next.doctor.phones[0]}`} aria-label="Call doctor" className="tap grid place-items-center rounded-[10px] bg-white/15"><Phone size={18} /></a>
-            ) : <span className="tap grid place-items-center rounded-[10px] bg-white/5 text-white/30"><Phone size={18} /></span>}
+              <a href={`tel:${next.doctor.phones[0]}`} aria-label="Call doctor" className="tap grid place-items-center rounded-[10px] bg-[var(--on-brand)]/15"><Phone size={18} /></a>
+            ) : <span className="tap grid place-items-center rounded-[10px] bg-[var(--on-brand)]/10 text-[var(--on-brand)]/40"><Phone size={18} /></span>}
             {next.doctor.location?.coordinates?.length === 2 ? (
               <a href={`https://www.google.com/maps/dir/?api=1&destination=${next.doctor.location.coordinates[1]},${next.doctor.location.coordinates[0]}`}
-                target="_blank" rel="noreferrer" aria-label="Navigate" className="tap grid place-items-center rounded-[10px] bg-white/15"><Navigation size={18} /></a>
-            ) : <span className="tap grid place-items-center rounded-[10px] bg-white/5 text-white/30"><Navigation size={18} /></span>}
+                target="_blank" rel="noreferrer" aria-label="Navigate" className="tap grid place-items-center rounded-[10px] bg-[var(--on-brand)]/15"><Navigation size={18} /></a>
+            ) : <span className="tap grid place-items-center rounded-[10px] bg-[var(--on-brand)]/10 text-[var(--on-brand)]/40"><Navigation size={18} /></span>}
           </div>
         </div>
       </section>
@@ -113,7 +113,7 @@ export default async function TodayPage() {
             <Link key={String(visit._id)} href={`/employee/visits/${visit._id}`}
               className="card flex items-center gap-3 p-3.5 active:bg-[var(--surface-2)]">
               <span className={`grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-bold ${
-                visit.status === "Completed" ? "bg-emerald-600 text-white" : visit.status === "Missed" ? "bg-rose-500 text-white" : "bg-[var(--brand)] text-white"
+                visit.status === "Completed" ? "bg-[var(--ok-ink)] text-[var(--on-brand)]" : visit.status === "Missed" ? "bg-[var(--danger-ink)] text-[var(--on-brand)]" : "bg-[var(--brand)] text-[var(--on-brand)]"
               }`}>{index + 1}</span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{visit.doctor?.name ?? "Doctor removed"}</p>

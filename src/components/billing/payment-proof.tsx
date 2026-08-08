@@ -87,12 +87,12 @@ export function PaymentProof({ invoiceId, payment, mayAttach, mayManage, userId,
         // an image opens here, which is one tap instead of a page change.
         isPdf(proof.contentType) ? (
           <a href={view} target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
+            className="inline-flex items-center gap-1.5 rounded-full bg-[var(--ok-bg)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ok-ink)]">
             <FileText size={12} />Proof (PDF)<ExternalLink size={11} />
           </a>
         ) : (
           <button type="button" onClick={() => setViewing(true)}
-            className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
+            className="inline-flex items-center gap-1.5 rounded-full bg-[var(--ok-bg)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ok-ink)]">
             <Paperclip size={12} />View proof
           </button>
         )
@@ -118,7 +118,7 @@ export function PaymentProof({ invoiceId, payment, mayAttach, mayManage, userId,
         onChange={event => upload(event.target.files?.[0])} />
     )}
 
-    {error && <p className="text-[11px] font-medium text-rose-700">{error}</p>}
+    {error && <p className="text-[11px] font-medium text-[var(--danger-ink)]">{error}</p>}
 
     {viewing && proof && (
       <Modal title="Proof of payment"

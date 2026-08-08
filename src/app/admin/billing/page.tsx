@@ -74,8 +74,8 @@ export default function BillingPage() {
         in each column, which a tablet does not have. */}
     <Card className="grid grid-cols-2 gap-5 p-5 lg:grid-cols-4">
       <Stat label="Billed" value={formatMoney(summary.billed)} />
-      <Stat label="Collected" value={formatMoney(summary.collected)} tone="text-emerald-700" />
-      <Stat label="Outstanding" value={formatMoney(summary.outstanding)} tone={summary.outstanding > 0 ? "text-amber-700" : undefined} />
+      <Stat label="Collected" value={formatMoney(summary.collected)} tone="text-[var(--ok-ink)]" />
+      <Stat label="Outstanding" value={formatMoney(summary.outstanding)} tone={summary.outstanding > 0 ? "text-[var(--warn-ink)]" : undefined} />
       <Stat label="Bills shown" value={rows.length} />
     </Card>
 
@@ -105,7 +105,7 @@ export default function BillingPage() {
           <option value="">Every representative</option>
           {people.map(person => <option key={person._id} value={person._id}>{person.name} ({person.employeeId})</option>)}
         </select>
-        <label className="flex min-h-[44px] items-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-white px-3 text-sm">
+        <label className="flex min-h-[44px] items-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-[var(--surface)] px-3 text-sm">
           <input type="checkbox" checked={overdue} onChange={e => setOverdue(e.target.checked)} className="size-4" />
           Overdue only
         </label>

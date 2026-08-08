@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, HeartHandshake, LayoutDashboard, LogOut, Menu, Package, Receipt, Search, Stethoscope, Users, Wallet, Warehouse, X } from "lucide-react";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { Brand, BrandMark } from "@/components/ui/brand";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { ROLE_LABEL, type Role } from "@/constants/access";
 
 /**
@@ -82,33 +83,34 @@ export function AdminShell({ user, children }: { user: { name: string; role: Rol
   );
 
   const account = (
-    <div className="flex items-center gap-3 border-t border-[var(--line)] px-2 pt-4">
-      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-xs font-bold text-white">{initials(user.name)}</span>
-      <div className="min-w-0 flex-1">
+    <div className="flex items-center gap-1 border-t border-[var(--line)] px-2 pt-4">
+      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-xs font-bold text-[var(--on-brand)]">{initials(user.name)}</span>
+      <div className="ml-2 min-w-0 flex-1">
         <p className="truncate text-sm font-semibold">{user.name}</p>
         <p className="truncate text-xs text-[var(--muted)]">{ROLE_LABEL[user.role]}</p>
       </div>
+      <ThemeToggle />
       <button onClick={signOut} aria-label="Sign out" className="tap grid shrink-0 place-items-center rounded-[10px] text-[var(--muted)] hover:bg-[var(--surface-2)]"><LogOut size={17} /></button>
     </div>
   );
 
   return <div className="min-h-[100dvh] lg:grid lg:grid-cols-[248px_1fr] lg:items-start">
     {/* Pinned to the viewport so navigation stays reachable however far the page scrolls. */}
-    <aside className="hidden border-r border-[var(--line)] bg-white px-4 py-5 lg:sticky lg:top-0 lg:flex lg:h-[100dvh] lg:flex-col">
+    <aside className="hidden border-r border-[var(--line)] bg-[var(--surface)] px-4 py-5 lg:sticky lg:top-0 lg:flex lg:h-[100dvh] lg:flex-col">
       <div className="px-2"><Brand subtitle="Doctor CRM" /></div>
       <div className="mt-8 min-h-0 flex-1 overflow-y-auto">{navList}</div>
       {account}
     </aside>
 
     <div className="min-w-0">
-      <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-[var(--line)] bg-white/95 px-3 backdrop-blur lg:hidden">
+      <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-[var(--line)] bg-[var(--surface-veil)] px-3 backdrop-blur lg:hidden">
         <div className="flex items-center gap-2"><BrandMark size={30} /><span className="text-sm font-bold tracking-[0.14em] text-[var(--brand)]">BHEALIX</span></div>
         <button onClick={() => setMenuOpen(true)} aria-label="Open menu" className="tap grid place-items-center rounded-[10px] text-[var(--ink-2)]"><Menu size={20} /></button>
       </header>
 
       {menuOpen && <div className="fixed inset-0 z-40 lg:hidden">
-        <button aria-label="Close menu" tabIndex={-1} onClick={() => setMenuOpen(false)} className="absolute inset-0 cursor-default bg-black/40" />
-        <div className="relative ml-auto flex h-full w-[80%] max-w-[300px] flex-col bg-white px-4 py-5">
+        <button aria-label="Close menu" tabIndex={-1} onClick={() => setMenuOpen(false)} className="absolute inset-0 cursor-default bg-[var(--overlay)]" />
+        <div className="relative ml-auto flex h-full w-[80%] max-w-[300px] flex-col bg-[var(--surface)] px-4 py-5">
           <div className="flex items-center justify-between">
             <Brand subtitle="Doctor CRM" />
             <button onClick={() => setMenuOpen(false)} aria-label="Close menu" className="tap grid place-items-center rounded-[10px] text-[var(--muted)]"><X size={19} /></button>

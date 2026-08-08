@@ -48,7 +48,7 @@ export default async function PlansPage() {
                 <span>{plan.totalDistanceKm ?? 0} km</span>
                 <span>{plan.assignedTo?.name ?? "Not assigned"}</span>
                 {conflicts > 0 && (
-                  <span className="inline-flex items-center gap-1 font-medium text-amber-700">
+                  <span className="inline-flex items-center gap-1 font-medium text-[var(--warn-ink)]">
                     <TriangleAlert size={12} />{conflicts} outside call time
                   </span>
                 )}

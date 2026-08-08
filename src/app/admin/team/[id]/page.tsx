@@ -88,12 +88,12 @@ export default function EmployeeProfile() {
             screen — it is the administrator's to read, not the HR desk's. */}
         {role === "ADMIN" && usesFieldPanel(employee.role) && (
           <Link href={`/admin/team/${id}/activity`}
-            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-white px-4 text-sm font-semibold">
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-[var(--surface)] px-4 text-sm font-semibold">
             <MapPinned size={16} />Field activity
           </Link>
         )}
         <Link href={`/admin/hr/attendance?month=${month}`}
-          className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-white px-4 text-sm font-semibold">
+          className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-[var(--surface)] px-4 text-sm font-semibold">
           <CalendarCheck size={16} />Attendance
         </Link>
         {mayEdit && <Button onClick={() => setEditing("employment")}><Pencil size={16} />Edit record</Button>}

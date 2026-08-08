@@ -33,7 +33,7 @@ export default async function HistoryPage() {
     <PageTitle title="History" subtitle="Your completed and missed visits" />
 
     <Card className="grid grid-cols-2 gap-5 p-4">
-      <Stat label="Completed this month" value={completedThisMonth} tone="text-emerald-700" />
+      <Stat label="Completed this month" value={completedThisMonth} tone="text-[var(--ok-ink)]" />
       <Stat label="Samples given" value={samplesThisMonth[0]?.total ?? 0} />
     </Card>
 

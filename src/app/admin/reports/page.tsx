@@ -87,15 +87,15 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
       {[7, 30, 90].map(value => (
         <a key={value} href={`/admin/reports?days=${value}`}
           className={`min-h-[38px] shrink-0 rounded-full border px-4 text-xs font-semibold leading-[36px] ${
-            days === value ? "border-[var(--brand)] bg-[var(--brand)] text-white" : "border-[var(--line-2)] bg-white text-[var(--ink-2)]"
+            days === value ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--on-brand)]" : "border-[var(--line-2)] bg-[var(--surface)] text-[var(--ink-2)]"
           }`}>Last {value} days</a>
       ))}
     </div>
 
     <Card className="grid grid-cols-2 gap-5 p-5 sm:grid-cols-3 lg:grid-cols-5">
       <Stat label="Planned" value={totals.planned} />
-      <Stat label="Completed" value={totals.completed} tone="text-emerald-700" />
-      <Stat label="Missed" value={totals.missed} tone={totals.missed ? "text-rose-700" : undefined} />
+      <Stat label="Completed" value={totals.completed} tone="text-[var(--ok-ink)]" />
+      <Stat label="Missed" value={totals.missed} tone={totals.missed ? "text-[var(--danger-ink)]" : undefined} />
       <Stat label="Completion" value={`${completion}%`} />
       <Stat label="Samples given" value={totalSamples} />
     </Card>
@@ -141,7 +141,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
                       filtered to the range above, so stock issued before it is
                       not counted. The running balance lives on Samples. */}
                   {unaccounted !== 0 && (
-                    <span className={unaccounted > 0 ? "" : "font-semibold text-rose-700"}>
+                    <span className={unaccounted > 0 ? "" : "font-semibold text-[var(--danger-ink)]"}>
                       {" "}· {Math.abs(unaccounted)} {unaccounted > 0 ? "not yet handed over" : "over-recorded"} in this period
                     </span>
                   )}

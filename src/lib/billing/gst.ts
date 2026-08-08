@@ -24,11 +24,34 @@ export type LineInput = {
   hsnCode?: string;
   unit?: string;
   quantity: number;
+  /**
+   * Units handed over under a scheme and not charged for — the "+1" of a 10+1.
+   *
+   * Kept beside the billed quantity rather than as a line of its own priced at
+   * zero: a scheme is an offer on a product, so the bill has to show both
+   * figures against the same product, and a zero-rate line would look like a
+   * pricing mistake to anybody reading it. It changes no money at all; what it
+   * changes is how many units leave the shelf.
+   */
+  freeQuantity?: number;
   rate: number;
   discountType: DiscountType;
   discountValue: number;
   gstRate: number;
 };
+
+/** Whole units, never fewer than none — what a scheme quantity is allowed to be. */
+const units = (value: unknown) => Math.max(0, Math.trunc(Number(value) || 0));
+
+/**
+ * Everything that physically leaves the warehouse for this line.
+ *
+ * Free goods are given away, not sold, so they are absent from every figure on
+ * the invoice — but they come off the same shelf as the billed ones. Stock and
+ * the shortage warning both count them through here, so neither can forget.
+ */
+export const unitsSupplied = (line: { quantity?: unknown; freeQuantity?: unknown }) =>
+  units(line.quantity) + units(line.freeQuantity);
 
 export type ComputedLine = {
   gross: number;

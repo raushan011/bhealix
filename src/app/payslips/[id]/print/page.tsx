@@ -51,14 +51,14 @@ export default async function PayslipPrintPage({ params }: { params: Promise<{ i
   const record = JSON.parse(JSON.stringify(payslip)) as PayslipRecord;
   const back = usesFieldPanel(session.role) ? "/employee/payslips" : `/admin/hr/payroll`;
 
-  return <div className="min-h-[100dvh] bg-neutral-100 py-4 print:bg-white print:py-0">
+  return <div className="min-h-[100dvh] bg-[var(--surface-2)] py-4 print:bg-white print:py-0">
     <div className="no-print mx-auto mb-4 flex max-w-[210mm] flex-wrap items-center justify-between gap-3 px-4">
       <Link href={back} className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--brand)]">
         <ArrowLeft size={16} />Back
       </Link>
       <div className="flex gap-2">
         <Link href={homeFor(session.role)}
-          className="inline-flex min-h-[44px] items-center rounded-[10px] border border-neutral-300 bg-white px-4 text-sm font-semibold">
+          className="inline-flex min-h-[44px] items-center rounded-[10px] border border-[var(--line-2)] bg-[var(--surface)] px-4 text-sm font-semibold">
           Home
         </Link>
         <PrintButton />
@@ -73,7 +73,7 @@ export default async function PayslipPrintPage({ params }: { params: Promise<{ i
       note: payrollSettings.payslipNote
     }} />
 
-    <p className="no-print mx-auto mt-4 max-w-[210mm] px-4 text-center text-xs text-neutral-500">
+    <p className="no-print mx-auto mt-4 max-w-[210mm] px-4 text-center text-xs text-[var(--muted)]">
       Choose “Save as PDF” as the printer to download this payslip.
     </p>
   </div>;

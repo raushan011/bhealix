@@ -80,8 +80,8 @@ export default function InventoryPage() {
       <Card className="grid grid-cols-2 gap-5 p-5 lg:grid-cols-4">
         <Stat label="Units in stock" value={totals.units} />
         <Stat label="Stock value" value={formatMoney(totals.value)} />
-        <Stat label="Low on stock" value={totals.low} tone={totals.low ? "text-amber-700" : undefined} />
-        <Stat label="Out of stock" value={totals.out} tone={totals.out ? "text-rose-700" : undefined} />
+        <Stat label="Low on stock" value={totals.low} tone={totals.low ? "text-[var(--warn-ink)]" : undefined} />
+        <Stat label="Out of stock" value={totals.out} tone={totals.out ? "text-[var(--danger-ink)]" : undefined} />
       </Card>
 
       {negatives.length > 0 && (
@@ -96,7 +96,7 @@ export default function InventoryPage() {
         {TABS.map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setTab(key)}
             className={`inline-flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-full border px-4 text-xs font-semibold ${
-              tab === key ? "border-[var(--brand)] bg-[var(--brand)] text-white" : "border-[var(--line-2)] bg-white text-[var(--ink-2)]"
+              tab === key ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--on-brand)]" : "border-[var(--line-2)] bg-[var(--surface)] text-[var(--ink-2)]"
             }`}><Icon size={14} />{label}</button>
         ))}
       </div>
@@ -119,7 +119,7 @@ export default function InventoryPage() {
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className={`text-sm font-semibold ${row.balance < 0 ? "text-rose-700" : ""}`}>
+                  <p className={`text-sm font-semibold ${row.balance < 0 ? "text-[var(--danger-ink)]" : ""}`}>
                     {row.balance} <span className="font-normal text-[var(--muted)]">{row.unit ?? "in hand"}</span>
                   </p>
                   {row.price > 0 && <p className="text-xs text-[var(--muted)]">{formatMoney(row.stockValue)}</p>}
@@ -285,7 +285,7 @@ function RecordStock({ type, products, onClose, onSaved }: {
                   aria-label="Quantity" className="input w-20 shrink-0" />
                 {lines.length > 1 && (
                   <button type="button" onClick={() => setLines(current => current.filter((_, i) => i !== index))}
-                    aria-label="Remove line" className="tap grid shrink-0 place-items-center rounded-[10px] text-rose-600">
+                    aria-label="Remove line" className="tap grid shrink-0 place-items-center rounded-[10px] text-[var(--danger-ink)]">
                     <X size={16} />
                   </button>
                 )}

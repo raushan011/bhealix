@@ -90,7 +90,7 @@ export function DoctorPicker({ weekday, excludeIds, onSelect, requireLocation = 
     {loading && <Loader2 size={15} className="absolute right-3 top-3.5 animate-spin text-[var(--muted)]" />}
 
     {open && (
-      <ul id={listId} role="listbox" className="absolute z-30 mt-1.5 max-h-80 w-full overflow-y-auto rounded-[10px] border border-[var(--line)] bg-white py-1 shadow-lg">
+      <ul id={listId} role="listbox" className="absolute z-30 mt-1.5 max-h-80 w-full overflow-y-auto rounded-[10px] border border-[var(--line)] bg-[var(--surface)] py-1 shadow-lg">
         {visible.length ? visible.map((doctor, index) => {
           const callTime = weekday !== undefined ? callTimeOn(doctor, weekday) : null;
           const unavailable = weekday !== undefined && !callTime;
@@ -102,7 +102,7 @@ export function DoctorPicker({ weekday, excludeIds, onSelect, requireLocation = 
                 <span className="block truncate text-sm font-semibold">{doctor.name}</span>
                 <span className="block truncate text-xs text-[var(--muted)]">{placeOf(doctor)}</span>
                 {weekday !== undefined && (
-                  <span className={`mt-0.5 flex items-center gap-1 text-xs font-medium ${unavailable ? "text-amber-700" : "text-[var(--brand)]"}`}>
+                  <span className={`mt-0.5 flex items-center gap-1 text-xs font-medium ${unavailable ? "text-[var(--warn-ink)]" : "text-[var(--brand)]"}`}>
                     <Clock size={11} />
                     {callTime ?? `No call time on ${WEEKDAY_SHORT[weekday]}`}
                   </span>

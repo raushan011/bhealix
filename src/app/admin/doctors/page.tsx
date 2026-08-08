@@ -99,7 +99,7 @@ function DirectoryContent() {
     <PageTitle title="Doctor directory" subtitle={`${total} active doctor${total === 1 ? "" : "s"}`} actions={
       <>
         {/* Plain anchor with download: next/link would client-navigate instead of saving the file. */}
-        <a href="/api/doctors/export" download className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-white px-4 text-sm font-semibold hover:bg-[var(--surface-2)]">
+        <a href="/api/doctors/export" download className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-[var(--surface)] px-4 text-sm font-semibold hover:bg-[var(--surface-2)]">
           <Download size={16} />Export
         </a>
         <LinkButton href="/admin/doctors/new"><Plus size={16} />Add doctor</LinkButton>
@@ -193,7 +193,7 @@ function DirectoryContent() {
             </p>
 
             <div className={`mt-2.5 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
-              hasCallTime ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "bg-amber-100 text-amber-900"
+              hasCallTime ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "bg-[var(--warn-bg)] text-[var(--warn-ink)]"
             }`}>
               <Clock size={13} className="shrink-0" />
               <span className="truncate">{summariseCallSchedule(doctor.callSchedule)}</span>
@@ -202,27 +202,27 @@ function DirectoryContent() {
             <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--ink-2)]">
               <span className="flex items-center gap-1.5"><Phone size={12} className="shrink-0 text-[var(--muted)]" />{doctor.phones?.[0] ?? "No phone"}</span>
               {doctor.email && <span className="flex min-w-0 items-center gap-1.5"><Mail size={12} className="shrink-0 text-[var(--muted)]" /><span className="truncate">{doctor.email}</span></span>}
-              {!hasCoordinates && <span className="text-amber-800">No map pin</span>}
+              {!hasCoordinates && <span className="text-[var(--warn-ink)]">No map pin</span>}
             </div>
 
             <div className="mt-3 flex items-center gap-1.5 border-t border-[var(--line)] pt-3">
               <button onClick={() => setEditing(doctor)}
-                className="flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-[var(--line-2)] bg-white px-2 text-xs font-semibold hover:bg-[var(--surface-2)]">
+                className="flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-[var(--line-2)] bg-[var(--surface)] px-2 text-xs font-semibold hover:bg-[var(--surface-2)]">
                 <Clock size={13} />{hasCallTime ? "Call time" : "Add time"}
               </button>
               <Link href={`/admin/doctors/${doctor._id}`}
-                className="flex min-h-9 flex-1 items-center justify-center rounded-lg border border-[var(--line-2)] bg-white px-2 text-xs font-semibold hover:bg-[var(--surface-2)]">
+                className="flex min-h-9 flex-1 items-center justify-center rounded-lg border border-[var(--line-2)] bg-[var(--surface)] px-2 text-xs font-semibold hover:bg-[var(--surface-2)]">
                 Details
               </Link>
               <button onClick={() => archive(doctor)} aria-label={`Remove ${doctor.name}`}
-                className="grid size-9 shrink-0 place-items-center rounded-lg text-rose-600 hover:bg-rose-50"><Trash2 size={14} /></button>
+                className="grid size-9 shrink-0 place-items-center rounded-lg text-[var(--danger-ink)] hover:bg-[var(--danger-bg)]"><Trash2 size={14} /></button>
             </div>
           </Card>;
         })}
       </div>
 
       {pages > 1 && (
-        <nav className="flex items-center justify-between rounded-[10px] border border-[var(--line)] bg-white px-4 py-2.5">
+        <nav className="flex items-center justify-between rounded-[10px] border border-[var(--line)] bg-[var(--surface)] px-4 py-2.5">
           <p className="text-sm text-[var(--muted)]">Page {page} of {pages}</p>
           <div className="flex gap-2">
             <Button tone="secondary" disabled={page <= 1} onClick={() => load(page - 1, filters)}>Previous</Button>

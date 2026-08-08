@@ -12,6 +12,15 @@ const ItemSchema = new Schema({
   hsnCode: String,
   unit: String,
   quantity: { type: Number, required: true, min: 0 },
+  /**
+   * Units given away with the line under a scheme — the "+1" of a 10+1.
+   *
+   * Stored on the line rather than as a line of its own priced at zero: the
+   * offer belongs to the product it is an offer on, and both figures have to
+   * print side by side for the doctor to see what the scheme was. It changes no
+   * money; it does come off the shelf, which lib/inventory/ledger sees to.
+   */
+  freeQuantity: { type: Number, default: 0, min: 0 },
   rate: { type: Number, required: true, min: 0 },
   discountType: { type: String, enum: DISCOUNT_TYPES, default: "PERCENT" },
   discountValue: { type: Number, default: 0, min: 0 },

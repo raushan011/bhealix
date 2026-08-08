@@ -37,7 +37,7 @@ export default function AddDoctorFromField() {
       {TABS.map(({ key, label }) => (
         <button key={key} onClick={() => setTab(key)}
           className={`inline-flex min-h-[38px] flex-1 items-center justify-center rounded-full border px-4 text-xs font-semibold ${
-            tab === key ? "border-[var(--brand)] bg-[var(--brand)] text-white" : "border-[var(--line-2)] bg-white text-[var(--ink-2)]"
+            tab === key ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--on-brand)]" : "border-[var(--line-2)] bg-[var(--surface)] text-[var(--ink-2)]"
           }`}>{label}</button>
       ))}
     </div>
@@ -209,7 +209,7 @@ function ManualAdd({ onSaved }: { onSaved: (id: string) => void }) {
           Without one this doctor cannot be placed on a route. If you are at the clinic now, this is the moment to catch it.
         </p>
         {coordinates ? (
-          <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+          <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-[var(--ok-ink)]">
             <Check size={13} />Saved: {coordinates.latitude.toFixed(5)}, {coordinates.longitude.toFixed(5)}
           </p>
         ) : (
@@ -220,7 +220,7 @@ function ManualAdd({ onSaved }: { onSaved: (id: string) => void }) {
       </div>
 
       {!coordinates && (
-        <p className="flex items-start gap-2 text-xs text-amber-800">
+        <p className="flex items-start gap-2 text-xs text-[var(--warn-ink)]">
           <TriangleAlert size={13} className="mt-0.5 shrink-0" />
           You can save without a location and add it on your next visit.
         </p>

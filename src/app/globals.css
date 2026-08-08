@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/*
+ * Two palettes, one set of names.
+ *
+ * Every screen paints with these tokens and never with a colour of its own, so
+ * the dark palette is a redefinition rather than a second stylesheet. The names
+ * say what a colour is for — surface, ink, line — not what it looks like, which
+ * is what lets `--ink` be near-black on cream and near-white on brown without a
+ * single call site changing.
+ */
 :root {
   /* Brand: warm cream paper with a deep walnut ink. */
   --bg: #fff9ed;
@@ -9,12 +18,125 @@
   --brand-hover: #5b3617;
   --brand-soft: #f6ebda;
   --brand-tint: #efe0cb;
+  /* Text on a brand-filled button. Follows the brand, which inverts in dark. */
+  --on-brand: #ffffff;
 
   --ink: #1c1611;
   --ink-2: #4a3a2c;
   --muted: #7a695b;
   --line: #ecdfc9;
   --line-2: #dbc8ab;
+  --placeholder: #a4917f;
+  --focus-ring: rgb(115 70 31 / .14);
+  /* A translucent surface for the bars that sit over scrolling content. */
+  --surface-veil: rgb(255 255 255 / .95);
+  --overlay: rgb(0 0 0 / .4);
+
+  /*
+   * Status colours. A badge, a notice and a figure that has gone the wrong way
+   * all read from these, so "this went well" looks the same wherever it is said
+   * — and stays legible when the page turns dark, which the Tailwind palettes
+   * these replaced did not.
+   */
+  --ok-bg: #ecfdf5;
+  --ok-ink: #065f46;
+  --ok-line: #a7f3d0;
+  --warn-bg: #fef6e0;
+  --warn-ink: #78350f;
+  --warn-line: #fbdda0;
+  --danger-bg: #fff1f2;
+  --danger-ink: #a4132f;
+  --danger-line: #fbcfd5;
+  --info-bg: #f0f7ff;
+  --info-ink: #0b5a86;
+  --info-line: #bcdcf5;
+
+  color-scheme: light;
+}
+
+/*
+ * The dark palette, kept warm: this is a brown-paper brand, and a neutral grey
+ * dark mode would read as a different product. The brand itself lightens to a
+ * tan — walnut on near-black is unreadable — and `--on-brand` darkens with it.
+ */
+:root[data-theme="dark"] {
+  --bg: #15110d;
+  --surface: #1e1913;
+  --surface-2: #29221b;
+  --brand: #e2b384;
+  --brand-hover: #f0c69a;
+  --brand-soft: #33281e;
+  --brand-tint: #3f3226;
+  --on-brand: #1a1310;
+
+  --ink: #f7ece0;
+  --ink-2: #ddcbb7;
+  --muted: #a3907c;
+  --line: #322a21;
+  --line-2: #4b3d31;
+  --placeholder: #8a7866;
+  --focus-ring: rgb(226 179 132 / .22);
+  --surface-veil: rgb(30 25 19 / .95);
+  --overlay: rgb(0 0 0 / .6);
+
+  --ok-bg: #11251c;
+  --ok-ink: #6ee7b7;
+  --ok-line: #22503c;
+  --warn-bg: #2b1f0c;
+  --warn-ink: #f3c464;
+  --warn-line: #4e3a15;
+  --danger-bg: #2b1318;
+  --danger-ink: #fba5b0;
+  --danger-line: #55232c;
+  --info-bg: #0f2131;
+  --info-ink: #7dd3fc;
+  --info-line: #23455e;
+
+  color-scheme: dark;
+}
+
+/*
+ * Nobody has chosen yet: follow the device. Written as a copy of the block
+ * above rather than a variable indirection so that `data-theme="light"` on the
+ * root beats the system preference — a rep who picks light on a phone that is
+ * dark at night gets light, and keeps it.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    --bg: #15110d;
+    --surface: #1e1913;
+    --surface-2: #29221b;
+    --brand: #e2b384;
+    --brand-hover: #f0c69a;
+    --brand-soft: #33281e;
+    --brand-tint: #3f3226;
+    --on-brand: #1a1310;
+
+    --ink: #f7ece0;
+    --ink-2: #ddcbb7;
+    --muted: #a3907c;
+    --line: #322a21;
+    --line-2: #4b3d31;
+    --placeholder: #8a7866;
+    --focus-ring: rgb(226 179 132 / .22);
+    --surface-veil: rgb(30 25 19 / .95);
+    --overlay: rgb(0 0 0 / .6);
+
+    --ok-bg: #11251c;
+    --ok-ink: #6ee7b7;
+    --ok-line: #22503c;
+    --warn-bg: #2b1f0c;
+    --warn-ink: #f3c464;
+    --warn-line: #4e3a15;
+    --danger-bg: #2b1318;
+    --danger-ink: #fba5b0;
+    --danger-line: #55232c;
+    --info-bg: #0f2131;
+    --info-ink: #7dd3fc;
+    --info-line: #23455e;
+
+    color-scheme: dark;
+  }
 }
 
 /*
@@ -69,9 +191,9 @@
   .input:focus, .select:focus, .textarea:focus {
     outline: none;
     border-color: var(--brand);
-    box-shadow: 0 0 0 3px rgb(115 70 31 / .14);
+    box-shadow: 0 0 0 3px var(--focus-ring);
   }
-  .input::placeholder, .textarea::placeholder { color: #a4917f; }
+  .input::placeholder, .textarea::placeholder { color: var(--placeholder); }
   .input:disabled, .select:disabled { background: var(--surface-2); color: var(--muted); }
 
   .card {
@@ -132,7 +254,14 @@
 @page { size: A4; margin: 12mm; }
 
 @media print {
-  html, body { background: #fff; }
+  /*
+   * Paper is light whatever the screen is. The bill and the payslip paint
+   * themselves in fixed ink rather than in tokens for exactly this reason; this
+   * is the safety net around them, so a page printed at night from a dark
+   * screen still comes out of the printer readable.
+   */
+  :root { color-scheme: light; }
+  html, body { background: #fff; color: #111827; }
   .no-print { display: none !important; }
   .invoice-sheet, .payslip-sheet {
     width: 100%;

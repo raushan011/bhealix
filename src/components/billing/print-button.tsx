@@ -42,7 +42,7 @@ export function PrintButton() {
   }, []);
 
   return <button onClick={() => window.print()}
-    className="inline-flex min-h-[44px] items-center gap-2 rounded-[10px] bg-[var(--brand)] px-4 text-sm font-semibold text-white">
+    className="inline-flex min-h-[44px] items-center gap-2 rounded-[10px] bg-[var(--brand)] px-4 text-sm font-semibold text-[var(--on-brand)]">
     <Printer size={16} />Print / Save as PDF
   </button>;
 }

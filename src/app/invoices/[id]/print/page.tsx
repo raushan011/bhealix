@@ -42,7 +42,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
 
   const record = JSON.parse(JSON.stringify(invoice)) as InvoiceRecord;
 
-  return <div className="min-h-[100dvh] bg-neutral-100 py-4 print:bg-white print:py-0">
+  return <div className="min-h-[100dvh] bg-[var(--surface-2)] py-4 print:bg-white print:py-0">
     <div className="no-print mx-auto mb-4 flex max-w-[210mm] flex-wrap items-center justify-between gap-3 px-4">
       <Link href={usesFieldPanel(session.role) ? `/employee/bills/${id}` : `/admin/billing/${id}`}
         className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--brand)]">
@@ -50,7 +50,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
       </Link>
       <div className="flex gap-2">
         <Link href={homeFor(session.role)}
-          className="inline-flex min-h-[44px] items-center rounded-[10px] border border-neutral-300 bg-white px-4 text-sm font-semibold">
+          className="inline-flex min-h-[44px] items-center rounded-[10px] border border-[var(--line-2)] bg-[var(--surface)] px-4 text-sm font-semibold">
           Home
         </Link>
         <PrintButton />
@@ -59,7 +59,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
 
     <InvoiceDocument invoice={record} settings={settings} />
 
-    <p className="no-print mx-auto mt-4 max-w-[210mm] px-4 text-center text-xs text-neutral-500">
+    <p className="no-print mx-auto mt-4 max-w-[210mm] px-4 text-center text-xs text-[var(--muted)]">
       Choose “Save as PDF” as the printer to download this bill.
     </p>
   </div>;

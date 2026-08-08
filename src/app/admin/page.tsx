@@ -51,7 +51,7 @@ export default async function AdminDashboard() {
       <Stat label="Active doctors" value={doctors} />
       <Stat label="Field team" value={team} />
       <Stat label="Visits today" value={todayVisits} />
-      <Stat label="Completed today" value={todayDone} tone="text-emerald-700" />
+      <Stat label="Completed today" value={todayDone} tone="text-[var(--ok-ink)]" />
     </Card>
 
     <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
@@ -65,7 +65,7 @@ export default async function AdminDashboard() {
     {(missingCallTime > 0 || missingLocation > 0) && (
       <Card className="p-5">
         <div className="flex items-start gap-3">
-          <TriangleAlert size={18} className="mt-0.5 shrink-0 text-amber-600" />
+          <TriangleAlert size={18} className="mt-0.5 shrink-0 text-[var(--warn-ink)]" />
           <div className="min-w-0">
             <h2 className="text-[15px] font-semibold">Data that blocks route planning</h2>
             <p className="mt-1 text-sm text-[var(--muted)]">
@@ -73,12 +73,12 @@ export default async function AdminDashboard() {
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {missingCallTime > 0 && (
-                <Link href="/admin/doctors?missingCallTime=1" className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800">
+                <Link href="/admin/doctors?missingCallTime=1" className="inline-flex items-center gap-1.5 rounded-full bg-[var(--warn-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--warn-ink)]">
                   <Clock size={13} />{missingCallTime} without call time
                 </Link>
               )}
               {missingLocation > 0 && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--warn-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--warn-ink)]">
                   <MapPin size={13} />{missingLocation} without coordinates
                 </span>
               )}

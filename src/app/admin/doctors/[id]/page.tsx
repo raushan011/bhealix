@@ -68,7 +68,7 @@ export default async function DoctorDetail({ params }: { params: Promise<{ id: s
             <div className="sm:col-span-2"><dt className="text-xs text-[var(--muted)]">Address</dt>
               <dd className="mt-0.5 flex items-start gap-2 text-sm font-medium"><MapPin size={14} className="mt-0.5 shrink-0 text-[var(--muted)]" />{doctor.fullAddress || [doctor.area, doctor.city].filter(Boolean).join(", ") || "Not recorded"}</dd></div>
             <div><dt className="text-xs text-[var(--muted)]">Coordinates</dt>
-              <dd className={`mt-0.5 text-sm font-medium ${coordinates?.length ? "" : "text-amber-700"}`}>
+              <dd className={`mt-0.5 text-sm font-medium ${coordinates?.length ? "" : "text-[var(--warn-ink)]"}`}>
                 {coordinates?.length ? `${coordinates[1].toFixed(5)}, ${coordinates[0].toFixed(5)}` : "Missing — cannot be route-planned"}</dd></div>
             <div><dt className="text-xs text-[var(--muted)]">Assigned to</dt>
               <dd className="mt-0.5 text-sm font-medium">{doctor.assignedTo?.name ?? "Not assigned"}</dd></div>

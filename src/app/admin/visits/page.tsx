@@ -65,7 +65,7 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
         const active = status === tab.value || (!status && !tab.value);
         return <Link key={tab.label} href={tab.value ? `/admin/visits?status=${tab.value}` : "/admin/visits"}
           className={`min-h-[38px] shrink-0 rounded-full border px-4 text-xs font-semibold leading-[36px] ${
-            active ? "border-[var(--brand)] bg-[var(--brand)] text-white" : "border-[var(--line-2)] bg-white text-[var(--ink-2)]"
+            active ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--on-brand)]" : "border-[var(--line-2)] bg-[var(--surface)] text-[var(--ink-2)]"
           }`}>{tab.label}</Link>;
       })}
     </div>

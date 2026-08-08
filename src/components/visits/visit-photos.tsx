@@ -341,7 +341,7 @@ export function VisitPhotos({ visitId, initial, canAdd }: {
       {photos.length ? ` — the oldest here goes in ${daysLeft(photos[0].expiresAt)} days` : ""}.
     </p>
 
-    {full && canAdd && <p className="text-xs font-medium text-amber-700">This visit already holds the maximum of {MAX_PHOTOS_PER_VISIT} photos.</p>}
+    {full && canAdd && <p className="text-xs font-medium text-[var(--warn-ink)]">This visit already holds the maximum of {MAX_PHOTOS_PER_VISIT} photos.</p>}
 
     {viewing && (
       <Modal title="Visit photo"
@@ -381,20 +381,20 @@ function LocationStrip({ located, locating, error, onRetry }: {
   }
 
   if (!located) {
-    return <div className="rounded-[10px] border border-amber-200 bg-amber-50 p-3">
-      <p className="flex items-start gap-1.5 text-xs font-medium text-amber-900">
+    return <div className="rounded-[10px] border border-[var(--warn-line)] bg-[var(--warn-bg)] p-3">
+      <p className="flex items-start gap-1.5 text-xs font-medium text-[var(--warn-ink)]">
         <Crosshair size={13} className="mt-0.5 shrink-0" />
         {error || "Your location has not been found yet."}
       </p>
       <button onClick={onRetry}
-        className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-amber-900 underline">
+        className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--warn-ink)] underline">
         <RefreshCw size={12} />Try again
       </button>
     </div>;
   }
 
   const accuracy = formatAccuracy(located.fix.accuracy);
-  return <p className="flex items-start gap-1.5 rounded-[10px] bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+  return <p className="flex items-start gap-1.5 rounded-[10px] bg-[var(--ok-bg)] px-3 py-2 text-xs text-[var(--ok-ink)]">
     <MapPin size={13} className="mt-0.5 shrink-0" />
     <span className="min-w-0">
       <span className="font-semibold">{placeLabel(located.place, located.fix)}</span>

@@ -62,7 +62,7 @@ export default async function PlanDetail({ params }: { params: Promise<{ id: str
         <Badge tone={statusTone(plan.status)}>{plan.status}</Badge>
         {routeLink && (
           <a href={routeLink} target="_blank" rel="noreferrer"
-            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-white px-4 text-sm font-semibold transition-colors hover:bg-[var(--surface-2)]">
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-[var(--surface)] px-4 text-sm font-semibold transition-colors hover:bg-[var(--surface-2)]">
             <ExternalLink size={15} />Open in Maps
           </a>
         )}
@@ -80,7 +80,7 @@ export default async function PlanDetail({ params }: { params: Promise<{ id: str
     </Card>
 
     {conflicts > 0 && (
-      <div className="flex items-start gap-2.5 rounded-[10px] border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+      <div className="flex items-start gap-2.5 rounded-[10px] border border-[var(--warn-line)] bg-[var(--warn-bg)] p-3 text-sm text-[var(--warn-ink)]">
         <TriangleAlert size={16} className="mt-0.5 shrink-0" />
         <p>{conflicts} stop{conflicts === 1 ? "" : "s"} fall outside the doctor&apos;s call window. Consider rebuilding this plan with an earlier start.</p>
       </div>
@@ -100,15 +100,15 @@ export default async function PlanDetail({ params }: { params: Promise<{ id: str
       <ol className="divide-y divide-[var(--line)]">
         {plan.stops.map(stop => {
           const visit = stop.doctor ? visitByDoctor.get(String(stop.doctor._id)) : undefined;
-          return <li key={stop.sequence} className={`flex items-start gap-3 px-5 py-4 ${stop.withinCallTime ? "" : "bg-amber-50"}`}>
-            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-[11px] font-bold text-white">{stop.sequence}</span>
+          return <li key={stop.sequence} className={`flex items-start gap-3 px-5 py-4 ${stop.withinCallTime ? "" : "bg-[var(--warn-bg)]"}`}>
+            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-[11px] font-bold text-[var(--on-brand)]">{stop.sequence}</span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold">{stop.doctor?.name ?? "Doctor removed"}</p>
               <p className="truncate text-xs text-[var(--muted)]">{[stop.doctor?.clinicName, stop.doctor?.area, stop.doctor?.city].filter(Boolean).join(" · ") || "—"}</p>
               {stop.doctor?.phones?.[0] && (
                 <p className="mt-0.5 flex items-center gap-1 text-xs text-[var(--ink-2)]"><Phone size={11} />{stop.doctor.phones[0]}</p>
               )}
-              {!stop.withinCallTime && <p className="mt-0.5 text-xs font-medium text-amber-800">Outside the doctor&apos;s call window</p>}
+              {!stop.withinCallTime && <p className="mt-0.5 text-xs font-medium text-[var(--warn-ink)]">Outside the doctor&apos;s call window</p>}
               {stop.timingUnknown && <p className="mt-0.5 text-xs text-[var(--muted)]">No call time recorded</p>}
             </div>
             <div className="shrink-0 text-right">

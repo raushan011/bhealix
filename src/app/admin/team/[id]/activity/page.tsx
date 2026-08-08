@@ -145,7 +145,7 @@ export default async function FieldActivityPage({ params, searchParams }: {
     <PageTitle title={`${employee.name} in the field`}
       subtitle={[ROLE_LABEL[employee.role], employee.employeeId, employee.designation, period].filter(Boolean).join(" · ")}
       actions={<Link href={`/admin/team/${id}`}
-        className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-white px-4 text-sm font-semibold">
+        className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-[var(--surface)] px-4 text-sm font-semibold">
         Employment record
       </Link>} />
 
@@ -154,7 +154,7 @@ export default async function FieldActivityPage({ params, searchParams }: {
         const active = range.days === days;
         return <Link key={range.label} href={`/admin/team/${id}/activity?days=${range.days}`}
           className={`min-h-[38px] shrink-0 rounded-full border px-4 text-xs font-semibold leading-[36px] ${
-            active ? "border-[var(--brand)] bg-[var(--brand)] text-white" : "border-[var(--line-2)] bg-white text-[var(--ink-2)]"
+            active ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--on-brand)]" : "border-[var(--line-2)] bg-[var(--surface)] text-[var(--ink-2)]"
           }`}>{range.label}</Link>;
       })}
     </div>
@@ -164,7 +164,7 @@ export default async function FieldActivityPage({ params, searchParams }: {
     <Card className="grid grid-cols-2 gap-5 p-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
       <Stat label="Doctors met" value={doctorsMet.length} />
       <Stat label="Visits completed" value={totals.completed} />
-      <Stat label="Missed" value={totals.missed} tone={totals.missed ? "text-rose-600" : undefined} />
+      <Stat label="Missed" value={totals.missed} tone={totals.missed ? "text-[var(--danger-ink)]" : undefined} />
       <Stat label="Still to do" value={totals.pending} />
       <Stat label="Completion" value={`${rate}%`} />
       <Stat label="Samples given" value={totals.samples} />

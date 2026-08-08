@@ -30,7 +30,7 @@ type LoadedPlan = {
 
 function Step({ n, title, hint, done }: { n: number; title: string; hint?: string; done?: boolean }) {
   return <div className="flex items-start gap-2.5">
-    <span className={`grid size-6 shrink-0 place-items-center rounded-full text-[11px] font-bold ${done ? "bg-emerald-600 text-white" : "bg-[var(--brand)] text-white"}`}>
+    <span className={`grid size-6 shrink-0 place-items-center rounded-full text-[11px] font-bold ${done ? "bg-[var(--ok-ink)] text-[var(--on-brand)]" : "bg-[var(--brand)] text-[var(--on-brand)]"}`}>
       {done ? <Check size={13} /> : n}
     </span>
     <div className="min-w-0">
@@ -222,16 +222,16 @@ function PlanBuilder() {
       <div className="mt-4 sm:pl-8">
         {reference ? (
           <div className="flex items-center gap-3 rounded-[10px] border border-[var(--brand)] bg-[var(--brand-soft)]/40 p-3">
-            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-white"><Navigation size={15} /></span>
+            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-[var(--on-brand)]"><Navigation size={15} /></span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold">{reference.name}</p>
               <p className="truncate text-xs text-[var(--muted)]">{placeOf(reference)}</p>
-              <p className={`mt-0.5 flex items-center gap-1 text-xs font-medium ${callTimeOn(reference, weekday) ? "text-[var(--brand)]" : "text-amber-700"}`}>
+              <p className={`mt-0.5 flex items-center gap-1 text-xs font-medium ${callTimeOn(reference, weekday) ? "text-[var(--brand)]" : "text-[var(--warn-ink)]"}`}>
                 <Clock size={11} />{callTimeOn(reference, weekday) ?? `No call time on ${WEEKDAYS[weekday]}`}
               </p>
             </div>
             <button onClick={() => { setReference(null); reset(); }} aria-label="Change starting doctor"
-              className="tap grid shrink-0 place-items-center rounded-[10px] text-[var(--muted)] hover:bg-white"><X size={16} /></button>
+              className="tap grid shrink-0 place-items-center rounded-[10px] text-[var(--muted)] hover:bg-[var(--surface)]"><X size={16} /></button>
           </div>
         ) : (
           <DoctorPicker weekday={weekday} excludeIds={excludeIds} onSelect={doctor => { setReference(doctor); reset(); }}
@@ -258,12 +258,12 @@ function PlanBuilder() {
                 <MapPin size={14} className="shrink-0 text-[var(--brand)]" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{doctor.name}</p>
-                  <p className={`flex items-center gap-1 truncate text-xs ${callTime ? "text-[var(--muted)]" : "text-amber-700"}`}>
+                  <p className={`flex items-center gap-1 truncate text-xs ${callTime ? "text-[var(--muted)]" : "text-[var(--warn-ink)]"}`}>
                     <Clock size={11} />{callTime ?? `No call time on ${WEEKDAYS[weekday]}`}
                   </p>
                 </div>
                 <button onClick={() => removeDoctor(doctor._id)} aria-label={`Remove ${doctor.name}`}
-                  className="tap grid shrink-0 place-items-center rounded-[10px] text-rose-600 hover:bg-rose-50"><Trash2 size={14} /></button>
+                  className="tap grid shrink-0 place-items-center rounded-[10px] text-[var(--danger-ink)] hover:bg-[var(--danger-bg)]"><Trash2 size={14} /></button>
               </li>;
             })}
           </ul>
@@ -294,13 +294,13 @@ function PlanBuilder() {
         </div>
 
         {preview.outsideCallTimeCount > 0 && (
-          <div className="flex items-start gap-2.5 rounded-[10px] border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <div className="flex items-start gap-2.5 rounded-[10px] border border-[var(--warn-line)] bg-[var(--warn-bg)] p-3 text-sm text-[var(--warn-ink)]">
             <TriangleAlert size={16} className="mt-0.5 shrink-0" />
             <p><strong>{preview.outsideCallTimeCount} doctor{preview.outsideCallTimeCount === 1 ? "" : "s"}</strong> cannot be reached inside their call window on this day. Start earlier, shorten visits, or move them to another day.</p>
           </div>
         )}
         {preview.unknownTimingCount > 0 && (
-          <div className="flex items-start gap-2.5 rounded-[10px] border border-[var(--line)] bg-white p-3 text-sm text-[var(--ink-2)]">
+          <div className="flex items-start gap-2.5 rounded-[10px] border border-[var(--line)] bg-[var(--surface)] p-3 text-sm text-[var(--ink-2)]">
             <Clock size={16} className="mt-0.5 shrink-0 text-[var(--muted)]" />
             <p><strong>{preview.unknownTimingCount}</strong> have no recorded call time for {WEEKDAYS[weekday]}, so they were placed by distance alone. Ask the rep to confirm timings on the visit.</p>
           </div>
@@ -308,12 +308,12 @@ function PlanBuilder() {
 
         <ol className="space-y-2">
           {preview.stops.map(stop => (
-            <li key={stop.doctor._id} className={`flex items-center gap-3 rounded-[10px] border p-3 ${stop.withinCallTime ? "border-[var(--line)]" : "border-amber-300 bg-amber-50"}`}>
-              <span className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-[11px] font-bold text-white">{stop.sequence}</span>
+            <li key={stop.doctor._id} className={`flex items-center gap-3 rounded-[10px] border p-3 ${stop.withinCallTime ? "border-[var(--line)]" : "border-[var(--warn-line)] bg-[var(--warn-bg)]"}`}>
+              <span className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-[11px] font-bold text-[var(--on-brand)]">{stop.sequence}</span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{stop.doctor.name}</p>
                 <p className="truncate text-xs text-[var(--muted)]">{placeOf(stop.doctor)}</p>
-                {!stop.withinCallTime && <p className="text-xs font-medium text-amber-800">Outside the doctor&apos;s call window</p>}
+                {!stop.withinCallTime && <p className="text-xs font-medium text-[var(--warn-ink)]">Outside the doctor&apos;s call window</p>}
                 {stop.timingUnknown && <p className="text-xs text-[var(--muted)]">Call time not recorded</p>}
                 {stop.waitMinutes > 0 && <p className="text-xs text-[var(--muted)]">Waits {formatDuration(stop.waitMinutes)} for the window to open</p>}
               </div>
@@ -331,7 +331,7 @@ function PlanBuilder() {
           ))}
         </ol>
 
-        {link && <a href={link} target="_blank" rel="noreferrer" className="inline-flex min-h-[44px] items-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-white px-4 text-sm font-semibold hover:bg-[var(--surface-2)]">
+        {link && <a href={link} target="_blank" rel="noreferrer" className="inline-flex min-h-[44px] items-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-[var(--surface)] px-4 text-sm font-semibold hover:bg-[var(--surface-2)]">
           <ExternalLink size={15} />Open in Google Maps
         </a>}
 

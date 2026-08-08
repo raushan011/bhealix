@@ -61,7 +61,7 @@ export default function FieldDoctors() {
               <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-[var(--muted)]">
                 <MapPin size={11} className="shrink-0" />{place}
               </p>
-              <p className={`mt-0.5 flex items-center gap-1 truncate text-xs font-medium ${doctor.callSchedule?.length ? "text-[var(--brand)]" : "text-amber-700"}`}>
+              <p className={`mt-0.5 flex items-center gap-1 truncate text-xs font-medium ${doctor.callSchedule?.length ? "text-[var(--brand)]" : "text-[var(--warn-ink)]"}`}>
                 <Clock size={11} className="shrink-0" />{summariseCallSchedule(doctor.callSchedule)}
               </p>
               {doctor.phones?.[0] && (

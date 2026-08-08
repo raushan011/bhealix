@@ -184,11 +184,11 @@ function PrepareMonth({ onClose, onDone }: { onClose: () => void; onDone: (id: s
         </Card>
 
         {preview.skipped.length > 0 && (
-          <div className="rounded-[10px] border border-amber-200 bg-amber-50 p-3">
-            <p className="flex items-center gap-1.5 text-sm font-semibold text-amber-900">
+          <div className="rounded-[10px] border border-[var(--warn-line)] bg-[var(--warn-bg)] p-3">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-[var(--warn-ink)]">
               <AlertTriangle size={15} />{preview.skipped.length} not being paid
             </p>
-            <ul className="mt-1.5 space-y-1 text-xs text-amber-900">
+            <ul className="mt-1.5 space-y-1 text-xs text-[var(--warn-ink)]">
               {preview.skipped.map(person => (
                 <li key={person.employeeId}>
                   <span className="font-medium">{person.name}</span> — {person.reason}

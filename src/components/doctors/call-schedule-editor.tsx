@@ -108,8 +108,8 @@ export function CallScheduleEditor({ doctorId, doctorName, initial, onSaved, onC
           <button key={day} type="button" onClick={() => toggleDay(weekday)} aria-pressed={selected.has(weekday)}
             className={`min-h-[38px] rounded-[10px] border px-3 text-xs font-semibold transition-colors ${
               selected.has(weekday)
-                ? "border-[var(--brand)] bg-[var(--brand)] text-white"
-                : "border-[var(--line-2)] bg-white text-[var(--ink-2)] hover:bg-[var(--surface-2)]"
+                ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--on-brand)]"
+                : "border-[var(--line-2)] bg-[var(--surface)] text-[var(--ink-2)] hover:bg-[var(--surface-2)]"
             }`}>{WEEKDAY_SHORT[weekday]}</button>
         ))}
       </div>

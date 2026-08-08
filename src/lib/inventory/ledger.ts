@@ -2,6 +2,7 @@ import { Types } from "mongoose";
 import { Product } from "@/models/Catalog";
 import { StockMovement } from "@/models/Inventory";
 import { SampleMovement } from "@/models/Sample";
+import { unitsSupplied } from "@/lib/billing/gst";
 import { levelChange, stockAlert, type StockLevel } from "./movements";
 
 /**
@@ -107,7 +108,7 @@ export async function balancesByProduct(names?: string[]): Promise<Map<string, n
  */
 export async function syncInvoiceStock(invoice: {
   _id: unknown;
-  items?: Array<{ product?: unknown; name: string; quantity: number }> | null;
+  items?: Array<{ product?: unknown; name: string; quantity: number; freeQuantity?: number }> | null;
   status?: string;
   invoiceDate?: Date | null;
   createdBy?: unknown;
@@ -116,12 +117,16 @@ export async function syncInvoiceStock(invoice: {
   if (invoice.status === "Cancelled") return 0;
 
   const rows = (invoice.items ?? [])
-    .filter(item => item?.name && Number(item.quantity) > 0)
-    .map(item => ({
+    // Scheme goods are charged for nothing and come off the same shelf, so the
+    // shelf is drawn down by both figures — a line that is *only* free goods
+    // still moves stock.
+    .map(item => ({ item, supplied: unitsSupplied(item) }))
+    .filter(({ item, supplied }) => item?.name && supplied > 0)
+    .map(({ item, supplied }) => ({
       product: item.product ?? undefined,
       productName: item.name,
       type: "SALE" as const,
-      quantity: -Math.abs(Math.trunc(Number(item.quantity))),
+      quantity: -supplied,
       invoice: invoice._id,
       actor: invoice.createdBy,
       occurredAt: invoice.invoiceDate ?? new Date()

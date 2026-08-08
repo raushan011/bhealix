@@ -39,7 +39,7 @@ export default function ProfilePage() {
 
     <Card className="p-4">
       <div className="flex items-center gap-3">
-        <span className="grid size-12 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-white"><UserRound size={22} /></span>
+        <span className="grid size-12 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-[var(--on-brand)]"><UserRound size={22} /></span>
         <div className="min-w-0">
           <p className="truncate font-semibold">{me.name}</p>
           <p className="truncate text-sm text-[var(--muted)]">{ROLE_LABEL[me.role]} · {me.employeeId}</p>

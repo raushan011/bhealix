@@ -25,8 +25,8 @@ export default async function MySamplesPage() {
     ) : <>
       <Card className="grid grid-cols-3 gap-4 p-4">
         <Stat label="Issued" value={issued} />
-        <Stat label="Given out" value={dispensed} tone="text-emerald-700" />
-        <Stat label="In hand" value={balance} tone={balance < 0 ? "text-rose-700" : undefined} />
+        <Stat label="Given out" value={dispensed} tone="text-[var(--ok-ink)]" />
+        <Stat label="In hand" value={balance} tone={balance < 0 ? "text-[var(--danger-ink)]" : undefined} />
       </Card>
 
       {short.length > 0 && (
@@ -41,7 +41,7 @@ export default async function MySamplesPage() {
           <div key={row.product} className="px-4 py-3">
             <div className="flex items-center justify-between gap-3">
               <p className="min-w-0 flex-1 truncate text-sm font-semibold">{row.product}</p>
-              <p className={`shrink-0 text-sm font-semibold ${row.balance < 0 ? "text-rose-700" : ""}`}>
+              <p className={`shrink-0 text-sm font-semibold ${row.balance < 0 ? "text-[var(--danger-ink)]" : ""}`}>
                 {row.balance} <span className="font-normal text-[var(--muted)]">in hand</span>
               </p>
             </div>

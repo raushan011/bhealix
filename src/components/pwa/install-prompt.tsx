@@ -75,7 +75,7 @@ export function InstallPrompt({ description = "Add it to your home screen for fu
   if (!installEvent && !showIosHelp) return null;
 
   return <section className="card mb-4 flex items-start gap-3 border-[var(--line-2)] bg-[var(--surface-2)] p-3.5">
-    <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-[var(--brand)] text-white"><Smartphone size={17} /></span>
+    <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-[var(--brand)] text-[var(--on-brand)]"><Smartphone size={17} /></span>
     <div className="min-w-0 flex-1">
       <p className="text-sm font-semibold">Install BHEALIX</p>
       {showIosHelp
@@ -84,11 +84,11 @@ export function InstallPrompt({ description = "Add it to your home screen for fu
           </p>
         : <>
             <p className="mt-0.5 text-[13px] text-[var(--muted)]">{description}</p>
-            <button onClick={install} className="mt-2.5 inline-flex min-h-[36px] items-center rounded-[10px] bg-[var(--brand)] px-3.5 text-[13px] font-semibold text-white hover:bg-[var(--brand-hover)]">
+            <button onClick={install} className="mt-2.5 inline-flex min-h-[36px] items-center rounded-[10px] bg-[var(--brand)] px-3.5 text-[13px] font-semibold text-[var(--on-brand)] hover:bg-[var(--brand-hover)]">
               Install
             </button>
           </>}
     </div>
-    <button onClick={dismiss} aria-label="Dismiss" className="tap -m-1 grid shrink-0 place-items-center rounded-[10px] text-[var(--muted)] hover:bg-white"><X size={16} /></button>
+    <button onClick={dismiss} aria-label="Dismiss" className="tap -m-1 grid shrink-0 place-items-center rounded-[10px] text-[var(--muted)] hover:bg-[var(--surface)]"><X size={16} /></button>
   </section>;
 }

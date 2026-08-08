@@ -45,7 +45,7 @@ export default async function MorePage() {
     </Card>
 
     <Card className="p-2">
-      <SignOutButton className="tap flex w-full items-center justify-center gap-2 rounded-[10px] text-sm font-semibold text-rose-600">
+      <SignOutButton className="tap flex w-full items-center justify-center gap-2 rounded-[10px] text-sm font-semibold text-[var(--danger-ink)]">
         <LogOut size={16} />Sign out
       </SignOutButton>
     </Card>

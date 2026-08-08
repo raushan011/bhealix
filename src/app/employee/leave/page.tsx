@@ -60,7 +60,7 @@ export default function MyLeavePage() {
             <p className="mt-0.5 text-xl font-semibold">
               {balance.available}<span className="text-xs font-normal text-[var(--muted)]">/{balance.entitled}</span>
             </p>
-            {balance.pending > 0 && <p className="text-[11px] text-amber-700">{balance.pending} awaiting approval</p>}
+            {balance.pending > 0 && <p className="text-[11px] text-[var(--warn-ink)]">{balance.pending} awaiting approval</p>}
           </div>
         ))}
       </Card>

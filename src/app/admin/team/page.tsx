@@ -113,7 +113,7 @@ export default function TeamPage() {
                 {member.active ? "Deactivate" : "Activate"}
               </Button>
               <button onClick={() => remove(member)} aria-label={`Delete ${member.name}`}
-                className="tap grid place-items-center rounded-[10px] text-rose-600 hover:bg-rose-50"><Trash2 size={16} /></button>
+                className="tap grid place-items-center rounded-[10px] text-[var(--danger-ink)] hover:bg-[var(--danger-bg)]"><Trash2 size={16} /></button>
             </div>
           </div>
         ))}

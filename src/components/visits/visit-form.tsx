@@ -179,7 +179,7 @@ export function VisitForm({ visit, doctor, products, stock = {}, photos = [] }:
             {VISIT_OUTCOMES.map(option => (
               <button key={option} type="button" onClick={() => setOutcome(option)}
                 className={`min-h-[44px] rounded-[10px] border px-3 text-left text-sm font-medium ${
-                  outcome === option ? "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand)]" : "border-[var(--line-2)] bg-white"
+                  outcome === option ? "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand)]" : "border-[var(--line-2)] bg-[var(--surface)]"
                 }`}>{option}</button>
             ))}
           </div>
@@ -192,7 +192,7 @@ export function VisitForm({ visit, doctor, products, stock = {}, photos = [] }:
               {products.map(product => (
                 <button key={product} type="button" onClick={() => toggleProduct(product)}
                   className={`min-h-[36px] rounded-full border px-3 text-xs font-semibold ${
-                    discussed.includes(product) ? "border-[var(--brand)] bg-[var(--brand)] text-white" : "border-[var(--line-2)] bg-white text-[var(--ink-2)]"
+                    discussed.includes(product) ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--on-brand)]" : "border-[var(--line-2)] bg-[var(--surface)] text-[var(--ink-2)]"
                   }`}>{product}</button>
               ))}
             </div>
@@ -217,11 +217,11 @@ export function VisitForm({ visit, doctor, products, stock = {}, photos = [] }:
                       onChange={e => updateSample(index, { quantity: Number(e.target.value) || 1 })}
                       aria-label="Quantity" className="input w-20 shrink-0" />
                     <button type="button" onClick={() => removeSample(index)} aria-label="Remove sample"
-                      className="tap grid shrink-0 place-items-center rounded-[10px] text-rose-600"><X size={16} /></button>
+                      className="tap grid shrink-0 place-items-center rounded-[10px] text-[var(--danger-ink)]"><X size={16} /></button>
                   </div>
                   {/* A count that is behind reality must not stop a rep mid-clinic, so this warns and lets them carry on. */}
                   {inHand !== undefined && (
-                    <p className={`mt-1 text-xs ${sample.quantity > inHand ? "font-semibold text-amber-700" : "text-[var(--muted)]"}`}>
+                    <p className={`mt-1 text-xs ${sample.quantity > inHand ? "font-semibold text-[var(--warn-ink)]" : "text-[var(--muted)]"}`}>
                       {sample.quantity > inHand
                         ? `You are recording more than the ${inHand} shown in hand — save it anyway and tell your administrator.`
                         : `${inHand} in hand`}
@@ -239,7 +239,7 @@ export function VisitForm({ visit, doctor, products, stock = {}, photos = [] }:
             {INTEREST_LEVELS.map(level => (
               <button key={level} type="button" onClick={() => setInterest(interest === level ? "" : level)}
                 className={`min-h-[38px] rounded-full border px-3.5 text-xs font-semibold ${
-                  interest === level ? "border-[var(--brand)] bg-[var(--brand)] text-white" : "border-[var(--line-2)] bg-white text-[var(--ink-2)]"
+                  interest === level ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--on-brand)]" : "border-[var(--line-2)] bg-[var(--surface)] text-[var(--ink-2)]"
                 }`}>{level}</button>
             ))}
           </div>
@@ -266,7 +266,7 @@ export function VisitForm({ visit, doctor, products, stock = {}, photos = [] }:
 
     {completed && (
       <Card className="p-6 text-center">
-        <span className="mx-auto grid size-12 place-items-center rounded-full bg-emerald-50 text-emerald-600"><Check size={24} /></span>
+        <span className="mx-auto grid size-12 place-items-center rounded-full bg-[var(--ok-bg)] text-[var(--ok-ink)]"><Check size={24} /></span>
         <p className="mt-3 font-semibold">Visit {status.toLowerCase()}</p>
         <p className="mt-1 text-sm text-[var(--muted)]">Your administrator can see this in the visit report.</p>
         <div className="mt-4 flex justify-center"><Button tone="secondary" onClick={() => router.push("/employee")}>Back to today</Button></div>

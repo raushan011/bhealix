@@ -43,9 +43,9 @@ export default function MyBillsPage() {
         88px, and a five-figure bill needs more than that. */}
     <Card className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-3">
       <Stat label="Billed" value={formatMoney(summary.billed)} />
-      <Stat label="Collected" value={formatMoney(summary.collected)} tone="text-emerald-700" />
+      <Stat label="Collected" value={formatMoney(summary.collected)} tone="text-[var(--ok-ink)]" />
       <Stat label="To collect" value={formatMoney(summary.outstanding)}
-        tone={summary.outstanding > 0 ? "text-amber-700" : undefined} />
+        tone={summary.outstanding > 0 ? "text-[var(--warn-ink)]" : undefined} />
     </Card>
 
     {overdue.length > 0 && (
@@ -59,7 +59,7 @@ export default function MyBillsPage() {
       {TABS.map(({ key, label }) => (
         <button key={key} onClick={() => setTab(key)}
           className={`inline-flex min-h-[38px] flex-1 items-center justify-center rounded-full border px-4 text-xs font-semibold ${
-            tab === key ? "border-[var(--brand)] bg-[var(--brand)] text-white" : "border-[var(--line-2)] bg-white text-[var(--ink-2)]"
+            tab === key ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--on-brand)]" : "border-[var(--line-2)] bg-[var(--surface)] text-[var(--ink-2)]"
           }`}>{label}</button>
       ))}
     </div>

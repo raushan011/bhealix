@@ -25,6 +25,8 @@ const itemSchema = z.object({
   hsnCode: z.string().trim().max(20).optional(),
   unit: z.string().trim().max(20).optional(),
   quantity: z.number().positive("Quantity must be more than zero"),
+  /** Scheme goods. Whole units only — half a free bottle is nobody's offer. */
+  freeQuantity: z.number().int("Free quantity must be a whole number").min(0, "Free quantity cannot be negative").default(0),
   rate: z.number().min(0, "Rate cannot be negative"),
   discountType: z.enum(DISCOUNT_TYPES).default("PERCENT"),
   discountValue: z.number().min(0, "Discount cannot be negative").default(0),

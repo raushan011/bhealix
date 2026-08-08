@@ -9,7 +9,7 @@ import { DoctorPicker, type PickableDoctor } from "@/components/doctors/doctor-p
 import { CustomerPicker } from "@/components/billing/customer-picker";
 import { CustomerForm } from "@/components/billing/customer-form";
 import { toDateInput, todayIso } from "@/lib/time";
-import { computeInvoice, type LineInput } from "@/lib/billing/gst";
+import { computeInvoice, unitsSupplied, type LineInput } from "@/lib/billing/gst";
 import { dueDateFrom } from "@/lib/billing/numbering";
 import { customerTitle, type CustomerRecord } from "@/lib/billing/customers";
 import type { InvoiceRecord } from "@/lib/billing/types";
@@ -30,7 +30,7 @@ type Settings = {
 type Line = LineInput & { product?: string };
 
 const blankLine = (): Line => ({
-  name: "", hsnCode: "", unit: "Pcs", quantity: 1, rate: 0,
+  name: "", hsnCode: "", unit: "Pcs", quantity: 1, freeQuantity: 0, rate: 0,
   discountType: "PERCENT", discountValue: 0, gstRate: 0
 });
 
@@ -94,7 +94,7 @@ export function BillForm({ invoice }: { invoice?: InvoiceRecord | null }) {
   const [lines, setLines] = useState<Line[]>(() => invoice?.items?.length
     ? invoice.items.map(item => ({
         name: item.name, hsnCode: item.hsnCode ?? "", unit: item.unit ?? "Pcs",
-        quantity: item.quantity, rate: item.rate,
+        quantity: item.quantity, freeQuantity: item.freeQuantity ?? 0, rate: item.rate,
         discountType: item.discountType, discountValue: item.discountValue, gstRate: item.gstRate
       }))
     : [blankLine()]);
@@ -219,7 +219,9 @@ export function BillForm({ invoice }: { invoice?: InvoiceRecord | null }) {
    */
   const shortages = useMemo(() => {
     const wanted = new Map<string, number>();
-    for (const line of filled) wanted.set(line.name, (wanted.get(line.name) ?? 0) + line.quantity);
+    // Scheme goods come off the same shelf as the billed ones, so they count
+    // towards the shortfall even though they are charged for nothing.
+    for (const line of filled) wanted.set(line.name, (wanted.get(line.name) ?? 0) + unitsSupplied(line));
     return [...wanted]
       .map(([name, need]) => ({ name, need, have: stock.get(name) ?? 0 }))
       .filter(row => row.need > row.have);
@@ -276,6 +278,7 @@ export function BillForm({ invoice }: { invoice?: InvoiceRecord | null }) {
             hsnCode: line.hsnCode || undefined,
             unit: line.unit || undefined,
             quantity: line.quantity,
+            freeQuantity: Math.max(0, Math.trunc(line.freeQuantity ?? 0)),
             rate: line.rate,
             discountType: line.discountType,
             discountValue: line.discountValue,
@@ -490,8 +493,13 @@ export function BillForm({ invoice }: { invoice?: InvoiceRecord | null }) {
       <div className="space-y-3">
         {lines.map((line, index) => {
           const available = stock.get(line.name);
-          const short = line.name && line.quantity > (available ?? 0);
+          const supplied = unitsSupplied(line);
+          const short = line.name && supplied > (available ?? 0);
           const priced = line.name ? preview.lines[index] : null;
+          // A line is what is being charged for; the scheme rides along with it.
+          // Free goods with nothing billed beside them would be dropped on save,
+          // so say that here rather than letting the line quietly disappear.
+          const freeOnly = Boolean(line.name) && (line.freeQuantity ?? 0) > 0 && line.quantity <= 0;
 
           return <div key={index} className="rounded-[10px] border border-[var(--line)] p-3">
             <div className="flex items-start gap-2">
@@ -502,7 +510,7 @@ export function BillForm({ invoice }: { invoice?: InvoiceRecord | null }) {
                   {products.map(product => <option key={product._id} value={product.name}>{product.name}</option>)}
                 </select>
                 {line.name && (
-                  <p className={`mt-1 text-xs ${short ? "font-semibold text-rose-700" : "text-[var(--muted)]"}`}>
+                  <p className={`mt-1 text-xs ${short ? "font-semibold text-[var(--danger-ink)]" : "text-[var(--muted)]"}`}>
                     {available === undefined ? "No stock recorded" : `${available} in stock`}
                     {line.hsnCode ? ` · HSN ${line.hsnCode}` : ""}
                   </p>
@@ -510,16 +518,21 @@ export function BillForm({ invoice }: { invoice?: InvoiceRecord | null }) {
               </div>
               {lines.length > 1 && (
                 <button type="button" onClick={() => setLines(current => current.filter((_, i) => i !== index))}
-                  aria-label="Remove line" className="tap grid shrink-0 place-items-center rounded-[10px] text-rose-600">
+                  aria-label="Remove line" className="tap grid shrink-0 place-items-center rounded-[10px] text-[var(--danger-ink)]">
                   <Trash2 size={16} />
                 </button>
               )}
             </div>
 
-            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
               <Field label="Quantity">
                 <input type="number" min={1} step={1} value={line.quantity} className="input"
                   onChange={e => setLine(index, { quantity: Math.max(0, Number(e.target.value) || 0) })} />
+              </Field>
+              {/* The "+1" of a 10+1. Charged for nothing, still off the shelf. */}
+              <Field label="Free" hint={(line.freeQuantity ?? 0) > 0 ? `${line.quantity}+${line.freeQuantity} scheme` : undefined}>
+                <input type="number" min={0} step={1} value={line.freeQuantity ?? 0} className="input"
+                  onChange={e => setLine(index, { freeQuantity: Math.max(0, Math.trunc(Number(e.target.value) || 0)) })} />
               </Field>
               <Field label={`Rate${ratesIncludeTax ? " (incl. GST)" : ""}`}>
                 <input type="number" min={0} step="0.01" value={line.rate} className="input"
@@ -545,12 +558,20 @@ export function BillForm({ invoice }: { invoice?: InvoiceRecord | null }) {
               </Field>
             </div>
 
+            {freeOnly && (
+              <p className="mt-2 text-xs font-semibold text-[var(--warn-ink)]">
+                Free goods ride along with something billed. Enter the quantity being charged for, or
+                bill one unit at a zero rate if the whole line is a giveaway.
+              </p>
+            )}
+
             {priced && (
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] pt-2 text-xs">
                 <span className="text-[var(--muted)]">
                   {formatMoney(priced.gross)}
                   {priced.discount > 0 && ` − ${formatMoney(priced.discount)} discount`}
                   {taxed && ` + ${formatMoney(priced.taxAmount)} GST`}
+                  {(line.freeQuantity ?? 0) > 0 && ` · ${line.freeQuantity} free`}
                 </span>
                 <span className="font-semibold">{formatMoney(priced.total)}</span>
               </div>
@@ -563,7 +584,7 @@ export function BillForm({ invoice }: { invoice?: InvoiceRecord | null }) {
         <Notice tone="error">
           <span className="flex items-start gap-2">
             <AlertTriangle size={15} className="mt-0.5 shrink-0" />
-            <span>Not enough stock for {shortages.map(row => `${row.name} (${row.have} left, ${row.need} billed)`).join(", ")}.
+            <span>Not enough stock for {shortages.map(row => `${row.name} (${row.have} left, ${row.need} going out)`).join(", ")}.
               You can still raise the bill — the shortfall will show on the inventory screen until stock is received.</span>
           </span>
         </Notice>
@@ -652,7 +673,7 @@ export function BillForm({ invoice }: { invoice?: InvoiceRecord | null }) {
     {error && <Notice tone="error">{error}</Notice>}
 
     {/* Pinned: the totals are above and the decision belongs with them. */}
-    <div className="sticky bottom-0 -mx-4 border-t border-[var(--line)] bg-white/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+    <div className="sticky bottom-0 -mx-4 border-t border-[var(--line)] bg-[var(--surface-veil)] px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs text-[var(--muted)]">{filled.length} line{filled.length === 1 ? "" : "s"}</p>
@@ -694,7 +715,7 @@ function TypeChoice({ active, disabled, onClick, title, description }: {
 }) {
   return <button type="button" onClick={onClick} disabled={disabled}
     className={`rounded-[10px] border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-      active ? "border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--line-2)] bg-white"
+      active ? "border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--line-2)] bg-[var(--surface)]"
     }`}>
     <p className="text-sm font-semibold">{title}</p>
     <p className="mt-0.5 text-xs text-[var(--muted)]">{description}</p>

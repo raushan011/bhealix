@@ -44,7 +44,7 @@ export function InvoiceRow({ row, href }: { row: InvoiceListRow; href: string })
         ].filter(Boolean).join(" · ")}
       </p>
       {owing && (row.dueDate || row.followUpDate) && (
-        <p className={`mt-0.5 flex items-center gap-1 text-xs font-medium ${label === "Overdue" ? "text-rose-700" : "text-[var(--muted)]"}`}>
+        <p className={`mt-0.5 flex items-center gap-1 text-xs font-medium ${label === "Overdue" ? "text-[var(--danger-ink)]" : "text-[var(--muted)]"}`}>
           {label === "Overdue" && <AlertTriangle size={11} className="shrink-0" />}
           {[
             row.dueDate && `Payment due ${formatDate(row.dueDate)}`,

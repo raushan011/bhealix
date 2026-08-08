@@ -116,7 +116,7 @@ export default function CustomersPage() {
                   <Pencil size={15} />
                 </button>
                 <button onClick={() => remove(customer)} aria-label={`Remove ${customer.name}`}
-                  className="grid size-9 shrink-0 place-items-center rounded-lg text-rose-600 hover:bg-rose-50">
+                  className="grid size-9 shrink-0 place-items-center rounded-lg text-[var(--danger-ink)] hover:bg-[var(--danger-bg)]">
                   <Trash2 size={15} />
                 </button>
               </>}

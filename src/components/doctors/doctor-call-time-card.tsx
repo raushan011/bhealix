@@ -32,7 +32,7 @@ export function DoctorCallTimeCard({ doctorId, doctorName, initial }: {
       </div>
     ) : (
       <>
-        <p className={`mt-3 rounded-[10px] px-3 py-2.5 text-sm font-semibold ${windows.length ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "bg-amber-50 text-amber-800"}`}>
+        <p className={`mt-3 rounded-[10px] px-3 py-2.5 text-sm font-semibold ${windows.length ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "bg-[var(--warn-bg)] text-[var(--warn-ink)]"}`}>
           {summariseCallSchedule(windows)}
         </p>
         <p className="mt-2 text-xs text-[var(--muted)]">

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ConnectionStatus } from "@/components/pwa/connection-status";
 import { ServiceWorker } from "@/components/pwa/service-worker";
+import { THEME_SCRIPT } from "@/lib/theme";
 
 export const metadata: Metadata = {
   title: "BHEALIX CRM",
@@ -24,13 +25,34 @@ export const viewport: Viewport = {
   // The shells pad with env(safe-area-inset-*), and those only resolve to real
   // values once the viewport covers the notch and home indicator.
   viewportFit: "cover",
-  themeColor: "#73461f"
+  // The browser paints its own chrome with this before the page has loaded, so
+  // a dark device gets a dark bar rather than a walnut one over a dark page.
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#73461f" },
+    { media: "(prefers-color-scheme: dark)", color: "#15110d" }
+  ]
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>
-    <ConnectionStatus />
-    <ServiceWorker />
-    {children}
-  </body></html>;
+  /*
+   * `suppressHydrationWarning` on <html>: the script below stamps `data-theme`
+   * on it before React arrives, so the served markup and the live element
+   * differ by exactly that attribute. It suppresses nothing else — the warning
+   * is scoped to this element's own attributes.
+   */
+  return <html lang="en" suppressHydrationWarning>
+    <head>
+      {/*
+        Blocking, and before anything paints. Restoring the theme in an effect
+        instead would show a cream flash on every fresh document to anybody who
+        chose dark, which is the whole of what people notice about dark mode.
+      */}
+      <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+    </head>
+    <body>
+      <ConnectionStatus />
+      <ServiceWorker />
+      {children}
+    </body>
+  </html>;
 }

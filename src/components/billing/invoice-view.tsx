@@ -102,7 +102,7 @@ export function InvoiceView({ invoiceId, backHref }: { invoiceId: string; backHr
       actions={<>
         {/* Opened in its own tab so the print dialog does not take the app with it. */}
         <a href={`/invoices/${invoiceId}/print?auto=1`} target="_blank" rel="noopener noreferrer"
-          className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-white px-4 text-sm font-semibold">
+          className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-[var(--surface)] px-4 text-sm font-semibold">
           <Download size={16} />Download
         </a>
         {/* Shown whenever the bill still stands, even when a receipt currently
@@ -110,7 +110,7 @@ export function InvoiceView({ invoiceId, backHref }: { invoiceId: string; backHr
             the edit screen explains the one thing to do about it. */}
         {mayManage && invoice.status !== "Cancelled" && (
           <Link href={`/admin/billing/${invoiceId}/edit`}
-            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-white px-4 text-sm font-semibold">
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-[var(--surface)] px-4 text-sm font-semibold">
             <Pencil size={16} />Edit
           </Link>
         )}
@@ -137,9 +137,9 @@ export function InvoiceView({ invoiceId, backHref }: { invoiceId: string; backHr
 
     <Card className="grid grid-cols-2 gap-5 p-5 lg:grid-cols-4">
       <Stat label="Total" value={formatMoney(invoice.grandTotal)} />
-      <Stat label="Received" value={formatMoney(invoice.amountPaid)} tone="text-emerald-700" />
+      <Stat label="Received" value={formatMoney(invoice.amountPaid)} tone="text-[var(--ok-ink)]" />
       <Stat label="Outstanding" value={formatMoney(invoice.balanceDue)}
-        tone={invoice.balanceDue > 0 && invoice.status !== "Cancelled" ? "text-amber-700" : undefined} />
+        tone={invoice.balanceDue > 0 && invoice.status !== "Cancelled" ? "text-[var(--warn-ink)]" : undefined} />
       <div className="min-w-0">
         <p className="truncate text-xs text-[var(--muted)]">Status</p>
         <p className="mt-1"><Badge tone={invoiceTone(invoice)}>{label}</Badge></p>
@@ -196,11 +196,17 @@ export function InvoiceView({ invoiceId, backHref }: { invoiceId: string; backHr
         {invoice.items.map((item, index) => (
           <div key={index} className="px-5 py-3.5">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <p className="text-sm font-semibold">{item.name}</p>
+              <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+                {item.name}
+                {/* The scheme is the first thing anybody checks a supply against,
+                    so it is on the line rather than buried in the detail under it. */}
+                {(item.freeQuantity ?? 0) > 0 && <Badge tone="success">+{item.freeQuantity} free</Badge>}
+              </p>
               <p className="text-sm font-semibold">{formatMoney(item.total)}</p>
             </div>
             <p className="mt-0.5 text-xs text-[var(--muted)]">
               {item.quantity} {item.unit ?? ""} × {formatMoney(item.rate)}
+              {(item.freeQuantity ?? 0) > 0 && ` · ${item.quantity}+${item.freeQuantity} scheme, ${item.freeQuantity} not charged`}
               {item.discount > 0 && ` · less ${formatMoney(item.discount)}${item.discountType === "PERCENT" ? ` (${item.discountValue}%)` : ""}`}
               {invoice.taxed && ` · GST ${item.gstRate}% = ${formatMoney(item.taxAmount)}`}
               {item.hsnCode && ` · HSN ${item.hsnCode}`}
@@ -256,7 +262,7 @@ export function InvoiceView({ invoiceId, backHref }: { invoiceId: string; backHr
                       : { tone: "error", text: json.error ?? "Could not remove this receipt" });
                     if (response.ok) load();
                   }}
-                  className="grid size-9 shrink-0 place-items-center rounded-lg text-rose-600 hover:bg-rose-50"><Trash2 size={15} /></button>
+                  className="grid size-9 shrink-0 place-items-center rounded-lg text-[var(--danger-ink)] hover:bg-[var(--danger-bg)]"><Trash2 size={15} /></button>
               )}
             </div>
           ))}
@@ -301,7 +307,7 @@ export function InvoiceView({ invoiceId, backHref }: { invoiceId: string; backHr
         <div className="flex flex-wrap gap-2">
           {invoice.status !== "Cancelled" && (
             <Link href={`/admin/billing/${invoiceId}/edit`}
-              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-white px-4 text-sm font-semibold">
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-[var(--surface)] px-4 text-sm font-semibold">
               <Pencil size={15} />Edit this bill
             </Link>
           )}

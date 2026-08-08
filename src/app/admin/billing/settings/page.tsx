@@ -211,7 +211,7 @@ export default function BillingSettingsPage() {
       </div>
     </Card>
 
-    <div className="sticky bottom-0 -mx-4 border-t border-[var(--line)] bg-white/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+    <div className="sticky bottom-0 -mx-4 border-t border-[var(--line)] bg-[var(--surface-veil)] px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
       <Button onClick={save} busy={busy} className="w-full sm:w-auto">{busy ? "Saving…" : "Save settings"}</Button>
     </div>
   </div>;

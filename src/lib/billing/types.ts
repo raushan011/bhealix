@@ -11,6 +11,8 @@ export type InvoiceItem = {
   hsnCode?: string;
   unit?: string;
   quantity: number;
+  /** Units supplied free under a scheme. Charged for nothing; still leaves stock. */
+  freeQuantity?: number;
   rate: number;
   discountType: DiscountType;
   discountValue: number;
