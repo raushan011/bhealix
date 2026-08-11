@@ -40,7 +40,27 @@ export const AUDIT_ACTIONS = {
   "payroll.reopened": "Reopened a payroll month",
   "payroll.paid": "Marked payroll paid",
   "payroll.deleted": "Deleted a draft payroll month",
-  "payroll.settings.updated": "Changed the payroll settings"
+  "payroll.settings.updated": "Changed the payroll settings",
+
+  /**
+   * The affiliate scheme. A coupon code decides whose commission an order
+   * becomes, and a delivery override decides whether it pays at all — both are
+   * ways to direct money at a person without raising an invoice, so both leave
+   * a line. The payout run's own lifecycle follows payroll's for the same reason.
+   */
+  "sales.rep.created": "Added a sales rep",
+  "sales.rep.updated": "Updated a sales rep",
+  "sales.rep.deactivated": "Deactivated a sales rep",
+  "sales.rep.deleted": "Deleted a sales rep",
+  "sales.delivery.overridden": "Corrected an order's delivery state by hand",
+  "sales.synced": "Pulled orders and delivery status",
+  "sales.settings.updated": "Changed the affiliate settings",
+  "sales.payout.generated": "Prepared an affiliate payout run",
+  "sales.payout.adjusted": "Adjusted a rep's payout line",
+  "sales.payout.approved": "Approved an affiliate payout run",
+  "sales.payout.reopened": "Reopened an affiliate payout run",
+  "sales.payout.paid": "Marked an affiliate payout paid",
+  "sales.payout.deleted": "Deleted a draft affiliate payout run"
 } as const;
 
 export type AuditAction = keyof typeof AUDIT_ACTIONS;

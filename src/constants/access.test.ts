@@ -60,6 +60,29 @@ describe("access", () => {
     expect(can.viewPayroll("HR")).toBe(true);
   });
 
+  it("separates preparing an affiliate payout from releasing it, as payroll does", () => {
+    expect(can.runSalesPayout("HR")).toBe(true);
+    expect(can.approveSalesPayout("HR")).toBe(false);
+    expect(can.approveSalesPayout("ADMIN")).toBe(true);
+  });
+
+  it("keeps coupons and delivery corrections with the administrator", () => {
+    // Issuing a coupon directs commission at a person, and correcting a
+    // delivery decides whether an order pays at all.
+    expect(can.manageSales("ADMIN")).toBe(true);
+    expect(can.manageSales("HR")).toBe(false);
+    expect(can.viewSales("HR")).toBe(true);
+  });
+
+  it("keeps the affiliate operation away from the field panel entirely", () => {
+    for (const role of ["MR", "SALES"] as const) {
+      expect(can.viewSales(role)).toBe(false);
+      expect(can.manageSales(role)).toBe(false);
+      expect(can.runSalesPayout(role)).toBe(false);
+      expect(can.approveSalesPayout(role)).toBe(false);
+    }
+  });
+
   it("keeps the warehouse count with the administrator", () => {
     expect(can.manageInventory("ADMIN")).toBe(true);
     expect(can.manageInventory("HR")).toBe(false);

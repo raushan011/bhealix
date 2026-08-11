@@ -16,6 +16,7 @@ locations — is here. Read this, decide which 2–5 files your task touches, th
 | Work with the database | §6 |
 | Call, change or add an HTTP endpoint | §7 |
 | Change business arithmetic (GST, payroll, stock, routing) | §8 |
+| Work on the affiliate/Sales CRM | §1, §6.15, §7.9, §8.8 |
 | Work on screens/components | §9 |
 | Write new code in-house style | §10 |
 | Avoid a known trap | §11 |
@@ -40,8 +41,29 @@ operation:
 7. **HR** — employment records, attendance, leave, holidays.
 8. **Payroll** — effective-dated salaries, monthly runs, statutory deductions, payslips.
 9. **Reporting** — per-rep field activity and an audit trail of everything a rep changed.
+10. **Affiliate sales** — coupon-attributed Shopify orders, Shiprocket delivery status, automatic
+    commission and weekly payout runs.
 
 Two panels, one app: `/admin` (desktop, for ADMIN + HR) and `/employee` (mobile PWA, for MR + SALES).
+
+### Two CRMs share the desk panel
+
+The desk panel holds two operations that barely touch, and a signed-in desk role is asked which they
+came for (`/choose`):
+
+| | **Doctor CRM** (`/admin`) | **Sales CRM** (`/admin/sales`) |
+|---|---|---|
+| Who sells | Employed medical representatives | Outside affiliates on commission |
+| Where | Clinics, in person | The Shopify storefront |
+| Paid by | Payroll | Weekly commission payout runs |
+| Domains | 1–9 above | 10 above |
+
+**There is no stored preference.** `lib/workspace.ts::workspaceOf(pathname)` decides which CRM the
+shell is describing, so a bookmark, an emailed link and the back button all land somewhere that
+agrees with itself. A cookie would eventually disagree with the URL, and the sidebar would describe
+a different application from the one on screen. `landingFor(role)` (in `constants/access.ts`) sends
+desk roles to the chooser on sign-in; `homeFor(role)` is unchanged and still what a panel guard uses
+to bounce somebody.
 
 ### Stack
 
@@ -84,6 +106,11 @@ npm test                   # vitest run
 | `NEXT_PUBLIC_COMPANY_NAME` | no | defaults to `BHEALIX` |
 | `GOOGLE_MAPS_SERVER_API_KEY` | for discovery | Places API (New) + Geocoding API |
 | `SEED_DEMO_STAFF` | no | `1` creates throwaway MR/HR/SALES accounts when seeding |
+| `CRON_SECRET` | for the nightly pass | Bearer token accepted by `GET /api/sales/cron`; `vercel.json` schedules it at 01:30 |
+
+The Shopify and Shiprocket credentials are **not** environment variables — they are entered under
+Sales settings and stored encrypted (§6.15), so they change without a redeploy. Note `AUTH_SECRET`
+now does double duty: it signs the session *and* derives the key those two are encrypted with.
 
 Validated by `src/lib/env.ts` (`env()` parses `process.env` through a Zod schema).
 Seed admin: `admin@bhealix.com` / `Bhealix@123` — **change before production**.
@@ -100,9 +127,10 @@ Seed admin: `admin@bhealix.com` / `Bhealix@123` — **change before production**
 | Visits | `Visit`, `VisitPhoto` | `lib/visits.ts` | — | `/api/visits` |
 | Samples | `SampleMovement` | `lib/samples/movements.ts` | `lib/samples/ledger.ts` | `/api/samples` |
 | Inventory | `StockMovement`, `Product` | `lib/inventory/movements.ts` | `lib/inventory/ledger.ts` | `/api/inventory`, `/api/products` |
-| Billing | `Invoice`, `Customer`, `PaymentProof`, `BillingSettings`, `Counter` | `lib/billing/{constants,gst,numbering,types,customers,attachments}` | `lib/billing/{invoices,compose}.ts` | `/api/invoices`, `/api/customers`, `/api/billing` |
+| Billing | `Invoice`, `Customer`, `PaymentProof`, `BillingSettings`, `Counter` | `lib/billing/{constants,gst,numbering,types,customers,attachments,follow-ups}` | `lib/billing/{invoices,compose}.ts` | `/api/invoices`, `/api/customers`, `/api/billing` |
 | HR | `LeaveRequest`, `Attendance`, `Holiday` | `lib/hr/{leave,attendance}` | `lib/hr/records.ts` | `/api/hr/{leave,attendance,holidays,overview}` |
 | Payroll | `SalaryStructure`, `PayrollRun`, `Payslip`, `PayrollSettings` | `lib/hr/payroll.ts` | `lib/hr/payroll-run.ts` | `/api/hr/{payroll,payslips,salary}` |
+| Affiliate sales | `SalesRep`, `SalesOrder`, `SalesPayout`, `SalesPayoutLine`, `SalesSettings` | `lib/sales/{constants,coupons,commission,delivery,payouts,types}` | `lib/sales/{settings,shopify,shiprocket,sync,payout-run,reporting,secrets,http,reps}` | `/api/sales/*` |
 | Audit | `AuditEvent` | — | `lib/audit.ts` | — (written inline) |
 
 **The pure/server split is a rule, not an accident.** Files listed under "pure logic" contain no
@@ -132,7 +160,14 @@ src/
 │   │   ├── billing/{page,new,[id],[id]/edit,settings}
 │   │   ├── team/{page,[id],[id]/activity}
 │   │   ├── hr/{page,attendance,leave,holidays,payroll,payroll/[id],payroll/settings}
-│   │   └── reports/page.tsx
+│   │   ├── reports/page.tsx
+│   │   └── sales/                   The Sales CRM (layout.tsx guards can.viewSales)
+│   │       ├── page.tsx             affiliate dashboard
+│   │       ├── reps/{page,[id]}
+│   │       ├── orders/page.tsx
+│   │       ├── payouts/{page,[id]}
+│   │       └── settings/{page,layout}   layout guards can.manageSales
+│   ├── choose/page.tsx              Doctor CRM or Sales CRM — the desk's landing page
 │   ├── employee/                    Mobile PWA panel — MR + SALES (layout.tsx = FieldShell)
 │   │   ├── page.tsx                 Today: the day's route in visiting order
 │   │   ├── plans/{page,new,[id]}    rep plans their own round
@@ -146,9 +181,10 @@ src/
 ├── components/
 │   ├── ui/          kit.tsx (design system), modal.tsx, brand.tsx, password-input.tsx
 │   ├── layout/      admin-shell.tsx, field-shell.tsx, sign-out-button.tsx
-│   ├── billing/     bill-form, customer-form, customer-picker, invoice-document,
-│   │                invoice-row, invoice-view, payment-form, payment-proof,
-│   │                payment-qr, print-button
+│   ├── billing/     bill-form, customer-form, customer-picker, follow-up-editor,
+│   │                invoice-document, invoice-row, invoice-view, payment-form,
+│   │                payment-proof, payment-qr, print-button
+│   ├── sales/       sync-button, rep-form, order-list
 │   ├── doctors/     call-schedule-editor, doctor-call-time-card, doctor-details-form, doctor-picker
 │   ├── visits/      visit-form, visit-photos
 │   ├── plans/       plan-assignment, delete-plan-button
@@ -165,7 +201,11 @@ src/
 │   ├── doctors/     fields, call-schedule, discovery, places
 │   ├── hr/          leave, attendance, payroll, payroll-run, records
 │   ├── inventory/   movements, ledger
-│   └── samples/     movements, ledger
+│   ├── samples/     movements, ledger
+│   ├── sales/       constants, coupons, commission, delivery, payouts, types  (pure)
+│   │                secrets, http, shopify, shiprocket, settings, sync,
+│   │                payout-run, reporting, reps                                (server)
+│   └── workspace.ts Which CRM a path belongs to
 ├── models/                          One file per bounded context — see §6
 └── (tests co-located as *.test.ts next to what they test)
 public/    sw.js, offline.html, icons/, brand/
@@ -216,6 +256,12 @@ balance is `$sum: "$quantity"` — never a stored column. Consequences:
 `Invoice.amountPaid`, `balanceDue` and `status` are a cache of `payments[]`, so a list of a hundred
 invoices can sort by what is owed without re-adding every receipt. **Anything that touches
 `invoice.payments` must call `recalculate(invoice)` from `lib/billing/invoices.ts` before saving.**
+
+`Invoice.followUpDate` is the same idea for chasing: a mirror of the earliest entry in `followUps[]`
+that nobody has marked made, so a hundred bills can be indexed and sorted by "who needs calling"
+without unpacking an array per row. **Anything that touches `invoice.followUps` must go through
+`lib/billing/follow-ups.ts`** — `applyFollowUps`, `appendFollowUp`, `setFollowUpDate` and
+`syncFollowUpDate` all re-derive the mirror before returning.
 
 ### 4.5 Documents that are evidence store a snapshot, not a reference
 
@@ -283,6 +329,33 @@ failures on purpose** — a rep in a clinic corridor must never lose a completed
 its audit line went wrong. Documents show only their latest state; the trail is how you learn a call
 time was corrected three times.
 
+### 4.13a A commission a payout run has claimed is never recomputed
+
+`SalesOrder.commission` is a cache of `lib/sales/commission.ts`, and **`recalculateCommission` is the
+only thing that writes it** — the same rule `recalculate()` has for an invoice (§4.4). Anything that
+changes a delivery state, a refund or a commission rate calls it and saves.
+
+What it will *not* do is restate a commission whose status is `In payout` or `Paid`. That run is a
+document somebody approved, and recomputing what it contains underneath it would make the approval
+meaningless. Instead the order is flagged `commission.needsReversal` and surfaced on the dashboard,
+because money already sent is recovered by agreement — as a named negative adjustment on a later
+run — and never by a background job editing a settled one.
+
+Releasing is the run's own business: deleting or reopening a draft hands its commissions back
+(`releaseRun`) and re-prices them on the way out, so a parcel that went RTO while the draft sat there
+comes back as `Void` rather than as payable money.
+
+### 4.13b Maturity is answered by the clock, not by whether a job ran
+
+A commission becomes payable because seven days went by. Nothing happens to the order; the seventh
+day simply arrives. So `payout-run.ts::matured()` matches on **`maturesAt <= end` with a status of
+`Maturing` *or* `Payable`**, rather than on rows already stored as `Payable`.
+
+Written the other way, a commission that matured overnight would be invisible to the payout until
+something happened to recompute it, and a rep would silently wait a week for money they were already
+owed. `GET /api/sales/cron` re-prices everything open on a schedule so the *screens* agree too, but
+the run is correct whether or not it ever ran.
+
 ### 4.13 Every schema is registered in one place
 
 `lib/db/mongoose.ts` imports every model so `populate()` always resolves. Without this, a route that
@@ -320,14 +393,14 @@ if ("response" in auth) return auth.response;    // 401 or 403 already built
 
 ### 5.3 Middleware (`src/middleware.ts`)
 
-Matches `/admin/*`, `/employee/*`, `/invoices/*`, `/payslips/*`, `/api/*`. Public: `/api/auth/login`,
-`/api/auth/logout`. Verifies the JWT; on failure returns 401 for API paths and redirects to
+Matches `/admin/*`, `/employee/*`, `/choose`, `/invoices/*`, `/payslips/*`, `/api/*`. Public:
+`/api/auth/login`, `/api/auth/logout`. Verifies the JWT; on failure returns 401 for API paths and redirects to
 `/login?next=…` for pages. Keeps desk roles (`ADMIN`, `HR`) out of `/employee` and field roles out of
 `/admin`. Sets `x-content-type-options: nosniff`, `x-frame-options: DENY`,
 `referrer-policy: strict-origin-when-cross-origin`.
 
 `/invoices` and `/payslips` are deliberately reachable by both panels — the page itself decides who
-may open that particular document.
+may open that particular document. `/choose` belongs to neither and is confined by its own guard.
 
 ### 5.4 The permission table (`src/constants/access.ts`)
 
@@ -357,12 +430,19 @@ Roles: `ADMIN`, `HR`, `MR`, `SALES`.
 | `issueSamples` | ✓ | | | | issue/adjust rep stock (reps may record their own RETURN) |
 | `manageInventory` | ✓ | | | | receive stock, correct the warehouse count |
 | `viewAllStock` | ✓ | ✓ | | | read stock without moving any |
+| `viewSales` | ✓ | ✓ | | | read the affiliate operation — also the door to `/admin/sales` |
+| `manageSales` | ✓ | | | | add a rep, issue a coupon, correct a delivery, hold the credentials |
+| `runSalesPayout` | ✓ | ✓ | | | prepare a week's payout and adjust its lines |
+| `approveSalesPayout` | ✓ | | | | approve, reopen, mark paid, delete a draft |
+
+Note `SALES` is a **field** role (a medical representative who also bills) and has nothing to do with
+the Sales CRM. An affiliate is a `SalesRep`, not a `User`, and has no login at all.
 
 ---
 
 ## 6. Data model
 
-13 model files, 18 collections. Every schema uses `{ timestamps: true }` unless noted, and the
+14 model files, 23 collections. Every schema uses `{ timestamps: true }` unless noted, and the
 `models.X ?? model("X", Schema)` idiom to survive hot reload.
 
 ### 6.1 `User` — `models/User.ts`
@@ -531,7 +611,9 @@ invoice must print.
 `PaymentProof`). Cached: `amountPaid`, `balanceDue`, `status` enum `INVOICE_STATUSES`.
 
 **Dates** — `invoiceDate` (req, indexed), `dueDate` (indexed), `paymentTerms` (days),
-`followUpDate` (indexed).
+`followUps[]`: `{date (req), note, doneAt, createdBy}` — every chase agreed on the bill, because
+collection is a conversation and one date could only ever hold the last thing said. Cached:
+`followUpDate` (indexed) = the earliest entry with no `doneAt`.
 
 **Trail** — `notes`, `terms`, `createdBy`, `updatedBy`, `cancelledAt`, `cancelledBy`, `cancelReason`.
 
@@ -580,6 +662,64 @@ delivery signs).
 **`PayrollSettings`** (`key: "payroll"`, singleton) — `lopBasis`, `ptSlabs[{upTo, amount}]`,
 `ptStateName` ("Karnataka"), `ptFebruaryAmount`, `payDay` (7), `defaultPayMode`, `signatoryName`,
 `payslipNote`.
+
+### 6.15 Affiliate sales — `models/Sales.ts`
+
+Five collections. Deliberately a separate world from `User` and `Invoice`: an affiliate is not an
+employee (no attendance, no payslip, no salary structure) and a Shopify order is not a GST invoice
+this company raised. Modelling either as the other would have meant a dozen always-empty fields and a
+permission table that no longer said what it meant.
+
+**`SalesRep`** — `code` (req, unique, upper — "RAUSHAN"), `name` (req, indexed), `phone`, `email`,
+`coupons[{code, suffix, active, note}]`, `user?` → User (reserved for rep logins),
+`payMethod` enum `PAYOUT_MODES`, `upiId`, `bankName`, `bankAccountName`, `bankAccountNo`, `bankIfsc`,
+`panNumber`, `active` (indexed), `joinedAt`, `notes`, `createdBy`.
+**Unique index `{"coupons.code"}`** — two reps sharing a code would make every order it brought in
+unattributable, with no way to work out afterwards whose it was. A withdrawn coupon is switched off,
+never removed: orders already attributed still point at it.
+
+**`SalesOrder`** — `source` enum `ORDER_SOURCES`, `shopifyOrderId` (unique, sparse), `name` ("#1042"),
+`orderNumber`, `placedAt` (req, indexed), `currency`, `customer{…}`, `couponCode` (indexed),
+`rep` → SalesRep (indexed), `ruleSuffix`, `discountCodes[]`,
+`items[{productId, variantId, sku, title, quantity, gross, couponDiscount, otherDiscount, refunded}]`,
+`totals{gross, discount, refunded, paid}`, `financialStatus`, `paymentMethod`, `cancelledAt`,
+`fullyRefunded`,
+`shipment{shiprocketOrderId, shipmentId, awb, courier, status, statusCode, deliveredAt, checkedAt}`,
+`delivery{reported, override, overrideReason, overrideBy, overrideAt, state, at}`,
+`commission{rate, base, amount, status, maturesAt, wholeOrderFallback, reason, needsReversal, payout, computedAt}`,
+`syncedAt`, `notes`.
+
+Every line figure is the **whole-line** rupee amount, not the unit — that is how Shopify reports
+discounts, and converting back and forth is how a rounding error gets into somebody's commission.
+`delivery.state` is a cache of `override ?? reported`; `commission` is a cache of the pure arithmetic
+(§4.13a). Indexes: `{rep, placedAt:-1}`, `{"commission.status", "commission.maturesAt"}`,
+`{"delivery.state", placedAt:-1}`.
+
+**Only attributed orders are stored.** The sync skips an order carrying no rep's coupon and reports
+how many it skipped, so the collection is the affiliate operation rather than a copy of the shop.
+
+**`SalesPayout`** — `payoutNo` (req, unique — `PO/2026-27/0004`), `financialYear`, `from`, `to`
+(`"yyyy-mm-dd"`), `status` enum `PAYOUT_STATUSES`, `holdDays` (**frozen** onto the run),
+`totals{reps, orders, gross, net}`, plus `generatedBy/At`, `approvedBy/At`, `paidBy/At`,
+`paymentDate`, `paymentMode`, `reference`, `note`.
+
+**`SalesPayoutLine`** — `run`, `rep`, `snapshot{name, code, phone, payMethod, upiId, bankName,
+bankAccountLastFour, panNumber}`, `orders[{order, name, placedAt, deliveredAt, base, rate, amount}]`,
+`orderCount`, `gross`, `adjustments[{name, amount}]` (**signed**), `net`, `note`.
+**Unique index `{run, rep}`.** The orders are copied on rather than joined at read time (§4.5): a rep
+asking in November what August's ₹1,800 was made of is owed the four orders exactly as they stood.
+
+**`SalesSettings`** (`key: "sales"`, singleton) — `shopifyDomain`, `shopifyAccessToken`
+(**`select: false`**, encrypted), `shopifyApiVersion`, `shopifyConnectedAt`, `lastOrderSyncAt/Error`,
+`shiprocketEmail`, `shiprocketPassword` + `shiprocketToken` (**`select: false`**, encrypted),
+`shiprocketTokenExpiresAt`, `lastShipmentSyncAt/Error`, `rules[{suffix, label, rate, base, products,
+active}]`, `holdDays` (7), `payoutWeekday` (1), `backfillDays` (90), `currency`.
+
+The two credentials are encrypted at rest by `lib/sales/secrets.ts` (AES-256-GCM, key derived from
+`AUTH_SECRET`). Neither can be hashed — both must be *presented* to somebody else's API — and a
+Shopify admin token reads every order and customer the company has, so a database dump should not
+hand it over in plain sight. **Rotating `AUTH_SECRET` makes them unreadable**, which is correct: they
+are re-entered on the settings screen.
 
 ### 6.14 HR — `models/HR.ts`
 
@@ -681,11 +821,14 @@ Rejects a reference doctor not in the list, unknown doctors, and doctors without
 | `/api/invoices` | GET | session | Reps are **forced** to `employee = self`; desk roles need `viewAllBilling`. Filters: `q` (invoiceNo / billTo.name / clinicName), `employee`, `doctor`, `customer`, `partyType`, `status`, `from`, `to`, `due=1`, `overdue=1`. Returns `{items, total, page, pages, summary{billed, collected, outstanding}}` — the summary covers the whole filtered set, excluding cancelled |
 | | POST | `manageBilling` | `billInputSchema` → `composeBill()`. Refuses a tax invoice without a seller GSTIN or state code. The `employee` must be an active MR/SALES. Claims a number atomically, `recalculate()`, save, then `syncInvoiceStock()`. Optional `payment` records money taken at the counter (capped at `grandTotal`) |
 | `/api/invoices/[id]` | GET | session; rep must own it, desk needs `viewAllBilling` | fully populated |
-| | PUT | `manageBilling` | rewrite via the same `composeBill`. **Refused once any payment exists**, and once cancelled. Keeps `invoiceNo`, `financialYear`, sets `updatedBy`, re-syncs stock |
-| | PATCH | `manageBilling` | `{dueDate?, followUpDate?, notes?, terms?, cancel?, cancelReason?}`. Cancelling is refused if money has been received; a cancelled invoice writes no stock rows, which returns the goods |
+| | PUT | `manageBilling` | rewrite via the same `composeBill`. Refused once **cancelled**, and refused when the new `grandTotal` would fall more than ₹0.50 below `amountPaid` — a part-paid bill is otherwise freely correctable and its receipts are untouched (`composed.fields` carries none). Keeps `invoiceNo`, `financialYear`, sets `updatedBy`, re-syncs stock |
+| | PATCH | `manageBilling` | `{dueDate?, followUps?, followUpDate?, notes?, terms?, cancel?, cancelReason?}`. `followUps` replaces the list and wins over `followUpDate`, which moves the earliest outstanding chase (or, `null`, drops every outstanding one). Cancelling is refused if money has been received; a cancelled invoice writes no stock rows, which returns the goods |
 | | DELETE | `manageBilling` | only with no payments; also deletes its `StockMovement`s and any `PaymentProof`s |
 | `/api/invoices/[id]/payments` | POST | `recordPayment` + ownership for reps | `{amount>0, mode, reference?, paidAt?, notes?}`. Refused when cancelled or already Paid, or when the amount exceeds `balanceDue + 0.5`. `receivedBy` = the rep (field) or the bill's owner (admin). Returns `{status, amountPaid, balanceDue, payments, payment: <new receipt id>}` |
 | | DELETE `?payment=<id>` | `manageBilling` | removes the receipt **and** its `PaymentProof` |
+| `/api/invoices/[id]/follow-ups` | POST | `recordPayment` + ownership for reps | `{date, note?, moveDueDate?}` appends one chase. Refused on a cancelled bill, past 20 follow-ups, or when a non-`manageBilling` caller asks to move the due date. Deliberately not part of the invoice PATCH: the rep hears "come back after the 15th" and may write it down, but may not rewrite a bill |
+| | PATCH `?followUp=<id>` | as above | `{date?, note?, done?}` — reschedules, or marks the call made. Marking one made twice does not move the day it was made on |
+| | DELETE `?followUp=<id>` | as above | drops a chase agreed by mistake; no figure on the bill moves |
 | `/api/invoices/[id]/payments/[paymentId]/proof` | GET | session + reach check | serves the bytes |
 | | POST | `recordPayment` (+ ownership) | one file per receipt, ≤5 MB, jpeg/png/webp/pdf; audits `invoice.payment.proof.added` |
 | | DELETE | `recordPayment` (+ ownership) | audits `invoice.payment.proof.removed` |
@@ -708,7 +851,9 @@ Rejects a reference doctor not in the list, unknown doctors, and doctors without
   doctor?: ObjectId, customer?: ObjectId,     // exactly one, or neither for One-off
   employee: ObjectId,                          // required — the rep the bill belongs to
   taxed = true, ratesIncludeTax = false,
-  invoiceDate: "yyyy-mm-dd", dueDate?, paymentTerms 0..365 = 0, followUpDate?,
+  invoiceDate: "yyyy-mm-dd", dueDate?, paymentTerms 0..365 = 0,
+  followUps?: [{ _id?, date: "yyyy-mm-dd", note?≤200, done? }]≤20,   // omitted on PUT = leave them alone
+  followUpDate?,                                                     // the one-date form, folded into the list
   placeOfSupplyCode?: <state code>,
   billTo?: { name?, clinicName?, type?, gstin?, address?, city?, pinCode?, phone? },
   saveDoctorDetails = true,
@@ -764,6 +909,32 @@ warehouse are counted under the same name.
 | | PATCH | `manageEmployees` | the whole employment record + `newPassword?` + `leaveEntitlement?` |
 | | DELETE | `manageEmployees` | refused for anyone with visits, and for the last administrator |
 | `/api/reports` | GET | `viewAllReports` | `?from=&to=` (default last 30 days). One pass returning totals, per-employee `{planned, completed, samples, orderValue}`, outcome counts, sample distribution by product with distinct doctor count, interest split, and sample movement totals |
+
+### 7.9 Affiliate sales
+
+| Route | Method | Guard | Notes |
+|---|---|---|---|
+| `/api/sales/overview` | GET | `viewSales` | `?from=&to=` (default last 30 days). Totals, delivery rate, earnings by commission status, top five reps, next payout date, proposed period, connection state and the last sync error |
+| `/api/sales/reps` | GET | `viewSales` | `{reps, summaries}`; `?active=1` |
+| | POST | `manageSales` | `{name, code, phone?, email?, coupons?, payMethod, upiId?, bank…, panNumber?, joinedAt?, notes?}`. Coupons omitted are built from the active rules (`couponsFor`), so a rep gets one code per rule. Refuses a code already held by anybody, and any coupon that does not split back into a name and digits. Audits `sales.rep.created` |
+| `/api/sales/reps/[id]` | GET | `viewSales` | rep + summary + last 200 orders |
+| | PATCH | `manageSales` | the record, and `coupons` (a code dropped from the list is switched off, never removed). The rep `code` itself is fixed once issued |
+| | DELETE | `manageSales` | deactivates where orders reference them, deletes outright otherwise (§4.10) |
+| `/api/sales/orders` | GET | `viewSales` | paginated; filters `q` (order/coupon/customer), `rep`, `delivery`, `status`, `attention=1`, `from`, `to`. `summary` covers the whole filtered set |
+| `/api/sales/orders/[id]` | GET | `viewSales` | |
+| | PATCH | `manageSales` | `{override?: DeliveryState \| null, overrideReason?, notes?}` — the manual delivery correction. Recalculates and audits `sales.delivery.overridden` |
+| `/api/sales/sync` | POST | `manageSales` | `{target: "all" \| "orders" \| "shipments" \| "recalculate", sinceDays?}`. Runs inline and returns a `SyncReport`. An integration failure is a **502 carrying the other side's own words** |
+| `/api/sales/cron` | GET | `CRON_SECRET` bearer, **or** `manageSales` | The nightly pass: sync, then re-price everything open. A failed pull still re-prices, because maturity does not depend on Shopify answering |
+| `/api/sales/settings` | GET | `viewSales` | Credentials are never sent back — only `shopifyTokenSet` / `shiprocketPasswordSet` and a masked hint |
+| | PUT | `manageSales` | Blank secrets leave what is stored alone. A changed rate or hold period **re-prices every unclaimed commission immediately** and reports how many; a changed Shiprocket credential drops the cached token |
+| `/api/sales/settings/test` | POST | `manageSales` | `{service: "shopify" \| "shiprocket"}`. A *failed credential* is a 200 with `{ok: false, message}` — the request was fine, the answer is no |
+| `/api/sales/shopify/install` | GET | `manageSales` | **Redirects** to Shopify's approval screen. Mints the `state` nonce into an http-only cookie |
+| `/api/sales/shopify/callback` | GET | `manageSales` | Checks the nonce (constant-time), the HMAC and the shop domain, then exchanges the code for an offline token and stores it encrypted. Always ends back on the settings screen with a message, never a bare error page |
+| `/api/sales/payouts` | GET | `viewSales` | runs + the `proposed` next period + `mayRun` / `mayApprove` |
+| | POST | `runSalesPayout` | `{action: "preview" \| "generate", from?, to?}`. **Preview writes nothing.** Generate refuses while another draft is open, so the same commissions cannot be split across two runs |
+| `/api/sales/payouts/[id]` | GET | `viewSales` | run + lines + capability flags |
+| | PATCH | `runSalesPayout` (adjust) / `approveSalesPayout` (the rest) | `{action:"adjust", line, adjustments[], note?}` (draft only) \| `{action:"approve"}` \| `{action:"reopen"}` \| `{action:"pay", paymentDate, paymentMode, reference?}`. Reopen only from Approved; **Paid is terminal** |
+| | DELETE | `approveSalesPayout` | drafts only; releases and re-prices the commissions |
 
 ---
 
@@ -897,13 +1068,82 @@ and merges by Place ID; `estimateGoogleRequests()` gives the ceiling before spen
 `toBulkPayload()` is shared by both save paths (office discovery and a rep adding one doctor) so the
 mapping cannot drift. Excel round-trip: `EXCEL_COLUMNS`, `toExcelRow`, `fromExcelRow`.
 
-### 8.8 Audit actions — `lib/audit.ts`
+### 8.8 Affiliate commission — `lib/sales/*` (pure parts tested)
+
+**Everything is in whole rupees** (`rupees()` = `Math.round`): a payout advice reading ₹449.70
+invites an argument that ₹450 does not.
+
+**Attribution.** A rep holds codes built from their own code and a rule's digits — `RAUSHAN10`,
+`RAUSHAN30`. `parseCoupon` splits one back into `{repCode, suffix}`; the suffix names the rule.
+Anything not shaped like *name-then-digits* (`FREESHIP`, `DIWALI25` where no rep is DIWALI) is left
+unattributed rather than guessed at. `attributeOrder` takes the first code on the order belonging to
+a known rep, so a site-wide offer stacked on top is ignored.
+
+**What a rate is applied to.** `computeCommission(lines, rule)`:
+
+```
+netOf(line) = max(0, gross − couponDiscount − otherDiscount − refunded)
+base        = Σ netOf over the lines in scope
+amount      = round(base × rate / 100)
+```
+
+Scope comes from the rule's `base`:
+
+- **`Discounted lines`** (the default) — the lines Shopify recorded this coupon as discounting.
+  Shopify allocates a code's discount per line item, so "the lines the coupon worked on" is a fact on
+  the order and not a list anybody maintains: a code valid for one product pays on that product by
+  itself. Where no line carries an allocation, the whole order is used and `wholeOrderFallback` says
+  so on screen — paying on nothing and paying on everything are both worse than saying which happened.
+- **`Whole order`** / **`Named products`** — every line, or lines matching a SKU/title list.
+
+Worked through: the kit is MRP ₹2,299, the `30` code takes ₹800 off, so ₹1,499 was received and 30%
+of that is ₹449.70 → **₹450**. The `10` code discounts one product by 10%, and 10% of what was paid
+for it is the commission. One sentence covers both, which is why there is one function.
+
+**When it is owed.** `commissionState`:
+
+| | |
+|---|---|
+| `Pending` | not delivered yet |
+| `Maturing` | delivered, inside the hold window (`maturesAt = deliveredAt + holdDays`) |
+| `Payable` | the window has passed, no run has claimed it |
+| `In payout` | on a draft or approved run — the figure is frozen |
+| `Paid` | the run carrying it has been paid |
+| `Void` | RTO, returned, cancelled, lost, refunded in full, or nothing received |
+
+A delivery with no timestamp starts the clock from the moment we learned of it — stranding a rep's
+earnings because Shiprocket omitted a date is not a policy anybody chose. See §4.13a for what is and
+is not recomputed, and §4.13b for why maturity is a date comparison.
+
+**Delivery states** — `lib/sales/delivery.ts` reduces Shiprocket's forty-odd statuses to six by
+matching on words, in an order that matters: `RTO DELIVERED` and `RETURN DELIVERED` both contain
+"delivered" and neither is a sale. An unrecognised status lands on `Awaiting`, which pays nobody,
+rather than on a guess; `PARTIAL_DELIVERED` lands on `Undelivered` until a human sets the override.
+
+**Payout runs** — `lib/sales/payout-run.ts`. `PO/2026-27/0004`, claimed with an atomic `$inc` on the
+same `Counter` invoices use. `previewPayout` writes nothing; `savePayoutRun` re-prices the candidates,
+*then* claims them with one conditional `updateMany` matching `status: "Payable"` — so two
+administrators pressing Generate at the same moment cannot both promise the same money, because the
+second matches nothing and produces a visibly empty run. State machine
+`Draft →(approve, ADMIN)→ Approved →(pay)→ Paid`, `Approved →(reopen)→ Draft`, **Paid terminal**.
+
+**The sync** — `lib/sales/sync.ts`. Two passes that fail independently, because a Shiprocket outage
+must not stop new orders being attributed. Orders are pulled by Shopify's `updated_at` with **an
+hour's overlap** on the last run: a window starting exactly where the last one ended will eventually
+skip an order indexed a moment late, and a skipped order is a rep unpaid with nothing on any screen
+to explain it. Every write is an upsert, so re-reading costs nothing. Shiprocket is joined on
+`channel_order_id`, tried against every form the order could be filed under (`matchKeysFor`:
+`#1042`, `1042`, the numeric id) because which one arrives depends on how the store was connected.
+
+### 8.9 Audit actions — `lib/audit.ts`
 
 `doctor.created`, `doctor.call-schedule.updated`, `visit.checked-in`, `visit.completed`,
 `visit.missed`, `visit.photo.added`, `visit.photo.deleted`, `invoice.payment.proof.added`,
 `invoice.payment.proof.removed`, `billing.qr.updated`, `billing.qr.removed`, `salary.revised`,
 `salary.revision.deleted`, `payroll.generated`, `payroll.approved`, `payroll.reopened`,
-`payroll.paid`, `payroll.deleted`, `payroll.settings.updated`.
+`payroll.paid`, `payroll.deleted`, `payroll.settings.updated`,
+`sales.rep.{created,updated,deactivated,deleted}`, `sales.delivery.overridden`, `sales.synced`,
+`sales.settings.updated`, `sales.payout.{generated,adjusted,approved,reopened,paid,deleted}`.
 `auditLabel(action)` gives the human sentence. Adding an action means adding it to `AUDIT_ACTIONS`.
 
 ---
@@ -950,7 +1190,10 @@ light whatever the screen is (§9.5). So do the badge over a visit photograph an
 
 ### 9.3 Shells
 
-`AdminShell` (`app/admin/layout.tsx`) — desktop sidebar navigation.
+`AdminShell` (`app/admin/layout.tsx`) — desktop sidebar navigation. Each `NAV` entry carries a
+`workspace`, and the shell shows only the CRM the current path belongs to (§1), with a "Switch CRM"
+link back to `/choose` for anybody who can reach both. `/admin`, `/admin/hr` and `/admin/sales` are
+matched exactly, or each would light up on every screen beneath it.
 `FieldShell` (`app/employee/layout.tsx`) — mobile bottom tabs: **Today, Plans, Doctors, Bills**, with
 samples, history, leave, payslips and profile behind **More**.
 
@@ -963,6 +1206,7 @@ samples, history, leave, payslips and profile behind **More**.
 | Visits | `VisitForm`, `VisitPhotos` |
 | Plans | `PlanAssignment`, `DeletePlanButton` |
 | HR | `PayslipDocument`, `SalaryCard` |
+| Sales | `SyncButton` (reports what a sync did, not just that it ran), `RepForm` (previews the coupon codes it will create), `OrderList` (+ the delivery override) |
 | PWA | `ServiceWorker`, `InstallPrompt`, `ConnectionStatus` |
 
 ### 9.5 Print documents
@@ -1059,13 +1303,18 @@ the control in the UI. Never invent an inline role check in a route.
 3. `lib/billing/types.ts` — add it to `InvoiceRecord` so the browser can name it.
 4. `components/billing/bill-form.tsx` and `invoice-document.tsx` — capture and print it.
 
+`followUps` is the one field deliberately **not** in `composeBill().fields`: it is a list carrying
+marks the client does not hold, so the routes merge it with `applyFollowUps` instead. A field that
+the server knows more about than the request does belongs there too, not in `fields`.
+
 ### 10.6 Style conventions observed throughout
 
 - British-English prose in comments; comments explain **why**, not what.
 - `const` arrow helpers for one-liners, `function` for exported logic.
 - `?.` / `??` freely; `.lean()` on every read-only query, with an explicit cast.
-- Errors are sentences a user can act on: `"Money has been received against this bill. Remove the
-  receipts first, then edit it."` — not `"Invalid state"`.
+- Errors are sentences a user can act on, naming the figures and the way out: `"₹500.00 has already
+  been received against this bill, so it cannot be re-priced to ₹400.00. Bill at least what has been
+  paid, or remove a receipt under Payments first."` — not `"Invalid state"`.
 - Enum arrays are `as const` and their type derived with `(typeof X)[number]`.
 
 ---
@@ -1093,6 +1342,16 @@ the control in the UI. Never invent an inline role check in a route.
 | Reopening a Paid payroll month | Money has left the bank. | Corrections are a later entry, never a rewrite. |
 | Rounding CGST and SGST separately | The two halves stop adding to the line's tax. | `sgst = money(tax - cgst)`. |
 | JSX in tests | `tsconfig` uses `jsx: "preserve"` for Next, which breaks esbuild under vitest. | `vitest.config.ts` already sets `esbuild.jsx: "automatic"` — do not remove it. |
+| Reading `RTO DELIVERED` as a delivery | The string contains "delivered", so a naive match pays commission on a parcel that came *back*. Same for `RETURN DELIVERED`. | `deliveryStateFrom` checks RTO and RETURN **before** DELIVERED. The order of those rules is the point of the module. |
+| Querying payouts on `status: "Payable"` alone | A commission that matured overnight is still stored as `Maturing`, so the run silently skips it and the rep waits another week. | Match on `maturesAt <= end` with status in `["Maturing", "Payable"]` (§4.13b). |
+| Recomputing a claimed commission | An approved run's figures change underneath it, and an approval stops meaning anything. | `recalculateCommission` leaves `In payout` / `Paid` alone and raises `needsReversal` instead (§4.13a). |
+| Syncing Shopify from `created_at` | A month-old order refunded this morning never comes back through, so its commission is never voided. | Pull by `updated_at`, with an hour's overlap on the last run. |
+| Paging Shopify with filters still attached | Shopify rejects `page_info` sent alongside anything but `limit`, so the second page 400s. | `fetchOrders` drops every filter once it holds a cursor. |
+| Two reps sharing a coupon code | Every order it brings in becomes unattributable, with no way to work out afterwards whose it was. | The unique index on `coupons.code`, plus the explicit check in the rep routes. |
+| Deleting a coupon from a rep | Orders already attributed point at a code that no longer exists. | Withdrawn codes are set `active: false` and kept. |
+| Putting a Shopify token in `.env` | It cannot then be rotated without a redeploy, and it sits in plain sight in the dashboard. | Credentials live in `SalesSettings`, `select: false` and encrypted (`lib/sales/secrets.ts`). |
+| Trusting the `shop` parameter on the OAuth callback | It is attacker-chosen and becomes the host the client secret is posted to. | `safeShopDomain` refuses anything but `<handle>.myshopify.com` **before** it reaches a URL. A suffix check would pass `shop.myshopify.com.evil.com`. |
+| Sending somebody to Shopify's admin to "create a custom app" | That button was removed on 1 January 2026, so the instruction describes a screen that is not there. | Dev Dashboard app + the OAuth flow in `lib/sales/oauth.ts`. |
 
 ---
 
@@ -1105,6 +1364,7 @@ the control in the UI. Never invent an inline role check in a route.
 | Change invoice numbering | `lib/billing/numbering.ts`, `lib/billing/invoices.ts` |
 | Change how the printed bill looks | `components/billing/invoice-document.tsx`, `app/invoices/[id]/print/page.tsx` |
 | Payment / receipt behaviour | `app/api/invoices/[id]/payments/route.ts`, `lib/billing/invoices.ts::recalculate` |
+| Follow-ups / collection chasing | `lib/billing/follow-ups.ts` (+ `follow-ups.test.ts`), `app/api/invoices/[id]/follow-ups/route.ts`, `components/billing/follow-up-editor.tsx` |
 | Payment proof upload | `app/api/invoices/[id]/payments/[paymentId]/proof/route.ts`, `models/PaymentProof.ts`, `lib/billing/attachments.ts` |
 | Seller details / payment QR | `models/Settings.ts`, `app/api/billing/settings/**`, `app/admin/billing/settings/page.tsx` |
 | Payroll figures | `lib/hr/payroll.ts` (+ `payroll.test.ts`, `payroll-days.test.ts`) |
@@ -1122,6 +1382,17 @@ the control in the UI. Never invent an inline role check in a route.
 | Product catalogue | `models/Catalog.ts`, `app/api/products/**`, `app/admin/products/page.tsx` |
 | Google discovery | `lib/doctors/{discovery,places}.ts`, `app/api/google/**`, `app/admin/discover/page.tsx` |
 | Excel import/export | `lib/doctors/discovery.ts`, `app/api/doctors/{export,bulk}/route.ts` |
+| Commission arithmetic | `lib/sales/commission.ts` (+ `commission.test.ts`) |
+| Coupon → rep attribution | `lib/sales/coupons.ts`, `lib/sales/sync.ts::couponIndex` |
+| Reading a courier status | `lib/sales/delivery.ts` (+ `delivery.test.ts`) |
+| Payout periods and totals | `lib/sales/payouts.ts` (+ `payouts.test.ts`) |
+| Payout run assembly | `lib/sales/payout-run.ts`, `app/api/sales/payouts/**` |
+| Shopify or Shiprocket calls | `lib/sales/{shopify,shiprocket,http}.ts` |
+| What the sync does | `lib/sales/sync.ts`, `app/api/sales/{sync,cron}/route.ts` |
+| Affiliate credentials | `lib/sales/{settings,secrets}.ts`, `app/api/sales/settings/**` |
+| Connecting Shopify (OAuth) | `lib/sales/oauth.ts` (+ `oauth.test.ts`), `app/api/sales/shopify/{install,callback}` |
+| Sales dashboards and figures | `lib/sales/reporting.ts`, `app/admin/sales/**` |
+| Which CRM a screen belongs to | `lib/workspace.ts`, `components/layout/admin-shell.tsx`, `app/choose/page.tsx` |
 | Permissions | `constants/access.ts` (+ `access.test.ts`) |
 | Session / login | `lib/auth/{session,guard}.ts`, `middleware.ts`, `app/api/auth/**` |
 | Navigation | `components/layout/{admin-shell,field-shell}.tsx` |
@@ -1140,6 +1411,7 @@ Co-located `*.test.ts` next to the module they cover; `npm test` runs vitest onc
 |---|---|
 | `constants/access.test.ts` | the whole permission matrix |
 | `lib/billing/gst.test.ts` | line pricing, inclusive rates, CGST/SGST split, round-off, words |
+| `lib/billing/follow-ups.test.ts` | which chase is next, the `followUpDate` mirror, marks kept through an edit |
 | `lib/hr/payroll.test.ts` | payslip composition, PF/ESI/PT |
 | `lib/hr/payroll-days.test.ts` | divisor days, on-roll days, loss of pay |
 | `lib/hr/hr.test.ts` | leave counting and balances |
@@ -1149,6 +1421,12 @@ Co-located `*.test.ts` next to the module they cover; `npm test` runs vitest onc
 | `lib/samples/movements.test.ts` | signed quantities, `foldStock`, dispense rows |
 | `lib/inventory/movements.test.ts` | signed stock, `foldLevels`, `levelChange`, alerts |
 | `lib/doctors/discovery.test.ts` | Places mapping, Excel round-trip |
+| `lib/sales/commission.test.ts` | coupon parsing and attribution, the ₹450 kit and the 10% case, refunds and stacked offers, the hold window, what a claimed commission keeps, `recalculateCommission` |
+| `lib/sales/delivery.test.ts` | Shiprocket's vocabulary, and that `RTO DELIVERED` never reads as a sale |
+| `lib/sales/payouts.test.ts` | period proposal, calendar arithmetic, closing-day boundaries, signed adjustments, run totals |
+| `lib/sales/secrets.test.ts` | credential round-trip, and that the stored form is parsed from the **end** — the `enc.v1` prefix carries a dot, so a value has six parts and not five |
+| `lib/sales/shopify.test.ts` | shop-address normalisation (admin URL, bare handle, storefront domain), and the discount-allocation mapping that decides whose commission an order is |
+| `lib/sales/oauth.test.ts` | the shop-domain guard against a forged `shop` parameter, the authorize URL, and HMAC verification against a tampered or wrongly-signed callback |
 | `components/ui/modal.test.tsx` | the one rendered-component test |
 
 **New arithmetic belongs in a pure module with a test.** Database code is exercised through the
@@ -1166,6 +1444,17 @@ routes, not unit-tested.
 - Excel import runs inline, so very large sheets are best split.
 - **No offline support** — see §9.6.
 - Leave counting includes weekends (no working-day calendar yet).
+- Affiliate reps have **no login**. Everything about them is read and settled from the admin panel;
+  `SalesRep.user` exists so adding rep-facing screens later needs no backfill.
+- The sync runs **inline** in the request. Right for a few hundred orders a week; a much larger shop
+  would want it moved off the request.
+- A commission paid out before a late return is **not clawed back automatically**. The order is
+  flagged `needsReversal` and shown on the dashboard; recovery is a named negative adjustment on a
+  later run. Shortening `holdDays` makes this more likely.
+- `channel_order_id` is matched against several shapes (§8.8). If a Shiprocket account files orders
+  under something else again, deliveries will not join and every commission stays `Pending` — the
+  sync report's unmatched count is what shows it.
+- A partial delivery is deliberately read as `Undelivered` and waits for a manual override.
 
 ---
 

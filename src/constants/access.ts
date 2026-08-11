@@ -13,6 +13,18 @@ export const usesAdminPanel = (role: Role) => role === "ADMIN" || role === "HR";
 export const usesFieldPanel = (role: Role) => role === "MR" || role === "SALES";
 export const homeFor = (role: Role) => (usesAdminPanel(role) ? "/admin" : "/employee");
 
+/**
+ * Where somebody lands when they sign in, as opposed to where a panel guard
+ * sends them when they wander.
+ *
+ * The desk serves two CRMs — the doctor operation and the affiliate one — so a
+ * desk role is asked which they came for. Field staff have one panel and are
+ * taken straight to it; asking them to choose would be a question with one
+ * answer. Kept apart from `homeFor` on purpose: a guard bouncing a rep out of
+ * `/admin` wants the panel, not the chooser.
+ */
+export const landingFor = (role: Role) => (usesAdminPanel(role) ? "/choose" : "/employee");
+
 export const can = {
   manageDoctors: (role: Role) => role === "ADMIN",
   manageEmployees: (role: Role) => role === "ADMIN" || role === "HR",
@@ -79,5 +91,33 @@ export const can = {
    */
   approvePayroll: (role: Role) => role === "ADMIN",
   /** Reading what somebody else earns. Everybody may read their own payslip. */
-  viewPayroll: (role: Role) => role === "ADMIN" || role === "HR"
+  viewPayroll: (role: Role) => role === "ADMIN" || role === "HR",
+
+  // ------------------------------------------------------------ affiliate sales
+  /**
+   * Reading the affiliate operation: who is selling, what their coupons brought
+   * in, what was delivered and what is owed. HR sees it because they are the
+   * desk that answers "when am I being paid" on the telephone.
+   */
+  viewSales: (role: Role) => role === "ADMIN" || role === "HR",
+  /**
+   * Adding a rep, issuing them a coupon, correcting a delivery the courier got
+   * wrong, and holding the Shopify and Shiprocket credentials.
+   *
+   * The administrator's alone. A coupon code *is* an attribution rule — whoever
+   * can issue one can direct commission at a person — and correcting a delivery
+   * state by hand is the manual override on whether an order pays out at all.
+   */
+  manageSales: (role: Role) => role === "ADMIN",
+  /** Preparing a week's payout: gathering what has matured and setting it out per rep. */
+  runSalesPayout: (role: Role) => role === "ADMIN" || role === "HR",
+  /**
+   * Approving a payout run and releasing the money.
+   *
+   * Split from preparing it for exactly the reason payroll is (see
+   * `approvePayroll`): this is a real payment to real people, and one person who
+   * can both assemble the figures and release them is the same hole in a
+   * different set of books.
+   */
+  approveSalesPayout: (role: Role) => role === "ADMIN"
 };

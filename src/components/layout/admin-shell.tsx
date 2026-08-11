@@ -3,45 +3,57 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, HeartHandshake, LayoutDashboard, LogOut, Menu, Package, Receipt, Search, Stethoscope, Users, Wallet, Warehouse, X } from "lucide-react";
+import { BadgePercent, BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, HeartHandshake, LayoutDashboard, LogOut, Menu, Package, Receipt, Repeat, Search, Settings, ShoppingBag, Stethoscope, Users, Wallet, Warehouse, X } from "lucide-react";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { Brand, BrandMark } from "@/components/ui/brand";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { ROLE_LABEL, type Role } from "@/constants/access";
+import { ROLE_LABEL, can, type Role } from "@/constants/access";
+import { CHOOSE_PATH, WORKSPACE_LABEL, workspaceOf, type Workspace } from "@/lib/workspace";
 
 /**
  * Grouped, because the desk serves two jobs. An administrator runs the field
  * operation and the books; HR runs the people. Showing each their own headings
  * is what stops the sidebar reading as one undifferentiated list of twelve.
+ *
+ * `workspace` splits it again, into the two CRMs that share this panel. The
+ * affiliate operation has nothing to do with doctors, route plans or payroll,
+ * and showing all of it at once would put twenty unrelated links in one column.
  */
 const NAV = [
-  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, roles: ["ADMIN", "HR"], group: "" },
-  { href: "/admin/discover", label: "Find doctors", icon: Search, roles: ["ADMIN"], group: "Field" },
-  { href: "/admin/doctors", label: "Doctors", icon: Stethoscope, roles: ["ADMIN"], group: "Field" },
-  { href: "/admin/plans", label: "Route plans", icon: CalendarRange, roles: ["ADMIN"], group: "Field" },
-  { href: "/admin/visits", label: "Visits", icon: ClipboardList, roles: ["ADMIN"], group: "Field" },
-  { href: "/admin/reports", label: "Reports", icon: BarChart3, roles: ["ADMIN"], group: "Field" },
+  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, roles: ["ADMIN", "HR"], group: "", workspace: "doctor" },
+  { href: "/admin/discover", label: "Find doctors", icon: Search, roles: ["ADMIN"], group: "Field", workspace: "doctor" },
+  { href: "/admin/doctors", label: "Doctors", icon: Stethoscope, roles: ["ADMIN"], group: "Field", workspace: "doctor" },
+  { href: "/admin/plans", label: "Route plans", icon: CalendarRange, roles: ["ADMIN"], group: "Field", workspace: "doctor" },
+  { href: "/admin/visits", label: "Visits", icon: ClipboardList, roles: ["ADMIN"], group: "Field", workspace: "doctor" },
+  { href: "/admin/reports", label: "Reports", icon: BarChart3, roles: ["ADMIN"], group: "Field", workspace: "doctor" },
 
-  { href: "/admin/billing", label: "Billing", icon: Receipt, roles: ["ADMIN", "HR"], group: "Trade" },
-  { href: "/admin/customers", label: "Customers", icon: Building2, roles: ["ADMIN", "HR"], group: "Trade" },
-  { href: "/admin/inventory", label: "Inventory", icon: Warehouse, roles: ["ADMIN", "HR"], group: "Trade" },
-  { href: "/admin/products", label: "Products", icon: Package, roles: ["ADMIN"], group: "Trade" },
-  { href: "/admin/samples", label: "Samples", icon: Boxes, roles: ["ADMIN", "HR"], group: "Trade" },
+  { href: "/admin/billing", label: "Billing", icon: Receipt, roles: ["ADMIN", "HR"], group: "Trade", workspace: "doctor" },
+  { href: "/admin/customers", label: "Customers", icon: Building2, roles: ["ADMIN", "HR"], group: "Trade", workspace: "doctor" },
+  { href: "/admin/inventory", label: "Inventory", icon: Warehouse, roles: ["ADMIN", "HR"], group: "Trade", workspace: "doctor" },
+  { href: "/admin/products", label: "Products", icon: Package, roles: ["ADMIN"], group: "Trade", workspace: "doctor" },
+  { href: "/admin/samples", label: "Samples", icon: Boxes, roles: ["ADMIN", "HR"], group: "Trade", workspace: "doctor" },
 
-  { href: "/admin/hr", label: "People", icon: HeartHandshake, roles: ["ADMIN", "HR"], group: "People" },
-  { href: "/admin/team", label: "Employees", icon: Users, roles: ["ADMIN", "HR"], group: "People" },
-  { href: "/admin/hr/attendance", label: "Attendance", icon: CalendarCheck, roles: ["ADMIN", "HR"], group: "People" },
-  { href: "/admin/hr/leave", label: "Leave", icon: ClipboardCheck, roles: ["ADMIN", "HR"], group: "People" },
-  { href: "/admin/hr/holidays", label: "Holidays", icon: CalendarDays, roles: ["ADMIN", "HR"], group: "People" },
-  { href: "/admin/hr/payroll", label: "Payroll", icon: Wallet, roles: ["ADMIN", "HR"], group: "People" }
+  { href: "/admin/hr", label: "People", icon: HeartHandshake, roles: ["ADMIN", "HR"], group: "People", workspace: "doctor" },
+  { href: "/admin/team", label: "Employees", icon: Users, roles: ["ADMIN", "HR"], group: "People", workspace: "doctor" },
+  { href: "/admin/hr/attendance", label: "Attendance", icon: CalendarCheck, roles: ["ADMIN", "HR"], group: "People", workspace: "doctor" },
+  { href: "/admin/hr/leave", label: "Leave", icon: ClipboardCheck, roles: ["ADMIN", "HR"], group: "People", workspace: "doctor" },
+  { href: "/admin/hr/holidays", label: "Holidays", icon: CalendarDays, roles: ["ADMIN", "HR"], group: "People", workspace: "doctor" },
+  { href: "/admin/hr/payroll", label: "Payroll", icon: Wallet, roles: ["ADMIN", "HR"], group: "People", workspace: "doctor" },
+
+  { href: "/admin/sales", label: "Overview", icon: LayoutDashboard, roles: ["ADMIN", "HR"], group: "", workspace: "sales" },
+  { href: "/admin/sales/reps", label: "Sales team", icon: Users, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
+  { href: "/admin/sales/orders", label: "Orders", icon: ShoppingBag, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
+  { href: "/admin/sales/payouts", label: "Payouts", icon: BadgePercent, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
+  { href: "/admin/sales/settings", label: "Settings", icon: Settings, roles: ["ADMIN"], group: "Affiliate", workspace: "sales" }
 ] as const;
 
 /**
- * Exact matching for the two that sit above others in the same path — /admin/hr
- * is the People dashboard, not an ancestor of Attendance, and would otherwise
- * light up on every HR screen at once.
+ * Exact matching for the three that sit above others in the same path —
+ * /admin/hr is the People dashboard, not an ancestor of Attendance, and
+ * /admin/sales is the affiliate overview rather than all of it. Either would
+ * otherwise light up on every screen beneath them at once.
  */
-const EXACT = new Set(["/admin", "/admin/hr"]);
+const EXACT = new Set(["/admin", "/admin/hr", "/admin/sales"]);
 const isActive = (pathname: string, href: string) =>
   EXACT.has(href) ? pathname === href : pathname.startsWith(href);
 const initials = (name: string) => name.trim().split(/\s+/).map(part => part[0]).slice(0, 2).join("").toUpperCase() || "?";
@@ -50,7 +62,13 @@ export function AdminShell({ user, children }: { user: { name: string; role: Rol
   const pathname = usePathname();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
-  const items = NAV.filter(item => (item.roles as readonly string[]).includes(user.role));
+
+  // The path decides which CRM this is, so the sidebar can never describe a
+  // different application from the one on screen.
+  const workspace: Workspace = workspaceOf(pathname);
+  const items = NAV.filter(item => item.workspace === workspace && (item.roles as readonly string[]).includes(user.role));
+  // Nobody is offered a switch to somewhere they would be refused.
+  const maySwitch = can.viewSales(user.role);
 
   async function signOut() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -61,6 +79,14 @@ export function AdminShell({ user, children }: { user: { name: string; role: Rol
   // Only headings with something under them for this role are drawn, so HR does
   // not see an empty "Field" heading.
   const groups = [...new Set(items.map(item => item.group))];
+
+  const switcher = maySwitch && (
+    <Link href={CHOOSE_PATH} onClick={() => setMenuOpen(false)}
+      className="tap mt-4 flex items-center gap-2 rounded-[10px] border border-[var(--line-2)] px-3 text-xs font-semibold text-[var(--ink-2)] transition-colors hover:bg-[var(--surface-2)]">
+      <Repeat size={14} className="shrink-0" />
+      Switch CRM
+    </Link>
+  );
 
   const navList = (
     <nav className="space-y-3">
@@ -97,8 +123,8 @@ export function AdminShell({ user, children }: { user: { name: string; role: Rol
   return <div className="min-h-[100dvh] lg:grid lg:grid-cols-[248px_1fr] lg:items-start">
     {/* Pinned to the viewport so navigation stays reachable however far the page scrolls. */}
     <aside className="hidden border-r border-[var(--line)] bg-[var(--surface)] px-4 py-5 lg:sticky lg:top-0 lg:flex lg:h-[100dvh] lg:flex-col">
-      <div className="px-2"><Brand subtitle="Doctor CRM" /></div>
-      <div className="mt-8 min-h-0 flex-1 overflow-y-auto">{navList}</div>
+      <div className="px-2"><Brand subtitle={WORKSPACE_LABEL[workspace]} />{switcher}</div>
+      <div className="mt-6 min-h-0 flex-1 overflow-y-auto">{navList}</div>
       {account}
     </aside>
 
@@ -112,10 +138,11 @@ export function AdminShell({ user, children }: { user: { name: string; role: Rol
         <button aria-label="Close menu" tabIndex={-1} onClick={() => setMenuOpen(false)} className="absolute inset-0 cursor-default bg-[var(--overlay)]" />
         <div className="relative ml-auto flex h-full w-[80%] max-w-[300px] flex-col bg-[var(--surface)] px-4 py-5">
           <div className="flex items-center justify-between">
-            <Brand subtitle="Doctor CRM" />
+            <Brand subtitle={WORKSPACE_LABEL[workspace]} />
             <button onClick={() => setMenuOpen(false)} aria-label="Close menu" className="tap grid place-items-center rounded-[10px] text-[var(--muted)]"><X size={19} /></button>
           </div>
-          <div className="mt-7 flex-1 overflow-y-auto">{navList}</div>
+          {switcher}
+          <div className="mt-6 flex-1 overflow-y-auto">{navList}</div>
           {account}
         </div>
       </div>}

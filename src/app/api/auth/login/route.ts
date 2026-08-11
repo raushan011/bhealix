@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { connectDb } from "@/lib/db/mongoose";
 import { User } from "@/models/User";
 import { createSessionToken, SESSION_COOKIE } from "@/lib/auth/session";
-import { homeFor, type Role } from "@/constants/access";
+import { landingFor, type Role } from "@/constants/access";
 import { fail, ok } from "@/lib/api";
 
 const schema = z.object({ identifier: z.string().min(2), password: z.string().min(1) });
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     user.lastLoginAt = new Date();
     await user.save();
 
-    return ok({ name: user.name, role, redirectTo: homeFor(role) });
+    return ok({ name: user.name, role, redirectTo: landingFor(role) });
   } catch (error) {
     return fail(error);
   }

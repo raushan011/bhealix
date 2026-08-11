@@ -39,6 +39,9 @@ export async function middleware(request: NextRequest) {
 // /invoices and /payslips are printable documents reached by both panels, so
 // they are guarded for a valid session but deliberately not confined to either
 // one. Which of them a person may open is decided by the page itself.
+//
+// /choose is the desk's CRM chooser: it needs a session but belongs to neither
+// panel, so it is matched here and confined by the page's own guard.
 export const config = {
-  matcher: ["/admin/:path*", "/employee/:path*", "/invoices/:path*", "/payslips/:path*", "/api/:path*"]
+  matcher: ["/admin/:path*", "/employee/:path*", "/choose", "/invoices/:path*", "/payslips/:path*", "/api/:path*"]
 };

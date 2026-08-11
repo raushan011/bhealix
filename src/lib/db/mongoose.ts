@@ -19,6 +19,7 @@ import "@/models/Catalog";
 import "@/models/Sample";
 import "@/models/HR";
 import "@/models/Payroll";
+import "@/models/Sales";
 
 type Cache = { conn: typeof mongoose | null; promise: Promise<typeof mongoose> | null };
 const globalWithMongoose = globalThis as typeof globalThis & { mongooseCache?: Cache };
