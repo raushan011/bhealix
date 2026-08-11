@@ -31,6 +31,8 @@ export default function SalesSettingsPage() {
 
   const [connecting, setConnecting] = useState(false);
   const [callbackUrl, setCallbackUrl] = useState("/api/sales/shopify/callback");
+  /** The App URL Shopify must be told about — the same origin the redirect is built from. */
+  const [appOrigin, setAppOrigin] = useState("");
 
   const [shopifyDomain, setShopifyDomain] = useState("");
   const [shopifyApiVersion, setShopifyApiVersion] = useState("2024-10");
@@ -51,6 +53,9 @@ export default function SalesSettingsPage() {
     if (data) {
       setSettings(data);
       if (data.callbackUrl) setCallbackUrl(data.callbackUrl);
+      // Trailing slash stripped: Shopify compares hosts, but a stored App URL
+      // that does not match what is pasted here invites a needless second look.
+      if (data.appUrl) setAppOrigin(data.appUrl.replace(/\/+$/, ""));
       setShopifyDomain(data.shopifyDomain ?? "");
       setShopifyApiVersion(data.shopifyApiVersion ?? "2024-10");
       setShopifyClientId(data.shopifyClientId ?? "");
@@ -193,12 +198,29 @@ export default function SalesSettingsPage() {
         </Button>
       </div>
       <p className="text-sm text-[var(--muted)]">
-        Create an app in the <strong>Shopify Dev Dashboard</strong>, give it the Admin API scopes
-        <strong> read_orders</strong> and <strong> read_products</strong>, and add
-        <code className="mx-1 rounded bg-[var(--surface-2)] px-1.5 py-0.5 text-xs">{callbackUrl}</code>
-        as a redirect URL. Then paste its Client ID and secret below and press Connect — Shopify will ask you to approve
-        the scopes, and the access token is issued from that.
+        Create an app in the <strong>Shopify Dev Dashboard</strong> and give it the Admin API scopes
+        <strong> read_orders</strong> and <strong> read_products</strong>. Set the two URLs below on it, release a
+        version, then paste its Client ID and secret here and press Connect.
       </p>
+
+      {/*
+        * Both URLs, not just the redirect.
+        *
+        * Shopify refuses the handshake unless the redirect URI and the App URL
+        * share a host — "The redirect_uri and application url must have matching
+        * hosts". A new app's App URL defaults to https://example.com, so showing
+        * only the redirect URL sends people to a refusal from Shopify that names
+        * a setting they were never told to fill in.
+        */}
+      <div className="space-y-2 rounded-[10px] border border-[var(--line)] bg-[var(--surface-2)] p-4">
+        <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">Set both of these on the app</p>
+        <CopyRow label="App URL" value={appOrigin} />
+        <CopyRow label="Redirect URL" value={callbackUrl} />
+        <p className="text-xs text-[var(--muted)]">
+          They must share a host, or Shopify refuses the handshake before you ever see the approval screen. Turn
+          <strong> embedded</strong> off too — this CRM is its own site, not a panel inside the Shopify admin.
+        </p>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Shop address" hint="Your .myshopify.com address, not your storefront domain. Pasting your admin URL works — the handle is read out of it.">
@@ -376,6 +398,26 @@ export default function SalesSettingsPage() {
     </Card>
 
     <div className="flex justify-end"><Button busy={busy} onClick={save}>Save settings</Button></div>
+  </div>;
+}
+
+/**
+ * A value to be pasted into somebody else's dashboard, with a button that puts
+ * it on the clipboard. Retyping a URL by hand is how a host ends up one
+ * character out, and Shopify's refusal for that does not say which character.
+ */
+function CopyRow({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  return <div className="flex flex-wrap items-center gap-2">
+    <span className="w-24 shrink-0 text-xs text-[var(--muted)]">{label}</span>
+    <code className="min-w-0 flex-1 wrap-break-word rounded bg-[var(--surface)] px-2 py-1 text-xs">{value || "—"}</code>
+    <button
+      onClick={() => { navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+      disabled={!value}
+      className="tap shrink-0 rounded-[8px] px-2 text-xs font-medium text-[var(--brand)] hover:bg-[var(--surface)] disabled:text-[var(--muted)]">
+      {copied ? "Copied" : "Copy"}
+    </button>
   </div>;
 }
 

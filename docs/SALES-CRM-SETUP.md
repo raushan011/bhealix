@@ -43,16 +43,30 @@ Paste it into **Shop address**. (Pasting the whole URL is fine — it is reduced
    > Without it those fields come back empty. Nothing about the money depends on it: attribution is by
    > discount code and commission is by line total, so orders and payouts are correct either way —
    > the customer column is simply blank.
-3. Add a **redirect URL**, exactly as the CRM's settings screen shows it:
+3. Set **both** URLs. The CRM's settings screen prints them with a copy button beside each:
 
-   ```
-   https://your-crm-address/api/sales/shopify/callback
-   ```
+   | | |
+   |---|---|
+   | **App URL** | `https://your-crm-address` |
+   | **Redirect URL** | `https://your-crm-address/api/sales/shopify/callback` |
 
-   It has to match character for character, including `https`. Shopify will not accept a plain
-   `http://localhost` — see *Connecting from a laptop* below.
-4. **Release a version** of the app, so the scopes you just set are the ones in force.
-5. From the app's **Settings** page, copy the **Client ID** and the **client secret**.
+   > **They must share a host.** A new app's App URL defaults to `https://example.com`, and leaving it
+   > there produces this at the approval screen, before anything of ours runs:
+   >
+   > ```
+   > Oauth error invalid_request:
+   > The redirect_uri and application url must have matching hosts
+   > ```
+   >
+   > Setting only the redirect URL is not enough. Set both.
+
+   Shopify will not accept a plain `http://localhost` for either — see *Connecting from a laptop*.
+4. Turn **embedded** off. This CRM is its own site, not a panel rendered inside the Shopify admin;
+   an embedded app is expected to load in an iframe and authenticate differently.
+5. **Release a version**, or none of steps 2–4 are in force. The Versions page should show your new
+   version as *Active* with the App URL you just set — if it still says `https://example.com`, the
+   release did not happen.
+6. From the app's **Settings** page, copy the **Client ID** and the **client secret**.
 
 ## 2a. Connecting from a laptop
 
