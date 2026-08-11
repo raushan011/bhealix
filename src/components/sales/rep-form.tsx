@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { X } from "lucide-react";
 import { Button, Field, Notice } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
-import { couponFor, isRepCode, normaliseCode } from "@/lib/sales/coupons";
+import { isRepCode, normaliseCode } from "@/lib/sales/coupons";
 import { PAYOUT_MODES } from "@/lib/sales/constants";
 import type { CommissionRule } from "@/lib/sales/commission";
-import type { SalesRepRecord } from "@/lib/sales/types";
+import type { RepCoupon, SalesRepRecord } from "@/lib/sales/types";
+
+type Coupon = RepCoupon;
 
 type Draft = {
   name: string; code: string; phone: string; email: string;
@@ -48,6 +51,7 @@ export function RepForm({ rep, onClose, onSaved }: {
   onSaved: (message: string) => void;
 }) {
   const [draft, setDraft] = useState<Draft>(rep ? draftFrom(rep) : emptyDraft());
+  const [coupons, setCoupons] = useState<Coupon[]>(rep?.coupons?.length ? rep.coupons.map(entry => ({ ...entry })) : []);
   const [rules, setRules] = useState<CommissionRule[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -60,12 +64,11 @@ export function RepForm({ rep, onClose, onSaved }: {
   }, []);
 
   const code = normaliseCode(draft.code);
-  const coupons = useMemo(
-    () => (isRepCode(code) ? rules.filter(rule => rule.active).map(rule => couponFor(code, rule.suffix)) : []),
-    [code, rules]
-  );
-
+  const active = useMemo(() => rules.filter(rule => rule.active), [rules]);
   const set = (key: keyof Draft) => (value: string) => setDraft(current => ({ ...current, [key]: value }));
+
+  const setCoupon = (index: number, patch: Partial<Coupon>) =>
+    setCoupons(current => current.map((coupon, at) => (at === index ? { ...coupon, ...patch } : coupon)));
 
   async function save() {
     setBusy(true); setError("");
@@ -78,6 +81,7 @@ export function RepForm({ rep, onClose, onSaved }: {
           code: code || undefined,
           email: draft.email || undefined,
           joinedAt: draft.joinedAt || undefined,
+          coupons: coupons.filter(coupon => coupon.code.trim() && coupon.suffix),
           // The code is fixed once issued; sending it on an edit would only
           // invite the server to refuse a change nobody asked for.
           ...(rep ? { code: undefined } : {})
@@ -120,16 +124,46 @@ export function RepForm({ rep, onClose, onSaved }: {
         </Field>
       )}
 
-      {!rep && (
-        coupons.length ? (
-          <Notice tone="info">
-            These codes will be created here: <strong>{coupons.join(", ")}</strong>. Create the matching discount codes in
-            Shopify and import them into the Fastrr checkout, or orders using them will not be attributed.
-          </Notice>
-        ) : code.length > 0 && !isRepCode(code) ? (
-          <Notice tone="warning">A rep code starts with a letter and has no spaces — RAUSHAN, PRIYA_K.</Notice>
-        ) : null
+      {!rep && code.length > 0 && !isRepCode(code) && (
+        <Notice tone="warning">A rep code starts with a letter and has no spaces — RAUSHAN, PRIYA_K.</Notice>
       )}
+
+      {/*
+        * Entered by hand, never invented.
+        *
+        * The CRM does not create discount codes — Shopify does — so generating
+        * RAUSHAN10 and RAUSHAN30 here only ever put codes on the record that
+        * might not exist over there. The code is whatever Shopify has; the rule
+        * it pays under is chosen beside it, so a coupon with no digits in its
+        * name works exactly as well as one with them.
+        */}
+      <div className="space-y-2">
+        <p className="text-[13px] font-medium text-[var(--ink-2)]">Coupon codes</p>
+        <p className="text-xs text-[var(--muted)]">
+          Exactly as they are spelled in Shopify. Attribution is an exact match, so a typo here means orders that earn
+          nobody anything.
+        </p>
+
+        {coupons.map((coupon, index) => (
+          <div key={index} className="grid grid-cols-[1fr_130px_auto] items-center gap-2">
+            <input className="input" placeholder="SATHYA30" value={coupon.code}
+              onChange={event => setCoupon(index, { code: event.target.value.toUpperCase() })} />
+            <select className="select" value={coupon.suffix} onChange={event => setCoupon(index, { suffix: event.target.value })}>
+              <option value="">Rule…</option>
+              {active.map(rule => <option key={rule.suffix} value={rule.suffix}>{rule.label} ({rule.rate}%)</option>)}
+            </select>
+            <button aria-label="Remove code" onClick={() => setCoupons(current => current.filter((_, at) => at !== index))}
+              className="tap grid place-items-center rounded-[10px] text-[var(--muted)] hover:bg-[var(--surface-2)]">
+              <X size={16} />
+            </button>
+          </div>
+        ))}
+
+        <button onClick={() => setCoupons(current => [...current, { code: code ? `${code}` : "", suffix: active[0]?.suffix ?? "", active: true }])}
+          className="text-sm font-medium text-[var(--brand)] hover:underline">
+          Add a coupon code
+        </button>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Phone"><input className="input" value={draft.phone} onChange={event => set("phone")(event.target.value)} /></Field>

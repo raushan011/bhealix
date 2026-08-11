@@ -97,7 +97,15 @@ export function linesFor(lines: OrderLine[], rule: CommissionRule): { lines: Ord
 
   if (rule.base === "Discounted lines") {
     const discounted = lines.filter(line => line.couponDiscount > 0);
-    return discounted.length ? { lines: discounted, wholeOrderFallback: false } : { lines, wholeOrderFallback: true };
+    if (discounted.length) return { lines: discounted, wholeOrderFallback: false };
+
+    // One line is not a fallback. "The lines the coupon discounted" and "the
+    // whole order" are the same set, so there is nothing ambiguous to warn
+    // about — and warning anyway would put a caution on every single-product
+    // order, which is most of them, until nobody reads the warning at all.
+    if (lines.length === 1) return { lines, wholeOrderFallback: false };
+
+    return { lines, wholeOrderFallback: true };
   }
 
   return { lines, wholeOrderFallback: false };

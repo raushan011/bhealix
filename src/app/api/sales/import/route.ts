@@ -96,11 +96,27 @@ export async function POST(request: Request) {
     let created = 0, updated = 0;
     for (const order of known) {
       const match = byCode.get(order.couponCode)!;
-      const existing = await SalesOrder.findOne({ name: order.name });
+
+      /*
+       * Matched on the shop's own order id first, then on the name.
+       *
+       * The export carries `platformOrderId`, which is exactly what the Shopify
+       * sync keys on. Ignoring it would mean an order imported today and pulled
+       * from Shopify tomorrow became two orders, and the rep was paid twice for
+       * one sale.
+       */
+      const existing = await SalesOrder.findOne(order.platformOrderId
+        ? { $or: [{ shopifyOrderId: order.platformOrderId }, { name: order.name }] }
+        : { name: order.name });
+
       const document = existing ?? new SalesOrder({ source: "Import", name: order.name });
 
       Object.assign(document, {
+        // An order Shopify has already priced per line keeps that provenance;
+        // the import only fills in what is missing.
         source: existing?.source === "Shopify" ? "Shopify" : "Import",
+        name: order.name,
+        shopifyOrderId: order.platformOrderId ?? existing?.shopifyOrderId,
         placedAt: order.placedAt,
         customer: order.customer,
         couponCode: order.couponCode,
@@ -108,12 +124,17 @@ export async function POST(request: Request) {
         ruleSuffix: match.suffix,
         discountCodes: [order.couponCode],
         items: [itemFrom(order)],
-        totals: { gross: order.total + order.discount, discount: order.discount, refunded: 0, paid: order.total },
+        totals: {
+          gross: order.total + order.discount,
+          discount: order.discount,
+          refunded: order.refunded,
+          paid: Math.max(0, order.total - order.refunded)
+        },
         syncedAt: new Date()
       });
 
-      // The export's own status wins over anything guessed before; a shipment
-      // sync can still correct it later, and a manual override still beats both.
+      // The export's own status wins over anything read before; a shipment sync
+      // can still correct it later, and a manual override still beats both.
       document.shipment = { ...(document.shipment ?? {}), status: order.deliveryStatus, checkedAt: new Date() };
       document.delivery.reported = order.delivery;
       if (order.delivery === "Delivered" && !document.shipment.deliveredAt) document.shipment.deliveredAt = order.placedAt;
@@ -157,5 +178,5 @@ const itemFrom = (order: ImportedOrder) => ({
   gross: order.total + order.discount,
   couponDiscount: order.discount,
   otherDiscount: 0,
-  refunded: 0
+  refunded: order.refunded
 });

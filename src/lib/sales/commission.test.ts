@@ -87,10 +87,16 @@ describe("computeCommission", () => {
     expect(result.wholeOrderFallback).toBe(false);
   });
 
-  it("counts the whole order, and says so, when no line carries an allocation", () => {
+  it("does not call a single line a fallback — it is the only line the coupon could have hit", () => {
     const result = computeCommission([line({ gross: 1499 })], KIT30);
-    expect(result.wholeOrderFallback).toBe(true);
     expect(result.base).toBe(1499);
+    expect(result.wholeOrderFallback).toBe(false);
+  });
+
+  it("counts the whole order, and says so, when several lines carry no allocation", () => {
+    const result = computeCommission([line({ gross: 1499 }), line({ title: "Face wash", gross: 599 })], KIT30);
+    expect(result.wholeOrderFallback).toBe(true);
+    expect(result.base).toBe(2098);
   });
 
   it("takes a stacked offer off the base as well — it is money that never arrived", () => {

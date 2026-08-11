@@ -37,6 +37,21 @@ describe("deliveryStateFrom", () => {
     expect(deliveryStateFrom("PARTIAL_DELIVERED")).toBe("Undelivered");
   });
 
+  it("never reads a fulfilment as a delivery", () => {
+    // "Fulfilled" is Shopify's word for "a label exists" — the parcel has been
+    // dispatched, not received. Paying on it would pay on every order the
+    // moment it left the warehouse.
+    expect(deliveryStateFrom("fulfilled")).toBe("In transit");
+    expect(deliveryStateFrom("FULFILLED")).toBe("In transit");
+  });
+
+  it("never reads UNfulfilled as fulfilled, let alone delivered", () => {
+    // The word contains the word it negates. Checking the shorter one first
+    // marks an order nobody has even picked as delivered.
+    expect(deliveryStateFrom("Unfulfilled")).toBe("Awaiting");
+    expect(deliveryStateFrom("UNFULFILLED")).toBe("Awaiting");
+  });
+
   it("reads a failed attempt", () => {
     expect(deliveryStateFrom("UNDELIVERED")).toBe("Undelivered");
     expect(deliveryStateFrom("UNDELIVERED - 1ST ATTEMPT")).toBe("Undelivered");

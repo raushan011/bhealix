@@ -156,14 +156,84 @@ describe("toOrder", () => {
     expect(result).toEqual({ ok: false, reason: "no coupon on this order" });
   });
 
-  it("skips an offer that belongs to nobody", () => {
-    const result = toOrder(row({ "Discount Name": "FREE BAG" }), mapping);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toMatch(/rep-shaped/);
+  it("accepts a coupon named anything, because a rep may be given one", () => {
+    // Whether a code belongs to somebody is decided against the rep list, not
+    // by the letters in it — a rep's coupon need not end in the rule's digits.
+    const result = toOrder(row({ "Discount Name": "DIWALI SPECIAL" }), mapping);
+    expect(result.ok && result.order.couponCode).toBe("DIWALI SPECIAL");
   });
 
   it("skips a row with nothing paid", () => {
     expect(toOrder(row({ "Order Total": "0" }), mapping).ok).toBe(false);
+  });
+});
+
+describe("a real Fastrr checkout export", () => {
+  // The header row and rows verbatim from an actual download, which is the only
+  // way to know the aliases match the file rather than match a guess at it.
+  const csv = [
+    "platformOrderId,clientOrderId,fastrrOrderId,date,trackingId,paymentMode,orderAmount,partial paid amount,discountData,shippingDetails,deliveryMethod,promiseEdd,firstAttemptDate,rtoPrediction,mobileNo,courier,childCourier,orderFulfillmentStatus,source,tags,paymentGateway,pgTransactionId,refundedAmount,paymentStatus,firstName,lastName",
+    '7205721407718,"#1789",357504693,2026-08-06T23:45:36.288,,cash_on_delivery,669.0,,,null null,Standard,2026-08-08T00:00,,low,6388403302,,,Unfulfilled,fastrr,"fastrr, low, SR_STANDARD, Standard",,Shydidly1786039944354,0.0,PENDING,Raushan,',
+    '7214005715174,"#1790",361162777,2026-08-11T11:52:34.139,,partial_paid,2299.0,99.0,FREE BAG,null null,Standard,2026-08-13T00:00,,low,6388403302,,,Unfulfilled,fastrr,"fastrr, low, PPCOD",RAZORPAY,order_TOMRuKrtuapfK0,0.0,partial_paid,Raushan,',
+    '7214067482854,"#1791",361223509,2026-08-11T13:03:22.010,,prepaid,1499.0,,SATHYA30,null null,Standard,2026-08-16T00:00,,low,8095341388,,,fulfilled,fastrr,"fastrr, low",RAZORPAY,order_TONf92Y5ptJJWV,0.0,CAPTURED,Deepthi,',
+    '7214208057574,"#1792",361358998,2026-08-11T15:52:08.296,,partial_paid,1499.0,99.0,PINKY30,null null,Standard,2026-08-13T00:00,,low,6388403302,,,Unfulfilled,fastrr,"fastrr, low, PPCOD",RAZORPAY,order_TOQb1X5vYDDxos,0.0,partial_paid,Raushan,Upadhyay',
+    '7214292369638,"#1794",361425895,2026-08-11T17:21:19.690,,prepaid,539.1,,SATHYA10,null null,Standard,2026-08-15T00:00,,low,9739828521,,,fulfilled,fastrr,"fastrr, low",RAZORPAY,order_TOS7y25oZSnAvk,0.0,CAPTURED,C.V,Nagaraja'
+  ].join("\n");
+
+  const table = toTable(csv);
+  const mapping = mapHeaders(table.headers);
+  const summary = readImport(table.rows, mapping);
+
+  it("finds the columns this export actually uses", () => {
+    expect(mapping.orderName).toBe("clientOrderId");
+    expect(mapping.platformOrderId).toBe("platformOrderId");
+    expect(mapping.couponCode).toBe("discountData");
+    expect(mapping.total).toBe("orderAmount");
+    expect(mapping.deliveryStatus).toBe("orderFulfillmentStatus");
+    expect(mapping.customerPhone).toBe("mobileNo");
+    expect(missingFields(mapping)).toEqual([]);
+  });
+
+  it("does not let 'partial paid amount' or 'refundedAmount' be read as the total", () => {
+    // Both contain a money word; the order the aliases are tried in is what
+    // keeps ₹99 from becoming the value of a ₹1,499 order.
+    expect(mapping.total).toBe("orderAmount");
+    expect(mapping.refunded).toBe("refundedAmount");
+  });
+
+  it("takes the coupon-carrying rows and skips the rest", () => {
+    expect(summary.rows).toBe(5);
+    expect(summary.orders.map(order => order.couponCode)).toEqual(["FREE BAG", "SATHYA30", "PINKY30", "SATHYA10"]);
+    // #1789 carried no discount at all.
+    expect(summary.skipped).toEqual([{ reason: "no coupon on this order", count: 1 }]);
+  });
+
+  it("reads what was charged, which is what commission is a share of", () => {
+    const kit = summary.orders.find(order => order.couponCode === "SATHYA30")!;
+    expect(kit.total).toBe(1499);        // 2,299 less the 800 the coupon took off
+    expect(kit.name).toBe("#1791");
+    expect(kit.platformOrderId).toBe("7214067482854");
+
+    const single = summary.orders.find(order => order.couponCode === "SATHYA10")!;
+    expect(single.total).toBe(539.1);    // 599 less 10%
+  });
+
+  it("never treats a fulfilment as a delivery", () => {
+    // Every row here is either Unfulfilled or fulfilled, and not one of them
+    // has been delivered. If any of these came back Delivered, the seven-day
+    // hold would start on a parcel still in a van.
+    expect(summary.orders.map(order => order.delivery)).toEqual(["Awaiting", "In transit", "Awaiting", "In transit"]);
+    expect(summary.orders.some(order => order.delivery === "Delivered")).toBe(false);
+  });
+
+  it("joins the customer's name back together", () => {
+    const order = summary.orders.find(order => order.couponCode === "PINKY30")!;
+    expect(order.customer.name).toBe("Raushan Upadhyay");
+    expect(order.customer.phone).toBe("6388403302");
+  });
+
+  it("keeps the quoted order name without its quotes", () => {
+    expect(summary.orders.every(order => /^#\d+$/.test(order.name))).toBe(true);
   });
 });
 
@@ -180,20 +250,20 @@ describe("readImport", () => {
   const table = toTable(csv);
   const summary = readImport(table.rows, mapHeaders(table.headers));
 
-  it("takes the rows carrying a rep's coupon", () => {
+  it("takes every row carrying a coupon of any name", () => {
     expect(summary.rows).toBe(5);
-    expect(summary.usable).toBe(3);
-    expect(summary.orders.map(order => order.couponCode)).toEqual(["SATHYA10", "PINKY30", "PINKY30"]);
+    expect(summary.usable).toBe(4);
+    expect(summary.orders.map(order => order.couponCode)).toEqual(["SATHYA10", "PINKY30", "PINKY30", "FREE BAG"]);
   });
 
   it("accounts for every row it did not take", () => {
-    // Silently importing 3 of 5 rows is how somebody is quietly underpaid.
+    // Silently importing 4 of 5 rows is how somebody is quietly underpaid.
     const total = summary.skipped.reduce((count, entry) => count + entry.count, 0);
-    expect(total).toBe(2);
-    expect(summary.skipped.map(entry => entry.reason).join(" ")).toMatch(/rep-shaped|no coupon/);
+    expect(total).toBe(1);
+    expect(summary.skipped).toEqual([{ reason: "no coupon on this order", count: 1 }]);
   });
 
   it("reads the delivery state each row will be priced on", () => {
-    expect(summary.orders.map(order => order.delivery)).toEqual(["Delivered", "In transit", "RTO"]);
+    expect(summary.orders.map(order => order.delivery)).toEqual(["Delivered", "In transit", "RTO", "Delivered"]);
   });
 });

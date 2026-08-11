@@ -1,5 +1,5 @@
 import { amount, normaliseHeader, parseDate } from "./csv";
-import { normaliseCode, parseCoupon } from "./coupons";
+import { normaliseCode } from "./coupons";
 import { deliveryStateFrom } from "./delivery";
 import type { DeliveryState } from "./constants";
 
@@ -22,25 +22,37 @@ import type { DeliveryState } from "./constants";
  */
 
 export const IMPORT_FIELDS = [
-  "orderName", "placedAt", "couponCode", "discount", "total",
-  "customerName", "customerPhone", "customerCity", "deliveryStatus", "items"
+  "orderName", "platformOrderId", "placedAt", "couponCode", "discount", "total",
+  "customerName", "customerLastName", "customerPhone", "customerCity", "deliveryStatus", "refunded", "items"
 ] as const;
 export type ImportField = (typeof IMPORT_FIELDS)[number];
 
 /**
- * What each column might be called. Longer, more specific aliases come first —
- * "discounttotal" must win over "total" when both are present.
+ * What each column might be called, most specific alias first.
+ *
+ * "discounttotal" must beat "total", and "orderfulfillmentstatus" must beat
+ * "status", or the wrong column is read as money. The Fastrr checkout export's
+ * own names are in here — `clientorderid`, `discountdata`, `orderamount` —
+ * because that is the file this is actually pointed at.
  */
 export const FIELD_ALIASES: Record<ImportField, string[]> = {
-  orderName: ["orderid", "ordernumber", "orderno", "channelorderid", "ordername", "order", "referencenumber"],
+  orderName: ["clientorderid", "orderid", "ordernumber", "orderno", "channelorderid", "ordername", "referencenumber", "order"],
+  /**
+   * The shop's own id for the order, when the export carries one. Kept because
+   * it is what the Shopify sync keys on: without it, importing an order and
+   * later syncing the same one from Shopify would make two.
+   */
+  platformOrderId: ["platformorderid", "shopifyorderid", "channelid", "platformid"],
   placedAt: ["orderdate", "createdat", "date", "placedon", "orderplacedat", "createdon"],
-  couponCode: ["discountname", "couponcode", "coupon", "discountcode", "promocode", "offercode"],
+  couponCode: ["discountdata", "discountname", "couponcode", "coupon", "discountcode", "promocode", "offercode"],
   discount: ["discounttotal", "discountamount", "discountvalue", "totaldiscount", "discount"],
-  total: ["ordertotal", "grandtotal", "totalamount", "netamount", "amountpaid", "payableamount", "amount", "total"],
-  customerName: ["customername", "buyername", "name", "customer"],
-  customerPhone: ["customerphone", "buyerphone", "phone", "mobile", "contact"],
+  total: ["orderamount", "ordertotal", "grandtotal", "totalamount", "netamount", "amountpaid", "payableamount", "amount", "total"],
+  customerName: ["firstname", "customername", "buyername", "name", "customer"],
+  customerLastName: ["lastname", "surname"],
+  customerPhone: ["mobileno", "customerphone", "buyerphone", "phone", "mobile", "contact"],
   customerCity: ["customercity", "shippingcity", "city"],
-  deliveryStatus: ["deliverystatus", "shipmentstatus", "orderstatus", "status"],
+  deliveryStatus: ["orderfulfillmentstatus", "deliverystatus", "shipmentstatus", "fulfillmentstatus", "orderstatus", "status"],
+  refunded: ["refundedamount", "refund", "refunded"],
   items: ["items", "products", "productname", "lineitems", "itemname"]
 };
 
@@ -79,12 +91,15 @@ export const missingFields = (mapping: Mapping) => REQUIRED_FIELDS.filter(field 
 
 export type ImportedOrder = {
   name: string;
+  /** The shop's own order id, where the export carries one. */
+  platformOrderId?: string;
   placedAt: Date;
   couponCode: string;
-  /** What the coupon took off. */
+  /** What the coupon took off, where the export says. Often it does not. */
   discount: number;
-  /** What the customer paid, after the discount. */
+  /** What the customer was charged, after the discount. */
   total: number;
+  refunded: number;
   customer: { name?: string; phone?: string; city?: string };
   deliveryStatus?: string;
   delivery: DeliveryState;
@@ -98,39 +113,50 @@ export type ImportRowResult =
 /**
  * One row.
  *
- * `total` is read as the money that actually arrived, and the discount is added
- * back to reconstruct what the line was before it — which is the shape the
- * commission arithmetic expects, and makes an imported order price identically
- * to one pulled from Shopify:
+ * `total` is the money the customer was charged **after** the coupon came off,
+ * which is what the commission is a share of. Where the export also names the
+ * discount, it is added back so the line reads as it did before — the shape a
+ * Shopify order arrives in — and where it does not, the total stands on its own
+ * and the answer is the same either way:
  *
- *     kit 2,299 gross − 800 coupon = 1,499 paid → 30% = ₹450
+ *     kit  2,299 gross − 800 coupon = 1,499 charged → 30% = ₹450
+ *     kit          (discount unknown) 1,499 charged → 30% = ₹450
+ *
+ * A code that is not name-then-digits is **not** rejected: a rep may be given a
+ * coupon called anything, and which rule applies is decided by the rule they
+ * were issued under, not by the letters in the code. Only the codes belonging
+ * to no rep at all are dropped, and that happens in the route where the reps
+ * are known.
  */
 export function toOrder(row: Record<string, string>, mapping: Mapping, fallbackDate = new Date()): ImportRowResult {
   const read = (field: ImportField) => (mapping[field] ? row[mapping[field]!] ?? "" : "");
 
-  const name = read("orderName").trim();
+  const name = read("orderName").trim().replace(/^["']|["']$/g, "");
   if (!name) return { ok: false, reason: "no order id in this row" };
 
   const couponCode = normaliseCode(read("couponCode"));
   if (!couponCode) return { ok: false, reason: "no coupon on this order" };
-  if (!parseCoupon(couponCode)) return { ok: false, reason: `"${couponCode}" is not a rep-shaped code` };
 
   const total = amount(read("total"));
-  if (total <= 0) return { ok: false, reason: "nothing was paid on this order" };
+  if (total <= 0) return { ok: false, reason: "nothing was charged on this order" };
 
-  const discount = Math.abs(amount(read("discount")));
   const status = read("deliveryStatus");
+  const platformOrderId = read("platformOrderId").trim();
+  const lastName = read("customerLastName").trim();
+  const firstName = read("customerName").trim();
 
   return {
     ok: true,
     order: {
       name: name.startsWith("#") ? name : `#${name}`,
+      platformOrderId: platformOrderId || undefined,
       placedAt: parseDate(read("placedAt")) ?? fallbackDate,
       couponCode,
-      discount,
+      discount: Math.abs(amount(read("discount"))),
       total,
+      refunded: Math.abs(amount(read("refunded"))),
       customer: {
-        name: read("customerName") || undefined,
+        name: [firstName, lastName].filter(Boolean).join(" ") || undefined,
         phone: read("customerPhone") || undefined,
         city: read("customerCity") || undefined
       },

@@ -58,7 +58,24 @@ export function deliveryStateFrom(status: string | null | undefined, statusCode?
     // what the manual override on the order is for.
     if (value.includes("PARTIAL")) return "Undelivered";
     if (value.includes("UNDELIVERED")) return "Undelivered";
-    if (has(value, "DELIVERED", "FULFILLED")) return "Delivered";
+
+    /*
+     * The negations come before the words they negate, because both contain
+     * them. "UNFULFILLED" contains "FULFILLED"; checking the shorter first
+     * would read an order that has not even been picked as delivered, and pay
+     * commission on it.
+     */
+    if (value.includes("UNFULFILLED")) return "Awaiting";
+    if (value.includes("DELIVERED")) return "Delivered";
+
+    /*
+     * Fulfilled is *dispatched*, not arrived — it is Shopify's word for "a
+     * label exists". Treating it as a delivery would pay on every parcel the
+     * moment it left the warehouse, which is the exact opposite of the rule
+     * this whole feature is built around. Delivery is confirmed by the courier,
+     * through the Shiprocket sync, and by nothing else.
+     */
+    if (value.includes("FULFILLED")) return "In transit";
 
     if (has(value, "TRANSIT", "OUT FOR DELIVERY", "SHIPPED", "PICKED UP", "DESTINATION HUB", "DISPATCHED", "DELAYED")) {
       return "In transit";

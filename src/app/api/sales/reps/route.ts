@@ -5,10 +5,9 @@ import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
 import { badRequest, fail, ok } from "@/lib/api";
 import { record } from "@/lib/audit";
-import { isRepCode, normaliseCode, parseCoupon, REP_CODE_SHAPE } from "@/lib/sales/coupons";
+import { isRepCode, normaliseCode, REP_CODE_SHAPE } from "@/lib/sales/coupons";
 import { PAYOUT_MODES } from "@/lib/sales/constants";
 import { repSummaries } from "@/lib/sales/reporting";
-import { couponsFor } from "@/lib/sales/reps";
 
 const couponSchema = z.object({
   code: z.string().trim().min(3).max(32),
@@ -65,17 +64,20 @@ export async function POST(request: Request) {
     const code = normaliseCode(input.code);
     if (!isRepCode(code)) return badRequest("A rep code is letters and digits with no spaces, like RAUSHAN.");
 
-    const coupons = (input.coupons?.length
-      ? input.coupons.map(coupon => ({ ...coupon, code: normaliseCode(coupon.code) }))
-      : await couponsFor(code));
+    /*
+     * Coupons are entered by hand, never invented.
+     *
+     * The CRM does not create discount codes — Shopify does — so guessing at
+     * RAUSHAN10 and RAUSHAN30 only put codes here that might not exist over
+     * there, and refused the ones that do: a rep may perfectly well be given a
+     * code with no digits in it at all. Which rule applies is carried by the
+     * coupon's `suffix`, chosen when it is added, rather than read out of the
+     * letters.
+     */
+    const coupons = (input.coupons ?? []).map(coupon => ({ ...coupon, code: normaliseCode(coupon.code) }));
 
-    // Every code must still split back into a name and a rule, or the sync
-    // cannot tell which rate an order it brought in should be paid at.
-    for (const coupon of coupons) {
-      if (!parseCoupon(coupon.code)) {
-        return badRequest(`"${coupon.code}" is not a usable coupon code. It must be a name followed by the rule's digits, like ${code}30.`);
-      }
-    }
+    const duplicate = coupons.find((coupon, at) => coupons.findIndex(other => other.code === coupon.code) !== at);
+    if (duplicate) return badRequest(`"${duplicate.code}" is listed twice.`);
 
     const clash = await SalesRep.findOne({ $or: [{ code }, { "coupons.code": { $in: coupons.map(coupon => coupon.code) } }] })
       .select("code name coupons").lean() as { code?: string; name?: string } | null;

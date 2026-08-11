@@ -6,7 +6,7 @@ import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
 import { record } from "@/lib/audit";
-import { normaliseCode, parseCoupon } from "@/lib/sales/coupons";
+import { normaliseCode } from "@/lib/sales/coupons";
 import { PAYOUT_MODES } from "@/lib/sales/constants";
 import { repSummary } from "@/lib/sales/reporting";
 
@@ -67,12 +67,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!rep) return badRequest("No such rep", 404);
 
     if (input.coupons) {
+      // A coupon may be called anything Shopify will accept — the rule it pays
+      // under is carried by its `suffix`, not by the letters in the code.
       const coupons = input.coupons.map(coupon => ({ ...coupon, code: normaliseCode(coupon.code) }));
-      for (const coupon of coupons) {
-        if (!parseCoupon(coupon.code)) {
-          return badRequest(`"${coupon.code}" is not a usable coupon code. It must be a name followed by the rule's digits, like ${rep.code}30.`);
-        }
-      }
+
+      const duplicate = coupons.find((coupon, at) => coupons.findIndex(other => other.code === coupon.code) !== at);
+      if (duplicate) return badRequest(`"${duplicate.code}" is listed twice.`);
 
       const clash = await SalesRep.findOne({
         _id: { $ne: rep._id },
