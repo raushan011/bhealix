@@ -185,6 +185,8 @@ export type SyncReport = {
   /** Codes seen on orders that belong to no rep — very often a typo in Shopify. */
   unknownCoupons: string[];
   warnings: string[];
+  /** How far back the order pull reached. An empty sync is only news if this is old. */
+  ordersSince?: string;
   from?: string;
   to?: string;
 };

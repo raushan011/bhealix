@@ -140,6 +140,22 @@ export async function verifyShop(config: ShopifyConfig): Promise<{ name: string;
   };
 }
 
+/**
+ * How many orders this token can actually see.
+ *
+ * The diagnostic that separates the three ways a sync comes back empty: a token
+ * without `read_orders` sees none, a token without `read_all_orders` sees only
+ * the last sixty days, and a correct token sees everything — in which case an
+ * empty sync is about the window it asked for, not about permission.
+ */
+export async function countOrders(config: ShopifyConfig): Promise<number> {
+  assertShopDomain(config.domain);
+  const { data } = await httpJson<{ count?: number }>({
+    service: "Shopify", url: url(config, "orders/count.json", { status: "any" }), headers: authHeaders(config)
+  });
+  return data.count ?? 0;
+}
+
 /** The `page_info` cursor out of Shopify's `Link` header, or nothing when the last page is in. */
 function nextPageInfo(headers: Headers): string | undefined {
   const link = headers.get("link") ?? headers.get("Link");

@@ -7,7 +7,7 @@ import { Badge, Card, EmptyState, LinkButton, Notice, PageTitle, Spinner, Stat }
 import { SyncButton } from "@/components/sales/sync-button";
 import { formatDate } from "@/lib/time";
 import { periodLabel } from "@/lib/sales/payouts";
-import { formatRupees, type RepSummary } from "@/lib/sales/types";
+import { formatRupees, type RepSummary, type SyncReport } from "@/lib/sales/types";
 import type { SalesOverview } from "@/lib/sales/reporting";
 
 type Overview = SalesOverview & {
@@ -34,6 +34,19 @@ type Overview = SalesOverview & {
  * if the last sync failed — and a dashboard of confident zeroes is the worst
  * possible way to find that out.
  */
+/**
+ * What a sync did, as a line fit for the top of the screen.
+ *
+ * A warning alongside a result is the interesting case — the pull worked and
+ * something in it wants attention, most often a coupon code belonging to
+ * nobody. That must not be reported as a failure, and must not be swallowed
+ * either.
+ */
+const noticeFor = (report: SyncReport & { message: string }): { tone: "success" | "warning" | "error"; text: string } =>
+  report.warnings.length && !report.message ? { tone: "error", text: report.warnings[0] }
+    : report.warnings.length ? { tone: "warning", text: `${report.message}. ${report.warnings.join(" ")}` }
+    : { tone: "success", text: report.message };
+
 export default function SalesOverviewPage() {
   const [data, setData] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -59,12 +72,13 @@ export default function SalesOverviewPage() {
       subtitle="Affiliate coupons, delivered orders and what each rep has earned"
       actions={<>
         <LinkButton tone="secondary" href="/admin/sales/payouts"><BadgePercent size={16} />Payouts</LinkButton>
-        <SyncButton onDone={report => {
-          if (report.warnings.length && !report.message) setNotice({ tone: "error", text: report.warnings[0] });
-          else if (report.warnings.length) setNotice({ tone: "warning", text: `${report.message}. ${report.warnings.join(" ")}` });
-          else setNotice({ tone: "success", text: report.message });
-          load();
-        }} />
+        {/*
+          * Two buttons, because the ordinary sync is incremental and reads
+          * nothing when nothing has changed — which is indistinguishable from a
+          * broken integration to somebody who has just set this up.
+          */}
+        <SyncButton tone="secondary" full label="Full resync" onDone={report => { setNotice(noticeFor(report)); load(); }} />
+        <SyncButton onDone={report => { setNotice(noticeFor(report)); load(); }} />
       </>} />
 
     {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}

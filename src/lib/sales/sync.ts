@@ -66,6 +66,11 @@ export async function syncOrders(options: { since?: Date } = {}): Promise<SyncRe
       ? new Date(new Date(settings.lastOrderSyncAt).getTime() - OVERLAP_MS)
       : new Date(Date.now() - backfillDaysOf(settings) * 86_400_000));
 
+  // Reported, because "0 orders read" and "0 orders read since four minutes
+  // ago" are different facts and only one of them is a problem. An incremental
+  // sync run twice in a minute is *supposed* to find nothing.
+  report.ordersSince = since.toISOString();
+
   let orders;
   try {
     orders = await fetchOrders(config, since);
