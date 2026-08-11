@@ -2,7 +2,9 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Card, Field, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
+import { Upload } from "lucide-react";
+import { Button, Card, Field, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
+import { ImportOrders } from "@/components/sales/import-orders";
 import { OrderList } from "@/components/sales/order-list";
 import { SyncButton } from "@/components/sales/sync-button";
 import { COMMISSION_STATUSES, DELIVERY_STATES } from "@/lib/sales/constants";
@@ -29,6 +31,7 @@ function OrdersScreen() {
   const [data, setData] = useState<Response | null>(null);
   const [reps, setReps] = useState<SalesRepRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
   const [notice, setNotice] = useState<{ tone: "success" | "warning" | "error"; text: string } | null>(null);
 
   const load = useCallback(async () => {
@@ -60,12 +63,18 @@ function OrdersScreen() {
 
   return <div className="space-y-5">
     <PageTitle title="Orders" subtitle="Every order an affiliate coupon brought in"
-      actions={<SyncButton tone="secondary" onDone={report => {
-        if (report.warnings.length && !report.message) setNotice({ tone: "error", text: report.warnings[0] });
-        else if (report.warnings.length) setNotice({ tone: "warning", text: `${report.message}. ${report.warnings.join(" ")}` });
-        else setNotice({ tone: "success", text: report.message });
-        load();
-      }} />} />
+      actions={<>
+        <Button tone="secondary" onClick={() => setImporting(true)}><Upload size={16} />Import file</Button>
+        <SyncButton tone="secondary" onDone={report => {
+          if (report.warnings.length && !report.message) setNotice({ tone: "error", text: report.warnings[0] });
+          else if (report.warnings.length) setNotice({ tone: "warning", text: `${report.message}. ${report.warnings.join(" ")}` });
+          else setNotice({ tone: "success", text: report.message });
+          load();
+        }} />
+      </>} />
+
+    {importing && <ImportOrders onClose={() => setImporting(false)}
+      onDone={message => { setImporting(false); setNotice({ tone: "success", text: message }); load(); }} />}
 
     {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
 
