@@ -4,18 +4,24 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  AlertTriangle, ArrowLeft, Ban, CalendarClock, Download, Pencil, Phone, Receipt, Trash2, User
+  AlertTriangle, ArrowLeft, Ban, CalendarClock, CalendarPlus, Check, Download, Pencil, Phone, Receipt,
+  Trash2, Undo2, User
 } from "lucide-react";
 import { Badge, Button, Card, Field, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import { PaymentForm } from "@/components/billing/payment-form";
 import { PaymentProof } from "@/components/billing/payment-proof";
 import { invoiceLabel, invoiceTone } from "@/components/billing/invoice-row";
-import { formatDate, toDateInput } from "@/lib/time";
+import {
+  draftsOf, filledFollowUps, FollowUpEditor, type FollowUpDraft
+} from "@/components/billing/follow-up-editor";
+import { formatDate, toDateInput, todayIso } from "@/lib/time";
 import { can, usesFieldPanel, type Role } from "@/constants/access";
 import { formatMoney } from "@/lib/billing/constants";
 import { amountInWords } from "@/lib/billing/gst";
-import type { InvoiceRecord } from "@/lib/billing/types";
+import { dueDateFrom } from "@/lib/billing/numbering";
+import { sortedFollowUps } from "@/lib/billing/follow-ups";
+import type { InvoiceFollowUp, InvoiceRecord } from "@/lib/billing/types";
 
 /**
  * One bill, in full. The same component in both panels: an administrator and
@@ -31,6 +37,7 @@ export function InvoiceView({ invoiceId, backHref }: { invoiceId: string; backHr
   const [notFound, setNotFound] = useState("");
   const [paying, setPaying] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [chasing, setChasing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [notice, setNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
@@ -68,8 +75,18 @@ export function InvoiceView({ invoiceId, backHref }: { invoiceId: string; backHr
    */
   const mayEvidence = role !== null && can.recordPayment(role)
     && (mayManage || (usesFieldPanel(role) && owned));
+  /**
+   * Scheduling and marking off a chase. The rep hears when the doctor will pay,
+   * so they may write it down against their own bill — it moves no figure, which
+   * is why it does not need the authority that editing a bill does.
+   */
+  const mayChase = role !== null && can.recordPayment(role)
+    && (mayManage || (usesFieldPanel(role) && owned))
+    && invoice.status !== "Cancelled";
 
   const label = invoiceLabel(invoice);
+  const chases = sortedFollowUps(invoice.followUps);
+  const nextChase = chases.find(entry => !entry.doneAt);
 
   async function save(patch: Record<string, unknown>, success: string) {
     const response = await fetch(`/api/invoices/${invoiceId}`, {
@@ -79,6 +96,22 @@ export function InvoiceView({ invoiceId, backHref }: { invoiceId: string; backHr
     setNotice(response.ok
       ? { tone: "success", text: success }
       : { tone: "error", text: json.error ?? "Could not save this" });
+    if (response.ok) load();
+    return response.ok;
+  }
+
+  /**
+   * The chases have their own route rather than going through the bill's PATCH,
+   * because the rep who agreed the date may reach this and may not rewrite a bill.
+   */
+  async function chase(path: string, init: RequestInit, success: string) {
+    const response = await fetch(`/api/invoices/${invoiceId}/follow-ups${path}`, {
+      headers: { "content-type": "application/json" }, ...init
+    });
+    const json = await response.json() as { error?: string };
+    setNotice(response.ok
+      ? { tone: "success", text: success }
+      : { tone: "error", text: json.error ?? "Could not save this follow-up" });
     if (response.ok) load();
     return response.ok;
   }
@@ -175,15 +208,50 @@ export function InvoiceView({ invoiceId, backHref }: { invoiceId: string; backHr
             value={invoice.employee ? `${invoice.employee.name}${invoice.employee.employeeId ? ` (${invoice.employee.employeeId})` : ""}` : "—"} />
           <Detail icon={CalendarClock} label="Payment due"
             value={invoice.dueDate ? formatDate(invoice.dueDate) : "Not set"} />
-          <Detail icon={Phone} label="Follow up on"
-            value={invoice.followUpDate ? formatDate(invoice.followUpDate) : "Not set"} />
+          <Detail icon={Phone} label="Next follow-up"
+            value={nextChase ? formatDate(nextChase.date) : chases.length ? "Every follow-up made" : "Not set"} />
           {invoice.taxed && (
             <Detail icon={Receipt} label="Supply"
               value={`${invoice.interState ? "Inter-state · IGST" : "Intra-state · CGST + SGST"}${invoice.placeOfSupply?.state ? ` · ${invoice.placeOfSupply.state}` : ""}`} />
           )}
         </div>
+
+        {/*
+          Every chase agreed, not only the next one. A bill collected over three
+          calls has three dates against it, and what was promised on each is the
+          most useful thing anybody has when they make the next one.
+        */}
+        <div className="space-y-2 border-t border-[var(--line)] pt-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold">Follow-ups</p>
+            {mayChase && (
+              <button type="button" onClick={() => setChasing(true)}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand)]">
+                <CalendarPlus size={13} />Add
+              </button>
+            )}
+          </div>
+
+          {chases.length === 0 ? (
+            <p className="text-xs text-[var(--muted)]">
+              {invoice.balanceDue > 0 && invoice.status !== "Cancelled"
+                ? "Nothing scheduled — nobody is due to call about this balance."
+                : "No follow-up scheduled."}
+            </p>
+          ) : (
+            <ul className="space-y-1.5">
+              {chases.map(entry => (
+                <FollowUpLine key={entry._id} entry={entry} isNext={entry._id === nextChase?._id} mayChase={mayChase}
+                  onToggle={() => chase(`?followUp=${entry._id}`, {
+                    method: "PATCH", body: JSON.stringify({ done: !entry.doneAt })
+                  }, entry.doneAt ? "Follow-up put back on the list." : "Follow-up marked as made.")} />
+              ))}
+            </ul>
+          )}
+        </div>
+
         {mayManage && invoice.status !== "Cancelled" && (
-          <Button tone="secondary" className="w-full" onClick={() => setEditing(true)}>Change dates and notes</Button>
+          <Button tone="secondary" className="w-full" onClick={() => setEditing(true)}>Change dates, follow-ups and notes</Button>
         )}
       </Card>
     </div>
@@ -299,8 +367,9 @@ export function InvoiceView({ invoiceId, backHref }: { invoiceId: string; backHr
         {invoice.payments.length > 0 && invoice.status !== "Cancelled" && (
           <Notice tone="info">
             {invoice.payments.length === 1 ? "A receipt is" : `${invoice.payments.length} receipts are`} recorded against
-            this bill, so it cannot be edited, cancelled or deleted while they stand. Remove them under Payments above
-            and all three become available again.
+            this bill. It can still be edited — the receipts are left as they are, and the only correction refused is one
+            that prices the bill below the {formatMoney(invoice.amountPaid)} received. Cancelling and deleting stay closed
+            until those receipts are removed under Payments above.
           </Notice>
         )}
 
@@ -323,12 +392,21 @@ export function InvoiceView({ invoiceId, backHref }: { invoiceId: string; backHr
       </Card>
     )}
 
-    {paying && <PaymentForm invoiceId={invoiceId} balanceDue={invoice.balanceDue}
+    {paying && <PaymentForm invoiceId={invoiceId} balanceDue={invoice.balanceDue} mayMoveDueDate={mayManage}
       onClose={() => setPaying(false)}
       onSaved={text => { setPaying(false); setNotice({ tone: "success", text }); load(); }} />}
 
     {editing && <EditDetails invoice={invoice} onClose={() => setEditing(false)}
       onSave={async patch => { if (await save(patch, "Bill updated.")) setEditing(false); }} />}
+
+    {chasing && <AddFollowUp balanceDue={invoice.balanceDue} mayMoveDueDate={mayManage}
+      onClose={() => setChasing(false)}
+      onSave={async body => {
+        const ok = await chase("", { method: "POST", body: JSON.stringify(body) },
+          `Follow-up set for ${formatDate(body.date)}.`);
+        if (ok) setChasing(false);
+        return ok;
+      }} />}
 
     {cancelling && <CancelBill invoiceNo={invoice.invoiceNo} onClose={() => setCancelling(false)}
       onConfirm={async reason => {
@@ -358,26 +436,128 @@ function Detail({ icon: Icon, label, value }: {
   </div>;
 }
 
+/**
+ * One scheduled chase in the Collection card.
+ *
+ * A follow-up whose day has gone unmade is called out, because that is exactly
+ * the one that goes quiet: it is no longer in the future, so nothing else on the
+ * screen would ever mention it again.
+ */
+function FollowUpLine({ entry, isNext, mayChase, onToggle }: {
+  entry: InvoiceFollowUp; isNext: boolean; mayChase: boolean; onToggle: () => Promise<boolean>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const done = Boolean(entry.doneAt);
+  const late = !done && entry.date.slice(0, 10) < todayIso();
+
+  return <li className="flex items-start gap-2.5 rounded-[10px] border border-[var(--line)] px-3 py-2">
+    <div className="min-w-0 flex-1">
+      <p className="flex flex-wrap items-center gap-2 text-sm">
+        <span className={`font-medium ${done ? "text-[var(--muted)] line-through" : ""}`}>{formatDate(entry.date)}</span>
+        {done ? <Badge tone="success">Made</Badge>
+          : late ? <Badge tone="danger">Missed</Badge>
+          : isNext ? <Badge tone="info">Next</Badge> : null}
+      </p>
+      {entry.note && <p className="mt-0.5 text-xs text-[var(--muted)]">{entry.note}</p>}
+      {entry.createdBy?.name && <p className="text-xs text-[var(--muted)]">Set by {entry.createdBy.name}</p>}
+    </div>
+    {mayChase && (
+      <button type="button" disabled={busy}
+        onClick={async () => { setBusy(true); await onToggle(); setBusy(false); }}
+        aria-label={done ? "Put this follow-up back on the list" : "Mark this follow-up as made"}
+        title={done ? "Put this follow-up back on the list" : "Mark this follow-up as made"}
+        className={`grid size-9 shrink-0 place-items-center rounded-lg border disabled:opacity-50 ${
+          done ? "border-[var(--line-2)] text-[var(--muted)]" : "border-[var(--ok-line)] text-[var(--ok-ink)]"
+        }`}>
+        {done ? <Undo2 size={15} /> : <Check size={15} />}
+      </button>
+    )}
+  </li>;
+}
+
+/**
+ * Scheduling one more chase, from the bill itself. Open to the rep as well as the
+ * desk — see `mayChase` above.
+ */
+function AddFollowUp({ balanceDue, mayMoveDueDate, onClose, onSave }: {
+  balanceDue: number;
+  mayMoveDueDate: boolean;
+  onClose: () => void;
+  onSave: (body: { date: string; note?: string; moveDueDate?: true }) => Promise<boolean>;
+}) {
+  const [date, setDate] = useState(() => dueDateFrom(todayIso(), 7));
+  const [note, setNote] = useState("");
+  const [moveDueDate, setMoveDueDate] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  return <Modal title="Add a follow-up"
+    description={balanceDue > 0 ? `${formatMoney(balanceDue)} is outstanding on this bill.` : undefined}
+    onClose={onClose}
+    footer={<Button className="w-full" busy={busy} disabled={!date} onClick={async () => {
+      setBusy(true);
+      const saved = await onSave({
+        date, note: note.trim() || undefined, moveDueDate: moveDueDate ? true : undefined
+      });
+      if (!saved) setBusy(false);
+    }}>{busy ? "Saving…" : "Save follow-up"}</Button>}>
+    <div className="space-y-4">
+      <Field label="Chase on"><input type="date" value={date} onChange={e => setDate(e.target.value)} className="input" /></Field>
+
+      <div className="flex flex-wrap gap-2">
+        {[7, 15, 30].map(days => (
+          <button key={days} type="button" onClick={() => setDate(dueDateFrom(todayIso(), days))}
+            className="inline-flex items-center gap-1 rounded-full border border-[var(--line-2)] px-3 py-1.5 text-xs font-semibold">
+            <CalendarClock size={12} />In {days} days
+          </button>
+        ))}
+      </div>
+
+      <Field label="What was agreed" hint="Optional, and the most useful thing on the next call">
+        <input value={note} onChange={e => setNote(e.target.value)} className="input" maxLength={200}
+          placeholder="Balance promised after the 15th" />
+      </Field>
+
+      {mayMoveDueDate && (
+        <label className="flex items-center gap-2.5 text-sm">
+          <input type="checkbox" checked={moveDueDate} onChange={e => setMoveDueDate(e.target.checked)} className="size-4" />
+          <span>Move the payment due date to this date
+            <span className="block text-xs text-[var(--muted)]">The bill counts as overdue only after the new date</span>
+          </span>
+        </label>
+      )}
+    </div>
+  </Modal>;
+}
+
 function EditDetails({ invoice, onClose, onSave }: {
   invoice: InvoiceRecord; onClose: () => void; onSave: (patch: Record<string, unknown>) => Promise<void>;
 }) {
   const [dueDate, setDueDate] = useState(invoice.dueDate ? toDateInput(invoice.dueDate) : "");
-  const [followUpDate, setFollowUpDate] = useState(invoice.followUpDate ? toDateInput(invoice.followUpDate) : "");
+  const [followUps, setFollowUps] = useState<FollowUpDraft[]>(() => draftsOf(invoice.followUps));
   const [notes, setNotes] = useState(invoice.notes ?? "");
   const [busy, setBusy] = useState(false);
 
-  return <Modal title="Dates and notes" description="What was billed cannot change; when it is due can."
+  return <Modal title="Dates, follow-ups and notes" description="What was billed cannot change; when it is due can."
     onClose={onClose}
     footer={<Button className="w-full" busy={busy} onClick={async () => {
       setBusy(true);
-      await onSave({ dueDate: dueDate || null, followUpDate: followUpDate || null, notes });
+      await onSave({
+        dueDate: dueDate || null,
+        // The whole list every time, so a row deleted here is deleted on the bill.
+        followUps: filledFollowUps(followUps).map(draft => ({
+          _id: draft._id, date: draft.date, note: draft.note.trim() || undefined, done: draft.done
+        })),
+        notes
+      });
       setBusy(false);
     }}>{busy ? "Saving…" : "Save"}</Button>}>
     <div className="space-y-4">
       <Field label="Payment due"><input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="input" /></Field>
-      <Field label="Follow up on" hint="When the representative should call about it">
-        <input type="date" value={followUpDate} onChange={e => setFollowUpDate(e.target.value)} className="input" />
-      </Field>
+      <div>
+        <p className="mb-1.5 text-[13px] font-medium text-[var(--ink-2)]">Follow-ups</p>
+        <FollowUpEditor value={followUps} onChange={setFollowUps}
+          hint="The earliest one still to be made is the bill's next" />
+      </div>
       <Field label="Notes"><textarea value={notes} onChange={e => setNotes(e.target.value)} className="textarea" /></Field>
     </div>
   </Modal>;

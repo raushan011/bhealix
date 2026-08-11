@@ -7,7 +7,8 @@ import { can, usesFieldPanel, type Role } from "@/constants/access";
 import { badRequest, fail, ok, pageParams, OBJECT_ID } from "@/lib/api";
 import { fromDateInput } from "@/lib/time";
 import { loadSettings, nextInvoiceNumber, recalculate } from "@/lib/billing/invoices";
-import { billInputSchema, composeBill, failed, rememberBuyerDetails } from "@/lib/billing/compose";
+import { billInputSchema, composeBill, failed, followUpsFrom, rememberBuyerDetails } from "@/lib/billing/compose";
+import { applyFollowUps } from "@/lib/billing/follow-ups";
 import { INVOICE_STATUSES } from "@/lib/billing/constants";
 import { syncInvoiceStock } from "@/lib/inventory/ledger";
 
@@ -74,7 +75,9 @@ export async function GET(request: Request) {
 
     const [items, total, summary] = await Promise.all([
       Invoice.find(filter)
-        .select("-items -taxSummary -payments")
+        // `followUpDate` carries the one date a row shows; the list itself is
+        // detail nobody reads until they open the bill.
+        .select("-items -taxSummary -payments -followUps")
         .populate("doctor", "name clinicName city area phones")
         .populate("customer", "code name businessName type city phones")
         .populate("employee", "name employeeId")
@@ -166,6 +169,8 @@ export async function POST(request: Request) {
           }]
         : []
     });
+
+    applyFollowUps(invoice, followUpsFrom(input) ?? [], auth.session.userId);
 
     recalculate(invoice);
     await invoice.save();

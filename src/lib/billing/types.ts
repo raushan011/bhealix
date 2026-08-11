@@ -51,6 +51,19 @@ export type InvoicePayment = {
   proof?: PaymentProofRef | null;
 };
 
+/**
+ * One scheduled chase, as the screens read it. `doneAt` is what separates the
+ * call still to be made from the one already made — a bill's history of chasing
+ * is worth as much as its next date.
+ */
+export type InvoiceFollowUp = {
+  _id: string;
+  date: string;
+  note?: string;
+  doneAt?: string | null;
+  createdBy?: { _id: string; name: string } | null;
+};
+
 export type PartyDetails = {
   name?: string; clinicName?: string; address?: string;
   city?: string; state?: string; stateCode?: string;
@@ -93,6 +106,8 @@ export type InvoiceRecord = {
   invoiceDate: string;
   dueDate?: string;
   paymentTerms?: number;
+  followUps?: InvoiceFollowUp[];
+  /** A mirror of the earliest follow-up still outstanding; the lists sort on it. */
   followUpDate?: string;
   notes?: string;
   terms?: string;
@@ -101,7 +116,7 @@ export type InvoiceRecord = {
   cancelReason?: string;
 };
 
-/** The lighter row a list returns — no items, no payments. */
-export type InvoiceListRow = Omit<InvoiceRecord, "items" | "payments" | "taxSummary">;
+/** The lighter row a list returns — no items, no payments, no follow-up detail. */
+export type InvoiceListRow = Omit<InvoiceRecord, "items" | "payments" | "taxSummary" | "followUps">;
 
 export type BillingSummary = { billed: number; collected: number; outstanding: number };

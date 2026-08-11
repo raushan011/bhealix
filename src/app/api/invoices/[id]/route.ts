@@ -8,14 +8,19 @@ import { apiSession } from "@/lib/auth/guard";
 import { can, usesFieldPanel, type Role } from "@/constants/access";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
 import { fromDateInput } from "@/lib/time";
+import { money } from "@/lib/billing/gst";
 import { loadSettings, recalculate } from "@/lib/billing/invoices";
-import { billInputSchema, composeBill, failed, rememberBuyerDetails } from "@/lib/billing/compose";
+import { billInputSchema, composeBill, failed, followUpsFrom, rememberBuyerDetails } from "@/lib/billing/compose";
+import { applyFollowUps, followUpListSchema, setFollowUpDate } from "@/lib/billing/follow-ups";
 import { syncInvoiceStock } from "@/lib/inventory/ledger";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const patchSchema = z.object({
   dueDate: z.string().regex(ISO_DATE).nullable().optional(),
+  /** The whole list, as the dates dialog holds it. */
+  followUps: followUpListSchema.optional(),
+  /** The one-date form: moves the earliest chase still outstanding, or clears them. */
   followUpDate: z.string().regex(ISO_DATE).nullable().optional(),
   notes: z.string().trim().max(1000).optional(),
   terms: z.string().trim().max(2000).optional(),
@@ -40,6 +45,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       .populate("customer", "code type name businessName address city pinCode phones gstin state stateCode")
       .populate("employee", "name employeeId email role")
       .populate("payments.receivedBy", "name")
+      .populate("followUps.createdBy", "name")
       .populate("payments.proof.uploadedBy", "name")
       .populate("createdBy", "name")
       .lean() as unknown as { employee?: { _id?: unknown } | null } | null;
@@ -64,10 +70,15 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
  * Rewrites a bill.
  *
  * The number, the series and the date it was raised on are kept — this corrects
- * what a bill says, it does not issue a replacement. Refused once money has
- * been received against it: re-pricing a bill below what has already been paid
- * would leave the books saying something untrue, and the receipts have to come
- * off first.
+ * what a bill says, it does not issue a replacement.
+ *
+ * A part-paid bill may be corrected. It used to be refused outright, which was
+ * the wrong cure for the right worry: what cannot be allowed is a bill re-priced
+ * *below* what has already been received, because that is a negative balance and
+ * a receipt with nothing behind it. So that one case is refused by name, and the
+ * ordinary correction — a wrong quantity, a missed line, the discount the doctor
+ * was promised — goes through with the receipts left untouched. `recalculate()`
+ * settles the status against the new total afterwards.
  *
  * Stock is re-synced from the new lines, which puts the old quantities back and
  * takes the new ones out in a single step.
@@ -83,9 +94,6 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const invoice = await Invoice.findById(id);
     if (!invoice) return badRequest("Invoice not found", 404);
     if (invoice.cancelledAt) return badRequest("This bill has been cancelled and can no longer be changed");
-    if (invoice.payments.length) {
-      return badRequest("Money has been received against this bill. Remove the receipts first, then edit it.");
-    }
 
     const input = billInputSchema.parse(await request.json());
     const settings = await loadSettings();
@@ -106,8 +114,25 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const composed = await composeBill(input, settings);
     if (failed(composed)) return badRequest(composed.error, composed.status);
 
-    // The invoice number and its financial year are deliberately not touched.
+    /*
+     * The one correction a part-paid bill cannot take. Half a rupee of slack, the
+     * same tolerance receipts are accepted with, so a bill re-priced to exactly
+     * what was paid settles rather than being rejected over rounding.
+     */
+    const received = money(invoice.amountPaid);
+    const total = money(Number(composed.fields.grandTotal) || 0);
+    if (received > 0 && total + 0.5 < received) {
+      return badRequest(
+        `₹${received.toFixed(2)} has already been received against this bill, so it cannot be re-priced to ₹${total.toFixed(2)}. `
+        + "Bill at least what has been paid, or remove a receipt under Payments first."
+      );
+    }
+
+    // The invoice number and its financial year are deliberately not touched,
+    // and neither are the receipts — `composed.fields` holds neither.
     invoice.set(composed.fields);
+    const followUps = followUpsFrom(input);
+    if (followUps) applyFollowUps(invoice, followUps, auth.session.userId);
     invoice.updatedBy = auth.session.userId;
 
     recalculate(invoice);
@@ -139,7 +164,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (invoice.cancelledAt && !input.cancel) return badRequest("This invoice is cancelled and can no longer be changed");
 
     if (input.dueDate !== undefined) invoice.dueDate = input.dueDate ? fromDateInput(input.dueDate) : undefined;
-    if (input.followUpDate !== undefined) invoice.followUpDate = input.followUpDate ? fromDateInput(input.followUpDate) : undefined;
+    // The list wins where a request sends both: it is the fuller statement of the
+    // same thing, and `followUpDate` is only ever a mirror of it.
+    if (input.followUps !== undefined) applyFollowUps(invoice, input.followUps, auth.session.userId);
+    else if (input.followUpDate !== undefined) setFollowUpDate(invoice, input.followUpDate, auth.session.userId);
     if (input.notes !== undefined) invoice.notes = input.notes;
     if (input.terms !== undefined) invoice.terms = input.terms;
 

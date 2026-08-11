@@ -1,10 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Paperclip, X } from "lucide-react";
+import { CalendarClock, Paperclip, X } from "lucide-react";
 import { Button, Field, Notice } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
-import { todayIso } from "@/lib/time";
+import { formatDate, todayIso } from "@/lib/time";
+import { dueDateFrom } from "@/lib/billing/numbering";
 import { formatMoney, PAYMENT_MODES, type PaymentMode } from "@/lib/billing/constants";
 import { formatBytes, MAX_PROOF_BYTES, PROOF_TYPES, sizeLimitText } from "@/lib/billing/attachments";
 
@@ -14,10 +15,17 @@ const ACCEPTED: readonly string[] = PROOF_TYPES;
  * Recording money against a bill. Used at the desk and on the rep's phone: the
  * one who takes the payment is usually the one standing in the clinic, and a
  * bill is settled in as many parts as the doctor chooses to pay in.
+ *
+ * A part payment leaves the dialog open on a second step asking when the rest is
+ * expected. That moment is the only one where anybody knows the answer: the
+ * doctor has just handed over half and said when the balance is coming, and the
+ * rep is still standing there. Asked later, from a list, it never gets answered.
  */
-export function PaymentForm({ invoiceId, balanceDue, onClose, onSaved }: {
+export function PaymentForm({ invoiceId, balanceDue, mayMoveDueDate, onClose, onSaved }: {
   invoiceId: string;
   balanceDue: number;
+  /** Whether this session may also move the bill's own payment due date. */
+  mayMoveDueDate?: boolean;
   onClose: () => void;
   onSaved: (text: string) => void;
 }) {
@@ -36,6 +44,20 @@ export function PaymentForm({ invoiceId, balanceDue, onClose, onSaved }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const input = useRef<HTMLInputElement>(null);
+
+  /**
+   * Set once the money is recorded and something is still owed, which turns the
+   * dialog into the follow-up step. Holding the confirmation text here is what
+   * lets the step be skipped without losing what was said about the receipt.
+   */
+  const [settled, setSettled] = useState<{ text: string; left: number } | null>(null);
+  // A week out: near enough to be worth a call, far enough not to be today.
+  const [chaseDate, setChaseDate] = useState(() => dueDateFrom(todayIso(), 7));
+  const [chaseNote, setChaseNote] = useState("");
+  const [moveDueDate, setMoveDueDate] = useState(false);
+
+  /** Closes for good, carrying everything that happened back to the bill. */
+  const finish = (extra = "") => onSaved((settled?.text ?? "") + extra);
 
   function chooseProof(file: File | undefined) {
     if (!file) return;
@@ -81,12 +103,92 @@ export function PaymentForm({ invoiceId, balanceDue, onClose, onSaved }: {
           : ` The payment is saved, but the proof did not upload — ${result.error ?? "try attaching it from the bill"}.`;
       }
 
+      /*
+        Money still owed keeps the dialog open on the follow-up step rather than
+        closing on a receipt and a balance nobody has agreed a date for. The
+        receipt is already saved by this point, so every way out of that step —
+        saving a date, skipping it, closing the dialog — reports it.
+      */
+      if (left > 0) { setSettled({ text: recorded + attached, left }); setBusy(false); return; }
       onSaved(recorded + attached);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Could not record this payment");
       setBusy(false);
     }
   }
+
+  /** Schedules the chase for the balance, and optionally moves the due date with it. */
+  async function scheduleChase() {
+    if (!chaseDate) { setError("Choose the date to chase the balance on"); return; }
+    setBusy(true); setError("");
+    try {
+      const response = await fetch(`/api/invoices/${invoiceId}/follow-ups`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          date: chaseDate,
+          note: chaseNote.trim() || undefined,
+          moveDueDate: mayMoveDueDate && moveDueDate ? true : undefined
+        })
+      });
+      const json = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(json.error ?? "Could not save this follow-up");
+
+      finish(` Follow-up set for ${formatDate(chaseDate)}${moveDueDate && mayMoveDueDate ? ", and the payment due date moved with it" : ""}.`);
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : "Could not save this follow-up");
+      setBusy(false);
+    }
+  }
+
+  if (settled) return <Modal title="When is the rest expected?"
+    description={`${formatMoney(settled.left)} is still outstanding on this bill.`}
+    // The receipt is saved. Closing here skips the follow-up, it does not undo anything.
+    onClose={() => finish()}
+    footer={<div className="flex gap-2">
+      <Button tone="secondary" className="flex-1" disabled={busy} onClick={() => finish()}>Not now</Button>
+      <Button className="flex-1" busy={busy} onClick={scheduleChase}>
+        {busy ? "Saving…" : "Save follow-up"}
+      </Button>
+    </div>}>
+    <div className="space-y-4">
+      <Notice tone="success">{settled.text}</Notice>
+
+      <Field label="Chase the balance on" hint="The rep sees this as the bill's next follow-up">
+        <input type="date" value={chaseDate} onChange={e => setChaseDate(e.target.value)} className="input" />
+      </Field>
+
+      <div className="flex flex-wrap gap-2">
+        {[7, 15, 30].map(days => (
+          <button key={days} type="button" onClick={() => setChaseDate(dueDateFrom(todayIso(), days))}
+            className="inline-flex items-center gap-1 rounded-full border border-[var(--line-2)] px-3 py-1.5 text-xs font-semibold">
+            <CalendarClock size={12} />In {days} days
+          </button>
+        ))}
+      </div>
+
+      <Field label="What was agreed" hint="Optional, and the most useful thing on the next call">
+        <input value={chaseNote} onChange={e => setChaseNote(e.target.value)} className="input" maxLength={200}
+          placeholder="Balance promised after the 15th" />
+      </Field>
+
+      {/* Moving what the bill says is due is a different thing from agreeing to
+          call, and belongs to whoever may change the bill. */}
+      {mayMoveDueDate && (
+        <label className="flex items-center gap-2.5 text-sm">
+          <input type="checkbox" checked={moveDueDate} onChange={e => setMoveDueDate(e.target.checked)} className="size-4" />
+          <span>Move the payment due date to this date
+            <span className="block text-xs text-[var(--muted)]">The bill counts as overdue only after the new date</span>
+          </span>
+        </label>
+      )}
+
+      <p className="text-xs text-[var(--muted)]">
+        More follow-ups can be added on the bill itself — one date does not have to stand for the whole conversation.
+      </p>
+
+      {error && <Notice tone="error">{error}</Notice>}
+    </div>
+  </Modal>;
 
   return <Modal title="Record a payment" description={`${formatMoney(balanceDue)} is outstanding on this bill.`}
     onClose={onClose}

@@ -72,6 +72,23 @@ const PaymentSchema = new Schema({
   proof: { type: ProofSchema, default: undefined }
 }, { timestamps: true });
 
+/**
+ * One scheduled chase against the bill.
+ *
+ * A list rather than a single date, because collection is a conversation: the
+ * doctor says "next week", then "after the 15th", and each of those is worth
+ * keeping. `doneAt` marks the call as made, which is what moves the bill on to
+ * its next chase instead of leaving it looking permanently overdue for a call.
+ */
+const FollowUpSchema = new Schema({
+  date: { type: Date, required: true },
+  /** What was agreed — "promised the balance after the 15th". */
+  note: String,
+  /** Set once the call has been made; unset means it is still outstanding. */
+  doneAt: Date,
+  createdBy: { type: Schema.Types.ObjectId, ref: "User" }
+});
+
 const TaxSummarySchema = new Schema({
   hsnCode: String,
   gstRate: Number,
@@ -154,7 +171,15 @@ const InvoiceSchema = new Schema({
   /** When the money is due. */
   dueDate: { type: Date, index: true },
   paymentTerms: { type: Number, default: 0 },
-  /** When the rep should call about it — often earlier than the due date. */
+  /** Every chase agreed on this bill, in no particular order. */
+  followUps: { type: [FollowUpSchema], default: [] },
+  /**
+   * The earliest chase still outstanding — often earlier than the due date.
+   *
+   * A cache of `followUps`, kept in step by lib/billing/follow-ups.ts, for the
+   * same reason `balanceDue` caches the receipts: a list of a hundred bills sorts
+   * and indexes on this without unpacking an array on every row.
+   */
   followUpDate: { type: Date, index: true },
 
   notes: String,

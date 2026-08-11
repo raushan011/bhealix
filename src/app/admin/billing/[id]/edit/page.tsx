@@ -34,18 +34,18 @@ export default function EditBillPage() {
 
   if (!invoice) return <Spinner label="Opening the bill…" />;
 
-  // Money already received is what makes a bill hard to change: the totals
-  // could fall below what has been paid. Those receipts come off first.
-  if (invoice.payments.length > 0 || invoice.status === "Cancelled") {
+  /*
+   * A cancelled bill is closed to correction — it keeps its number and stays in
+   * the books as it was. A part-paid one is not: the form opens with the receipts
+   * shown and refuses only to price the bill below them, which was the whole of
+   * the worry that used to shut this screen altogether.
+   */
+  if (invoice.status === "Cancelled") {
     return <div className="space-y-4">
       <Link href={`/admin/billing/${id}`} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--brand)]">
         <ArrowLeft size={16} />Back to the bill
       </Link>
-      <Notice tone="error">
-        {invoice.status === "Cancelled"
-          ? "This bill has been cancelled, so it can no longer be changed."
-          : "Money has been received against this bill. Remove the receipts on the bill first, then edit it."}
-      </Notice>
+      <Notice tone="error">This bill has been cancelled, so it can no longer be changed.</Notice>
     </div>;
   }
 

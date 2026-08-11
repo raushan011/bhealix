@@ -8,6 +8,7 @@ import { Badge, Button, Card, Field, Notice, PageTitle, Spinner } from "@/compon
 import { DoctorPicker, type PickableDoctor } from "@/components/doctors/doctor-picker";
 import { CustomerPicker } from "@/components/billing/customer-picker";
 import { CustomerForm } from "@/components/billing/customer-form";
+import { draftsOf, filledFollowUps, FollowUpEditor, type FollowUpDraft } from "@/components/billing/follow-up-editor";
 import { toDateInput, todayIso } from "@/lib/time";
 import { computeInvoice, unitsSupplied, type LineInput } from "@/lib/billing/gst";
 import { dueDateFrom } from "@/lib/billing/numbering";
@@ -89,7 +90,9 @@ export function BillForm({ invoice }: { invoice?: InvoiceRecord | null }) {
   const [invoiceDate, setInvoiceDate] = useState(() => invoice ? toDateInput(invoice.invoiceDate) : todayIso());
   const [paymentTerms, setPaymentTerms] = useState(invoice?.paymentTerms ?? 0);
   const [dueDate, setDueDate] = useState(() => invoice?.dueDate ? toDateInput(invoice.dueDate) : todayIso());
-  const [followUpDate, setFollowUpDate] = useState(() => invoice?.followUpDate ? toDateInput(invoice.followUpDate) : "");
+  // Every chase agreed, not just the next one. A bill collected in three calls
+  // needs three dates, and overwriting the first two lost the trail.
+  const [followUps, setFollowUps] = useState<FollowUpDraft[]>(() => draftsOf(invoice?.followUps));
 
   const [lines, setLines] = useState<Line[]>(() => invoice?.items?.length
     ? invoice.items.map(item => ({
@@ -230,6 +233,15 @@ export function BillForm({ invoice }: { invoice?: InvoiceRecord | null }) {
   /** What the bill will actually be saved as, spelled out before it is saved. */
   const settling = settlement === "FULL" ? preview.totals.grandTotal : settlement === "PART" ? paidAmount : 0;
 
+  /**
+   * Money already received against the bill being corrected. The receipts
+   * themselves are untouchable from here — what matters is that the new total
+   * cannot fall below them, which is checked before the save and again on the
+   * server.
+   */
+  const received = editing ? invoice!.amountPaid : 0;
+  const underpriced = received > 0 && preview.totals.grandTotal + 0.5 < received;
+
   async function submit() {
     if (partySource === "Doctor" && !doctor) { setError("Choose the doctor this bill is for"); return; }
     if (partySource === "Customer" && !customer) { setError("Choose the customer this bill is for"); return; }
@@ -239,6 +251,11 @@ export function BillForm({ invoice }: { invoice?: InvoiceRecord | null }) {
     if (settlement === "PART" && paidAmount <= 0) { setError("Enter how much was received"); return; }
     if (settlement === "PART" && paidAmount >= preview.totals.grandTotal) {
       setError("That is the whole bill — choose “Paid in full” instead.");
+      return;
+    }
+    if (underpriced) {
+      setError(`${formatMoney(received)} has already been received against this bill, so it cannot be re-priced to `
+        + `${formatMoney(preview.totals.grandTotal)}. Bill at least what has been paid, or remove a receipt on the bill first.`);
       return;
     }
 
@@ -257,7 +274,14 @@ export function BillForm({ invoice }: { invoice?: InvoiceRecord | null }) {
           invoiceDate,
           dueDate: dueDate || undefined,
           paymentTerms,
-          followUpDate: followUpDate || undefined,
+          // Sent whole every time, so removing a chase in the form removes it on
+          // the bill. `done` goes as a flag; the server holds when it was made.
+          followUps: filledFollowUps(followUps).map(draft => ({
+            _id: draft._id,
+            date: draft.date,
+            note: draft.note.trim() || undefined,
+            done: draft.done
+          })),
           placeOfSupplyCode: placeOfSupply || undefined,
           // Only the overrides typed here; the rest comes off the buyer's record
           // on the server, which is the copy that cannot be tampered with.
@@ -315,6 +339,19 @@ export function BillForm({ invoice }: { invoice?: InvoiceRecord | null }) {
       subtitle={editing
         ? "The bill keeps its number. Changing the lines re-prices it and puts the old quantities back into stock."
         : "Products supplied to a doctor, a trade buyer or a one-off customer"} />
+
+    {/* A part-paid bill can be corrected; it just cannot be priced below what has
+        already been handed over. Said here, with the figures, rather than left to
+        be discovered as an error on save. */}
+    {received > 0 && (
+      <Notice tone={underpriced ? "error" : "info"}>
+        {formatMoney(received)} has already been received against this bill. The receipts are not touched by
+        an edit — they are recorded on the bill itself — but the total cannot be corrected to less than that.{" "}
+        {underpriced
+          ? `As priced here the bill comes to ${formatMoney(preview.totals.grandTotal)}, which is ${formatMoney(received - preview.totals.grandTotal)} short of it.`
+          : `Saving now leaves ${formatMoney(Math.max(0, preview.totals.grandTotal - received))} to collect.`}
+      </Notice>
+    )}
 
     {!settings?.gstin && (
       <Notice tone="info">
@@ -454,7 +491,7 @@ export function BillForm({ invoice }: { invoice?: InvoiceRecord | null }) {
         </span>
       </label>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Field label="Bill date">
           <input type="date" value={invoiceDate} className="input"
             onChange={e => { setInvoiceDate(e.target.value); setDueDate(dueDateFrom(e.target.value, paymentTerms)); }} />
@@ -470,9 +507,12 @@ export function BillForm({ invoice }: { invoice?: InvoiceRecord | null }) {
         <Field label="Payment due">
           <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="input" />
         </Field>
-        <Field label="Follow up on" hint="When the rep should call about it">
-          <input type="date" value={followUpDate} onChange={e => setFollowUpDate(e.target.value)} className="input" />
-        </Field>
+      </div>
+
+      <div>
+        <p className="mb-1.5 text-[13px] font-medium text-[var(--ink-2)]">Follow-ups</p>
+        <FollowUpEditor value={followUps} onChange={setFollowUps}
+          hint="The rep sees the earliest one still to be made" />
       </div>
     </Card>
 
@@ -679,7 +719,7 @@ export function BillForm({ invoice }: { invoice?: InvoiceRecord | null }) {
           <p className="text-xs text-[var(--muted)]">{filled.length} line{filled.length === 1 ? "" : "s"}</p>
           <p className="truncate text-lg font-semibold">{formatMoney(preview.totals.grandTotal)}</p>
         </div>
-        <Button onClick={submit} busy={busy} disabled={!filled.length}>
+        <Button onClick={submit} busy={busy} disabled={!filled.length || underpriced}>
           {busy ? "Saving…" : editing ? "Save changes" : "Raise bill"}
         </Button>
       </div>

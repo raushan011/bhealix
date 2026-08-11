@@ -5,6 +5,7 @@ import { Product } from "@/models/Catalog";
 import { OBJECT_ID } from "@/lib/api";
 import { fromDateInput } from "@/lib/time";
 import { computeInvoice } from "./gst";
+import { followUpListSchema, type FollowUpInput } from "./follow-ups";
 import { DISCOUNT_TYPES, PARTY_SOURCES, PAYMENT_MODES, stateName, STATE_CODES } from "./constants";
 import type { SellerSettings } from "./invoices";
 
@@ -51,6 +52,12 @@ export const billInputSchema = z.object({
   invoiceDate: dateField,
   dueDate: dateField.optional(),
   paymentTerms: z.number().int().min(0).max(365).default(0),
+  /**
+   * Every chase agreed on the bill. `followUpDate` is the one-date form the API
+   * has always accepted, folded into the list by the routes so a client that
+   * knows nothing of the list keeps working.
+   */
+  followUps: followUpListSchema.optional(),
   followUpDate: dateField.optional(),
 
   placeOfSupplyCode: z.enum(STATE_CODES as [string, ...string[]]).optional(),
@@ -82,6 +89,19 @@ export const billInputSchema = z.object({
 });
 
 export type BillInput = z.infer<typeof billInputSchema>;
+
+/**
+ * The chases a bill request is asking for, whichever way it asked for them.
+ *
+ * `undefined` means the request said nothing about follow-ups at all, which on an
+ * edit leaves the ones already agreed exactly where they were — a correction to
+ * the pricing is not an instruction to stop chasing the money.
+ */
+export function followUpsFrom(input: BillInput): FollowUpInput[] | undefined {
+  if (input.followUps) return input.followUps;
+  if (input.followUpDate) return [{ date: input.followUpDate }];
+  return undefined;
+}
 
 /** The buyer, flattened to the fields a bill needs, whichever directory they came from. */
 export type Party = {
@@ -258,7 +278,9 @@ export async function composeBill(input: BillInput, settings: SellerSettings): P
       invoiceDate: fromDateInput(input.invoiceDate),
       dueDate: input.dueDate ? fromDateInput(input.dueDate) : undefined,
       paymentTerms: input.paymentTerms,
-      followUpDate: input.followUpDate ? fromDateInput(input.followUpDate) : undefined,
+      // Follow-ups are deliberately not here. They are a list with marks on it
+      // that the client does not hold — `applyFollowUps` merges them onto the
+      // bill instead, so correcting a bill cannot erase a call already made.
       notes: input.notes,
       terms: input.terms ?? settings.terms
     }
