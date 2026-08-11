@@ -24,7 +24,7 @@ const ruleSchema = z.object({
 
 const schema = z.object({
   shopifyDomain: z.string().trim().max(120).optional(),
-  shopifyApiVersion: z.string().trim().regex(/^\d{4}-\d{2}$/, "An API version looks like 2024-10").optional(),
+  shopifyApiVersion: z.string().trim().regex(/^\d{4}-\d{2}$/, "An API version looks like 2026-07").optional(),
   shopifyClientId: z.string().trim().max(120).optional(),
   /** Blank leaves whatever is stored alone — the form never receives the real one back. */
   shopifyClientSecret: z.string().trim().max(200).optional(),
@@ -62,7 +62,7 @@ export async function GET() {
       callbackUrl: appUrl ? redirectUri(appUrl) : "",
       appUrl,
       shopifyDomain: settings.shopifyDomain,
-      shopifyApiVersion: settings.shopifyApiVersion ?? "2024-10",
+      shopifyApiVersion: settings.shopifyApiVersion ?? "2026-07",
       shopifyConnectedAt: settings.shopifyConnectedAt?.toISOString(),
       shopifyClientId: settings.shopifyClientId,
       shopifyClientSecretSet: Boolean(settings.shopifyClientSecret),

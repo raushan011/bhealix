@@ -82,7 +82,7 @@ export async function storeSecret(field: SecretField, value: string | undefined)
 export function shopifyConfig(settings: SettingsDoc): ShopifyConfig | null {
   const domain = normaliseDomain(settings.shopifyDomain ?? "");
   if (!domain || !settings.shopifyAccessToken) return null;
-  return { domain, accessToken: settings.shopifyAccessToken, apiVersion: settings.shopifyApiVersion || "2024-10" };
+  return { domain, accessToken: settings.shopifyAccessToken, apiVersion: settings.shopifyApiVersion || "2026-07" };
 }
 
 export const shiprocketConfig = (settings: SettingsDoc): ShiprocketConfig | null =>

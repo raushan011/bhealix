@@ -343,7 +343,7 @@ const SalesSettingsSchema = new Schema({
   shopifyAccessToken: { type: String, select: false },
   /** What Shopify actually granted, which is not always what was asked for. */
   shopifyScopes: String,
-  shopifyApiVersion: { type: String, default: "2024-10" },
+  shopifyApiVersion: { type: String, default: "2026-07" },
   shopifyConnectedAt: Date,
   lastOrderSyncAt: Date,
   lastOrderSyncError: String,

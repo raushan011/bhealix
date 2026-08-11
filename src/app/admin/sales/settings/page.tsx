@@ -35,7 +35,7 @@ export default function SalesSettingsPage() {
   const [appOrigin, setAppOrigin] = useState("");
 
   const [shopifyDomain, setShopifyDomain] = useState("");
-  const [shopifyApiVersion, setShopifyApiVersion] = useState("2024-10");
+  const [shopifyApiVersion, setShopifyApiVersion] = useState("2026-07");
   const [shopifyClientId, setShopifyClientId] = useState("");
   const [shopifyClientSecret, setShopifyClientSecret] = useState("");
   const [shopifyAccessToken, setShopifyAccessToken] = useState("");
@@ -57,7 +57,7 @@ export default function SalesSettingsPage() {
       // that does not match what is pasted here invites a needless second look.
       if (data.appUrl) setAppOrigin(data.appUrl.replace(/\/+$/, ""));
       setShopifyDomain(data.shopifyDomain ?? "");
-      setShopifyApiVersion(data.shopifyApiVersion ?? "2024-10");
+      setShopifyApiVersion(data.shopifyApiVersion ?? "2026-07");
       setShopifyClientId(data.shopifyClientId ?? "");
       setShiprocketEmail(data.shiprocketEmail ?? "");
       setRules(data.rules ?? []);
