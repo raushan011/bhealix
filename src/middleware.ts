@@ -1,7 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 
-const PUBLIC_API = ["/api/auth/login", "/api/auth/logout"];
+/**
+ * `/api/sales/shopify/webhook` is public because Shopify has no session with
+ * us. It is not unauthenticated: the route verifies an HMAC over the raw body
+ * against the app's client secret and refuses anything that does not match.
+ * Leaving it behind the session gate would have every delivery answered with a
+ * 401 until Shopify gave up and removed the subscription.
+ */
+const PUBLIC_API = ["/api/auth/login", "/api/auth/logout", "/api/sales/shopify/webhook"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

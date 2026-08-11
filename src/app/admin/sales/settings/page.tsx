@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, Link2 as LinkIcon, Plug, RefreshCw, XCircle } from "lucide-react";
 import { Badge, Button, Card, Field, Notice, PageTitle, Spinner } from "@/components/ui/kit";
 import { PasswordInput } from "@/components/ui/password-input";
+import { AutomationPanel } from "@/components/sales/automation-panel";
 import { COMMISSION_BASES } from "@/lib/sales/constants";
 import { weekdayName } from "@/lib/sales/payouts";
 import type { CommissionRule } from "@/lib/sales/commission";
@@ -396,6 +397,8 @@ export default function SalesSettingsPage() {
         Shortening it pays reps sooner and makes a return more likely to land after the money has gone.
       </Notice>
     </Card>
+
+    <AutomationPanel />
 
     <div className="flex justify-end"><Button busy={busy} onClick={save}>Save settings</Button></div>
   </div>;

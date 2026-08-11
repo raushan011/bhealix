@@ -217,6 +217,24 @@ Shortening the hold pays reps sooner and makes this more likely. Lengthening it 
 
 ---
 
+## Automation — what runs by itself
+
+Three things keep this current without anybody uploading anything:
+
+| | When | What |
+|---|---|---|
+| **Live updates** | Seconds | Shopify tells the CRM the moment an order is placed, changed or cancelled. Subscribed automatically when you connect. |
+| **Nightly pass** | 01:30 daily | Pulls anything a live update missed, asks Shiprocket about every parcel still moving, and clears commissions whose hold has elapsed. |
+| **Full resync** | On demand | Ignores the last run and reaches back over the whole backfill window. For repairs. |
+
+**Sales settings → Automation** lists the last twenty passes with what each one did, so the schedule
+can be seen working rather than assumed. It warns if the most recent scheduled pass is more than a
+day and a half old.
+
+The three overlap on purpose. A webhook delivered while the site is redeploying is lost, and the
+nightly pass picks it up; the nightly pass failing is visible in that list rather than silent. A
+manual upload is only ever needed for orders neither can see.
+
 ## Scheduling
 
 `vercel.json` already schedules `GET /api/sales/cron` for 01:30 daily. Set **`CRON_SECRET`** in your

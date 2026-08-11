@@ -3,7 +3,7 @@ import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
 import { badRequest, fail, ok } from "@/lib/api";
 import { IntegrationError } from "@/lib/sales/http";
-import { recalculateAll, syncAll } from "@/lib/sales/sync";
+import { recalculateAll, recordedSync, syncAll } from "@/lib/sales/sync";
 
 /**
  * The nightly pass: pull what is new, then re-price everything still open.
@@ -39,7 +39,7 @@ export async function GET(request: Request) {
     await connectDb();
 
     try {
-      const report = await syncAll();
+      const report = await recordedSync(syncAll, { trigger: scheduled ? "Scheduled" : "Manual", target: "all" });
       const recalculated = await recalculateAll();
       return ok({ ...report, commissionsRecalculated: recalculated, scheduled });
     } catch (error) {

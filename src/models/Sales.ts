@@ -303,6 +303,46 @@ SalesPayoutLineSchema.index({ rep: 1, createdAt: -1 });
 
 export const SalesPayoutLine = models.SalesPayoutLine ?? model("SalesPayoutLine", SalesPayoutLineSchema);
 
+// ---------------------------------------------------------------- sync history
+
+/**
+ * What each pull did, kept so the automation can be seen working.
+ *
+ * Without this, "it syncs every night" is a claim rather than a fact, and the
+ * first anybody learns that it stopped is a payout run that comes back empty.
+ * A row per pass, with the same figures the operator sees when they press the
+ * button by hand.
+ *
+ * The TTL is what keeps it from growing without limit: MongoDB removes a row
+ * 90 days after it is written, with no job to schedule and nothing to remember.
+ */
+const SalesSyncRunSchema = new Schema({
+  trigger: { type: String, enum: ["Manual", "Scheduled", "Webhook"], default: "Manual", index: true },
+  target: String,
+  finishedAt: { type: Date, default: Date.now, index: true },
+  durationMs: Number,
+
+  ordersSeen: { type: Number, default: 0 },
+  ordersAttributed: { type: Number, default: 0 },
+  ordersCreated: { type: Number, default: 0 },
+  ordersUpdated: { type: Number, default: 0 },
+  shipmentsMatched: { type: Number, default: 0 },
+  commissionsRecalculated: { type: Number, default: 0 },
+
+  unknownCoupons: { type: [String], default: [] },
+  warnings: { type: [String], default: [] },
+  /** Set when the pass failed outright; the figures above are then what it managed first. */
+  error: String,
+
+  actor: { type: Schema.Types.ObjectId, ref: "User" },
+  /** Removed automatically 90 days on — see the note above. */
+  expiresAt: { type: Date, required: true }
+}, { timestamps: true });
+
+SalesSyncRunSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+export const SalesSyncRun = models.SalesSyncRun ?? model("SalesSyncRun", SalesSyncRunSchema);
+
 // ------------------------------------------------------------------ settings
 
 const RuleSchema = new Schema({

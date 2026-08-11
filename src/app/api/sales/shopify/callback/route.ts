@@ -10,6 +10,7 @@ import { IntegrationError } from "@/lib/sales/http";
 import { exchangeCode, OAUTH_STATE_COOKIE, safeShopDomain, verifyCallback } from "@/lib/sales/oauth";
 import { encryptSecret } from "@/lib/sales/secrets";
 import { loadCredentials } from "@/lib/sales/settings";
+import { registerWebhooks, WEBHOOK_PATH, WEBHOOK_TOPICS } from "@/lib/sales/webhooks";
 
 /**
  * Step two: Shopify sends the merchant back with a one-time code.
@@ -98,9 +99,33 @@ export async function GET(request: Request) {
     const granted = scope.split(",").filter(Boolean);
     const missing = ["read_orders", "read_products"].filter(needed => !granted.includes(needed));
 
-    return back(missing.length
-      ? `Connected to ${shop}, but Shopify did not grant ${missing.join(" or ")}. Add ${missing.length === 1 ? "that scope" : "those scopes"} to the app in the Dev Dashboard, release a version, then connect again.`
-      : `Connected to ${shop}.`, !missing.length);
+    if (missing.length) {
+      return back(`Connected to ${shop}, but Shopify did not grant ${missing.join(" or ")}. Add ${missing.length === 1 ? "that scope" : "those scopes"} to the app in the Dev Dashboard, release a version, then connect again.`);
+    }
+
+    /*
+     * Subscribe now, while we certainly have a working token.
+     *
+     * Doing it here rather than behind a button is the difference between
+     * automation that works and automation somebody has to remember to switch
+     * on. A failure is reported but does not fail the connection — the
+     * scheduled sync still covers everything webhooks would have brought in,
+     * just less promptly.
+     */
+    let subscribed = "";
+    try {
+      const result = await registerWebhooks(
+        { domain: shop, accessToken, apiVersion: settings.shopifyApiVersion || "2026-07" },
+        `${(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "")}${WEBHOOK_PATH}`
+      );
+      subscribed = result.failed.length
+        ? ` Live updates: ${result.failed.length} of ${WEBHOOK_TOPICS.length} could not be subscribed, so new orders will arrive on the nightly sync instead.`
+        : " New orders will now arrive as they are placed.";
+    } catch {
+      subscribed = " Live updates could not be set up, so new orders will arrive on the nightly sync instead.";
+    }
+
+    return back(`Connected to ${shop}.${subscribed}`, true);
   } catch (error) {
     if (error instanceof IntegrationError) return back(error.message);
     return fail(error);

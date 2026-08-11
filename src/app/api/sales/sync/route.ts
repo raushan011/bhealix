@@ -5,7 +5,8 @@ import { can } from "@/constants/access";
 import { badRequest, fail, ok } from "@/lib/api";
 import { record } from "@/lib/audit";
 import { IntegrationError } from "@/lib/sales/http";
-import { recalculateAll, syncAll, syncOrders, syncShipments } from "@/lib/sales/sync";
+import { recalculateAll, recordedSync, syncAll, syncOrders, syncShipments } from "@/lib/sales/sync";
+import { SalesSyncRun } from "@/models/Sales";
 
 const schema = z.object({
   target: z.enum(["all", "orders", "shipments", "recalculate"]).default("all"),
@@ -24,6 +25,21 @@ const schema = z.object({
  * it, because "Shopify refused the token (401)" tells somebody which field to
  * fix and "something went wrong" does not.
  */
+/** The last twenty passes, so the automation can be seen working rather than believed in. */
+export async function GET() {
+  try {
+    const auth = await apiSession(can.viewSales);
+    if ("response" in auth) return auth.response;
+    await connectDb();
+
+    const runs = await SalesSyncRun.find({}).sort({ finishedAt: -1 }).limit(20)
+      .populate("actor", "name").lean();
+    return ok({ runs, scheduled: Boolean(process.env.CRON_SECRET) });
+  } catch (error) {
+    return fail(error);
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const auth = await apiSession(can.manageSales);
@@ -40,9 +56,10 @@ export async function POST(request: Request) {
         return ok({ target, commissionsRecalculated: count });
       }
 
-      const report = target === "orders" ? await syncOrders({ since })
-        : target === "shipments" ? await syncShipments()
-        : await syncAll();
+      const report = await recordedSync(
+        () => target === "orders" ? syncOrders({ since }) : target === "shipments" ? syncShipments() : syncAll(),
+        { trigger: "Manual", target, actor: auth.session.userId }
+      );
 
       await record({
         actor: auth.session.userId,
