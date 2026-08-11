@@ -9,6 +9,11 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:serve": "node tests/support/serve.mjs",
+    "test:seed": "node tests/support/seed.mjs",
+    "test:api": "vitest run --config vitest.integration.config.ts",
+    "test:load": "node tests/load/run.mjs",
+    "test:e2e": "playwright test",
     "icons": "node scripts/generate-icons.mjs",
     "seed": "node scripts/seed.mjs",
     "backfill:samples": "node scripts/backfill-sample-ledger.mjs"
@@ -30,6 +35,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4.1.0",
     "@testing-library/jest-dom": "^6.8.0",
     "@testing-library/react": "^16.3.0",
