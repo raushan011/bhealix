@@ -32,24 +32,32 @@ export type ShopDiscount = {
   usageCount?: number;
 };
 
-type Money = { amount?: string };
 type Node = {
   codeDiscount?: {
     title?: string;
     status?: string;
     startsAt?: string;
     endsAt?: string;
-    usageCount?: number;
+    asyncUsageCount?: number;
+    summary?: string;
     codes?: { edges?: { node?: { code?: string } }[] };
-    customerGets?: {
-      value?: {
-        percentage?: number;
-        amount?: Money;
-        appliesOnEachItem?: boolean;
-      };
-    };
   };
 };
+
+/**
+ * `summary` is Shopify's own sentence — "₹800.00 off Skin Anti Pigmentation Kit
+ * • Applies once per order" — the very text shown in its Discounts screen.
+ * Asking for it beats reassembling one out of `customerGets`, which is a union
+ * inside a union and three more ways for this query to be wrong.
+ *
+ * `asyncUsageCount`, not `usageCount`: the latter is not a field on any of
+ * these types, and GraphQL rejects the whole query for one bad name rather than
+ * returning what it could.
+ */
+export const DISCOUNT_FIELDS = "title status startsAt endsAt asyncUsageCount summary codes(first: 25) { edges { node { code } } }";
+
+/** The three types a code discount can be. An App discount has no code to read. */
+export const DISCOUNT_TYPES = ["DiscountCodeBasic", "DiscountCodeBxgy", "DiscountCodeFreeShipping"] as const;
 
 const QUERY = `
   query CodeDiscounts($cursor: String) {
@@ -59,33 +67,13 @@ const QUERY = `
         node {
           codeDiscount {
             __typename
-            ... on DiscountCodeBasic {
-              title status startsAt endsAt usageCount
-              codes(first: 20) { edges { node { code } } }
-              customerGets { value {
-                ... on DiscountPercentage { percentage }
-                ... on DiscountAmount { amount { amount } appliesOnEachItem }
-              } }
-            }
-            ... on DiscountCodeBxgy { title status startsAt endsAt usageCount
-              codes(first: 20) { edges { node { code } } } }
-            ... on DiscountCodeFreeShipping { title status startsAt endsAt usageCount
-              codes(first: 20) { edges { node { code } } } }
+            ${DISCOUNT_TYPES.map(type => `... on ${type} { ${DISCOUNT_FIELDS} }`).join("\n            ")}
           }
         }
       }
     }
   }
 `;
-
-const summarise = (node: Node["codeDiscount"]): string => {
-  const value = node?.customerGets?.value;
-  if (value?.percentage) return `${Math.round(value.percentage * 100)}% off`;
-  if (value?.amount?.amount) {
-    return `₹${Math.round(Number(value.amount.amount))} off${value.appliesOnEachItem ? " each item" : ""}`;
-  }
-  return node?.title ?? "Discount";
-};
 
 /** Every code discount on the shop, paged through. */
 export async function fetchDiscounts(config: ShopifyConfig, maxPages = 10): Promise<ShopDiscount[]> {
@@ -109,7 +97,13 @@ export async function fetchDiscounts(config: ShopifyConfig, maxPages = 10): Prom
     // looking like a success. Turning it back into a throw is what lets the
     // caller fall back rather than quietly show an empty catalogue.
     if (data.errors?.length) {
-      throw new Error(data.errors.map(error => error.message).filter(Boolean).join("; ") || "Shopify refused the discounts query");
+      const reason = data.errors.map(error => error.message).filter(Boolean).join("; ");
+      // The commonest cause by far, and the message Shopify returns for it
+      // ("Access denied for codeDiscountNodes field") says nothing about how to
+      // fix it.
+      throw new Error(/access denied|not approved|scope/i.test(reason)
+        ? "Shopify refused the discount list because the app does not have the read_discounts scope. Add it in the Dev Dashboard, release a version, then press Reconnect with Shopify."
+        : reason || "Shopify refused the discounts query");
     }
 
     const connection = data.data?.codeDiscountNodes;
@@ -124,10 +118,10 @@ export async function fetchDiscounts(config: ShopifyConfig, maxPages = 10): Prom
           code,
           title: discount.title ?? code,
           status: discount.status ?? "ACTIVE",
-          summary: summarise(discount),
+          summary: discount.summary ?? discount.title ?? "Discount",
           startsAt: discount.startsAt,
           endsAt: discount.endsAt,
-          usageCount: discount.usageCount
+          usageCount: discount.asyncUsageCount
         });
       }
     }

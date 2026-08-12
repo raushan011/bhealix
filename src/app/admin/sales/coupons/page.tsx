@@ -6,6 +6,7 @@ import { Badge, Button, Card, EmptyState, Field, Notice, PageTitle, Spinner, Sta
 import { Modal } from "@/components/ui/modal";
 import { formatDate } from "@/lib/time";
 import { PAYOUT_MODES } from "@/lib/sales/constants";
+import { parseCoupon } from "@/lib/sales/coupons";
 import { formatRupees } from "@/lib/sales/types";
 import type { CatalogueEntry } from "@/lib/sales/catalogue";
 import type { CommissionRule } from "@/lib/sales/commission";
@@ -155,11 +156,22 @@ function ClaimCoupon({ entry, reps, rules, onClose, onDone }: {
   onClose: () => void;
   onDone: (message: string) => void;
 }) {
-  const [mode, setMode] = useState<"existing" | "new">(reps.length ? "existing" : "new");
-  const [rep, setRep] = useState(reps[0]?._id ?? "");
-  const [suffix, setSuffix] = useState(rules[0]?.suffix ?? "");
+  /*
+   * Read out of the code itself: SHRADDHA30 is the rep SHRADDHA on the 30 rule.
+   *
+   * Only a starting point — a coupon need not be named after anybody — but with
+   * twenty codes to place, retyping what is already on screen is both tedious
+   * and the way SATHYA becomes SATHY. Both fields stay editable.
+   */
+  const guess = parseCoupon(entry.code);
+  const suggestedRule = rules.find(rule => rule.suffix === guess?.suffix)?.suffix;
+  const existing = guess ? reps.find(candidate => candidate.code === guess.repCode) : undefined;
+
+  const [mode, setMode] = useState<"existing" | "new">(existing || reps.length ? "existing" : "new");
+  const [rep, setRep] = useState(existing?._id ?? reps[0]?._id ?? "");
+  const [suffix, setSuffix] = useState(suggestedRule ?? rules[0]?.suffix ?? "");
   const [name, setName] = useState("");
-  const [repCode, setRepCode] = useState("");
+  const [repCode, setRepCode] = useState(guess?.repCode ?? "");
   const [phone, setPhone] = useState("");
   const [payMethod, setPayMethod] = useState<string>("UPI");
   const [upiId, setUpiId] = useState("");
@@ -219,9 +231,9 @@ function ClaimCoupon({ entry, reps, rules, onClose, onDone }: {
       </div>
 
       {mode === "existing" ? (
-        <Field label="Rep">
+        <Field label="Rep" hint={existing ? `${entry.code} looks like ${existing.name}'s — check before saving.` : undefined}>
           <select className="select" value={rep} onChange={event => setRep(event.target.value)}>
-            {reps.map(entry => <option key={entry._id} value={entry._id}>{entry.name} ({entry.code})</option>)}
+            {reps.map(option => <option key={option._id} value={option._id}>{option.name} ({option.code})</option>)}
           </select>
         </Field>
       ) : <>
