@@ -43,6 +43,13 @@ export function OrderList({ orders, mayOverride, onChanged, showRep = true }: {
               <Badge tone={commissionTone(order.commission.status)}>{order.commission.status}</Badge>
               {order.delivery.override && <Badge tone="info">Set by hand</Badge>}
               {order.commission.needsReversal && <Badge tone="danger">Needs reversal</Badge>}
+              {/*
+                * Where the order came from, shown only when it is not Shopify.
+                * An imported order was priced from an order total rather than a
+                * priced basket, and "is this coming from Shopify yet?" is the
+                * question this whole screen keeps being asked.
+                */}
+              {order.source !== "Shopify" && <Badge tone="warn">{order.source}</Badge>}
             </div>
 
             <p className="mt-0.5 text-xs text-[var(--muted)]">
