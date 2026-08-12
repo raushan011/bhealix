@@ -421,6 +421,21 @@ const SalesLeadSchema = new Schema({
 
   status: { type: String, enum: LEAD_STATUSES, default: "New", index: true },
 
+  /**
+   * When somebody last opened WhatsApp against this lead, and how many times.
+   *
+   * Separate from `status` because they answer different questions. The status
+   * is what the parlour *said*; this is what we did, and the gap between them is
+   * the whole point — a lead messaged three times and still sitting at `New` is
+   * either a bad number or a decision somebody needs to take.
+   *
+   * The count is deliberately not a cap. Nothing here stops a fourth message;
+   * the queue simply puts the least-recently-messaged first, so a working list
+   * empties before it repeats.
+   */
+  lastContactedAt: { type: Date, index: true },
+  contactCount: { type: Number, default: 0, min: 0 },
+
   phone: { type: String, trim: true },
   website: { type: String, trim: true },
   address: { type: String, trim: true },
@@ -464,6 +479,36 @@ SalesLeadSchema.index({ type: 1, name: 1 });
 SalesLeadSchema.index({ status: 1, createdAt: -1 });
 
 export const SalesLead = models.SalesLead ?? model("SalesLead", SalesLeadSchema);
+
+// ----------------------------------------------------------------- outreach
+
+/**
+ * What gets said to a lead, written once.
+ *
+ * A collection rather than an array on the settings document next door, because
+ * these are written and rewritten by whoever is doing the prospecting that
+ * month — a Diwali message, a follow-up for the ones who went quiet, one for
+ * salons and a blunter one for chemists. Settings is for commercial decisions
+ * taken once; this is working material, and it wants its own timestamps and its
+ * own delete.
+ *
+ * The body is stored with its `{{name}}` placeholders intact. Rendering happens
+ * at the moment of sending (`lib/sales/outreach.ts`), so correcting a typo here
+ * fixes every message not yet sent rather than only the next batch.
+ */
+const SalesTemplateSchema = new Schema({
+  name: { type: String, required: true, trim: true },
+  body: { type: String, required: true, trim: true },
+  /** Free text, mirroring the lead's own type — "Beauty parlour", "Chemist". */
+  audience: { type: String, trim: true },
+  createdBy: { type: Schema.Types.ObjectId, ref: "User" },
+  updatedBy: { type: Schema.Types.ObjectId, ref: "User" }
+}, { timestamps: true });
+
+/** The one question the picker asks: what have we got, most recent first. */
+SalesTemplateSchema.index({ updatedAt: -1 });
+
+export const SalesTemplate = models.SalesTemplate ?? model("SalesTemplate", SalesTemplateSchema);
 
 // ------------------------------------------------------------------ settings
 

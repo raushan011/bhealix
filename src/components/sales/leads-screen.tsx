@@ -1,29 +1,35 @@
 "use client";
 
 import { useState } from "react";
-import { Search, UsersRound } from "lucide-react";
+import { Search, Send, UsersRound } from "lucide-react";
 import { Notice, PageTitle } from "@/components/ui/kit";
 import { LeadList } from "@/components/sales/lead-list";
 import { LeadSearch } from "@/components/sales/lead-search";
+import { OutreachQueue } from "@/components/sales/outreach-queue";
 
 /**
- * Prospecting, in the two halves it actually has: finding businesses, and then
- * ringing them.
+ * Prospecting, in the three halves it actually has: finding businesses, working
+ * out which are worth approaching, and then approaching them.
  *
  * Tabs rather than one long page. The search half is transient — a form and
  * forty cards that are gone as soon as they are saved — and the saved half
  * grows to hundreds of rows that somebody scrolls for ten minutes at a time.
  * Stacked, the list would be permanently below the fold of a search nobody is
  * running.
+ *
+ * Outreach earns its own tab for a different reason: it is the one screen here
+ * used on a phone rather than at a desk, standing up, one lead at a time. It
+ * shares nothing with the list except the rows underneath.
  */
 export function LeadsScreen({ maySearch }: { maySearch: boolean }) {
-  const [tab, setTab] = useState<"search" | "saved">(maySearch ? "search" : "saved");
+  const [tab, setTab] = useState<"search" | "saved" | "outreach">(maySearch ? "search" : "saved");
   /** Bumped when a search saves, so the list behind it is not stale on return. */
   const [savedAt, setSavedAt] = useState(0);
 
   const tabs = [
     ...(maySearch ? [["search", "Search", Search] as const] : []),
-    ["saved", "Saved leads", UsersRound] as const
+    ["saved", "Saved leads", UsersRound] as const,
+    ...(maySearch ? [["outreach", "Send", Send] as const] : [])
   ];
 
   return <div className="space-y-5">
@@ -50,8 +56,8 @@ export function LeadsScreen({ maySearch }: { maySearch: boolean }) {
       </Notice>
     )}
 
-    {tab === "search" && maySearch
-      ? <LeadSearch onSaved={() => setSavedAt(current => current + 1)} />
-      : <LeadList mayEdit={maySearch} reloadToken={savedAt} />}
+    {tab === "search" && maySearch && <LeadSearch onSaved={() => setSavedAt(current => current + 1)} />}
+    {tab === "outreach" && maySearch && <OutreachQueue mayEdit={maySearch} />}
+    {(tab === "saved" || !maySearch) && <LeadList mayEdit={maySearch} reloadToken={savedAt} />}
   </div>;
 }

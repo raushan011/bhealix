@@ -69,7 +69,18 @@ export const AUDIT_ACTIONS = {
    */
   "sales.leads.saved": "Saved leads from a search",
   "sales.lead.updated": "Updated a lead",
-  "sales.lead.deleted": "Removed a lead"
+  "sales.lead.deleted": "Removed a lead",
+
+  /**
+   * Outreach. The message line carries the wording verbatim rather than the
+   * template's name, because the template it came from is editable and a
+   * parlour asking "who sent me this" wants the sentence they were actually
+   * sent, not whatever that template says today.
+   */
+  "sales.lead.messaged": "Messaged a lead on WhatsApp",
+  "sales.template.created": "Wrote an outreach message",
+  "sales.template.updated": "Edited an outreach message",
+  "sales.template.deleted": "Deleted an outreach message"
 } as const;
 
 export type AuditAction = keyof typeof AUDIT_ACTIONS;

@@ -43,12 +43,33 @@ export async function GET(request: Request) {
     const unfiltered = and.length ? { ...filter, $and: and } : filter;
 
     const status = params.get("status");
-    const where = status && (LEAD_STATUSES as readonly string[]).includes(status)
+    const withStatus = status && (LEAD_STATUSES as readonly string[]).includes(status)
       ? { ...unfiltered, status }
       : unfiltered;
 
+    /**
+     * The outreach queue's one extra question: leave out anybody already
+     * messaged. Asked as its own filter rather than folded into `status`
+     * because the two genuinely differ — a lead messaged last week and marked
+     * `Interested` since is not one to message again, and neither is one still
+     * sitting at `New` because nobody replied.
+     */
+    const where = params.get("contacted") === "never"
+      ? { ...withStatus, lastContactedAt: { $exists: false } }
+      : withStatus;
+
+    /**
+     * Newest-first for the list somebody is reading; least-recently-messaged
+     * first for the queue somebody is working. Mongo sorts missing values ahead
+     * of present ones on an ascending sort, which is exactly the order wanted —
+     * everyone never contacted, then the coldest of the rest.
+     */
+    const order: Record<string, 1 | -1> = params.get("sort") === "outreach"
+      ? { lastContactedAt: 1, createdAt: -1 }
+      : { createdAt: -1 };
+
     const [items, total, counts, types] = await Promise.all([
-      SalesLead.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      SalesLead.find(where).sort(order).skip(skip).limit(limit).lean(),
       SalesLead.countDocuments(where),
       SalesLead.aggregate([{ $match: unfiltered }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
       // Every trade ever saved, so the filter offers what is actually there

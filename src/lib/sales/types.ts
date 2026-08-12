@@ -56,6 +56,9 @@ export type SalesLeadRecord = {
   source?: LeadSource;
   notes?: string;
   createdAt?: string;
+  /** What the outreach queue has done to this lead — see `lib/sales/outreach.ts`. */
+  lastContactedAt?: string;
+  contactCount?: number;
 };
 
 export type SalesOrderItem = {
