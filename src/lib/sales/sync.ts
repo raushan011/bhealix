@@ -34,6 +34,21 @@ import { emptyReport, type SyncReport } from "./types";
  */
 const OVERLAP_MS = 60 * 60 * 1000;
 
+/**
+ * How far back an order pull reaches.
+ *
+ * Three cases, and the first one is the whole point of pulling this out where a
+ * test can reach it: an explicit `since` **always wins**. That is what "Full
+ * resync" sends, and a version of this that quietly preferred the last run's
+ * timestamp turned the repair button into an ordinary incremental sync — which
+ * then reported "0 orders read" and looked exactly like a broken integration.
+ */
+export function windowStart(explicit: Date | undefined, lastSyncAt: Date | undefined, backfillDays: number, now = Date.now()): Date {
+  if (explicit) return explicit;
+  if (lastSyncAt) return new Date(new Date(lastSyncAt).getTime() - OVERLAP_MS);
+  return new Date(now - backfillDays * 86_400_000);
+}
+
 /** Every coupon code in the directory, pointing at the rep who holds it. */
 export async function couponIndex(): Promise<Map<string, { repId: string; suffix: string }>> {
   const reps = await SalesRep.find({}).select("code coupons").lean() as
@@ -108,10 +123,7 @@ export async function syncOrders(options: { since?: Date } = {}): Promise<SyncRe
     throw new IntegrationError("Shopify", "Shopify is not connected. Add the shop address and Admin API access token under Sales settings.");
   }
 
-  const since = options.since
-    ?? (settings.lastOrderSyncAt
-      ? new Date(new Date(settings.lastOrderSyncAt).getTime() - OVERLAP_MS)
-      : new Date(Date.now() - backfillDaysOf(settings) * 86_400_000));
+  const since = windowStart(options.since, settings.lastOrderSyncAt, backfillDaysOf(settings));
 
   // Reported, because "0 orders read" and "0 orders read since four minutes
   // ago" are different facts and only one of them is a problem. An incremental
@@ -271,8 +283,11 @@ export async function recalculateAll(): Promise<number> {
 }
 
 /** Both passes, orders first — a shipment for an order we have not pulled yet is no use. */
-export async function syncAll(): Promise<SyncReport> {
-  const orders = await syncOrders();
+export async function syncAll(options: { since?: Date } = {}): Promise<SyncReport> {
+  // `options` is passed through, not ignored. Dropping it here is what made
+  // "Full resync" quietly do an incremental one: the route parsed `sinceDays`,
+  // turned it into a date, and handed it to a function that took no arguments.
+  const orders = await syncOrders(options);
   let shipments: SyncReport | null = null;
   try {
     shipments = await syncShipments();

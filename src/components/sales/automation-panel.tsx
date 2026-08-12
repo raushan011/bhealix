@@ -10,6 +10,7 @@ type Run = {
   target: string;
   finishedAt: string;
   durationMs?: number;
+  ordersSince?: string;
   ordersSeen: number;
   ordersAttributed: number;
   ordersCreated: number;
@@ -107,7 +108,11 @@ export function AutomationPanel() {
                   <p className="text-xs text-[var(--danger-ink)]">{run.error}</p>
                 ) : (
                   <p className="text-xs text-[var(--muted)]">
-                    {run.ordersSeen} read · {run.ordersAttributed} attributed
+                    {run.ordersSeen} read
+                    {/* Without the window, "0 read" cannot be told apart from
+                        an incremental pass that correctly found nothing. */}
+                    {run.ordersSince ? ` since ${new Date(run.ordersSince).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}
+                    {" · "}{run.ordersAttributed} attributed
                     {run.ordersCreated ? ` · ${run.ordersCreated} new` : ""}
                     {run.shipmentsMatched ? ` · ${run.shipmentsMatched} delivery updates` : ""}
                   </p>

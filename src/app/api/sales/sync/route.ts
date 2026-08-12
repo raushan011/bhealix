@@ -57,7 +57,7 @@ export async function POST(request: Request) {
       }
 
       const report = await recordedSync(
-        () => target === "orders" ? syncOrders({ since }) : target === "shipments" ? syncShipments() : syncAll(),
+        () => target === "orders" ? syncOrders({ since }) : target === "shipments" ? syncShipments() : syncAll({ since }),
         { trigger: "Manual", target, actor: auth.session.userId }
       );
 

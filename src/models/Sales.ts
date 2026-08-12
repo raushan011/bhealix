@@ -322,6 +322,8 @@ const SalesSyncRunSchema = new Schema({
   finishedAt: { type: Date, default: Date.now, index: true },
   durationMs: Number,
 
+  /** How far back the order pull reached. "0 read" is only news when this is old. */
+  ordersSince: Date,
   ordersSeen: { type: Number, default: 0 },
   ordersAttributed: { type: Number, default: 0 },
   ordersCreated: { type: Number, default: 0 },
