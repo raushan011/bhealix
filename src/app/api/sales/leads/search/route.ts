@@ -1,8 +1,8 @@
 import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
 import { badRequest, fail, ok } from "@/lib/api";
-import { geocode, searchText } from "@/lib/doctors/places";
-import { leadSearchPages, leadSearchSchema, toLead, type DiscoveredLead } from "@/lib/sales/leads";
+import { geocode, searchCentres, searchText } from "@/lib/doctors/places";
+import { LEAD_QUERY_CEILING, leadSearchPages, leadSearchSchema, toLead, type DiscoveredLead } from "@/lib/sales/leads";
 
 type Cached = { expires: number; payload: unknown };
 const cache = globalThis as typeof globalThis & { leadSearchCache?: Map<string, Cached> };
@@ -47,21 +47,43 @@ export async function POST(request: Request) {
      * sweep next door has one because a route has to be drivable, and a list of
      * numbers to ring does not.
      */
-    const centre = await geocode(input.location, key);
-    const pages = leadSearchPages(input.resultLimit);
-    const places = await searchText(`${input.query} in ${input.location}`, key, {
-      bias: { centre, radiusM: 25000 },
-      pages
-    });
+    const origin = await geocode(input.location, key);
+
+    /*
+     * One query is capped at three pages of twenty, so sixty is the most any
+     * single search can ever return. Past that the only way up is outward: ask
+     * the same question from a ring of sub-centres and merge by Place ID, which
+     * is exactly what the doctor sweep does to reach five hundred.
+     *
+     * The ring is sized in kilometres because that is what `searchCentres`
+     * takes; 25 km is the bias radius a single-centre lead search already used,
+     * and it is about the size of a city somebody would work in a day.
+     */
+    const radiusKm = 25;
+    const centres = searchCentres(origin, radiusKm, input.resultLimit);
+    const pages = leadSearchPages(Math.min(input.resultLimit, LEAD_QUERY_CEILING));
+    const zoneRadiusM = Math.min(50000, Math.max(2000, (radiusKm * 1000) / Math.sqrt(centres.length)));
 
     const found = new Map<string, DiscoveredLead>();
-    for (const place of places) {
-      if (found.size >= input.resultLimit) break;
-      const lead = toLead(place, input.type);
-      if (lead && !found.has(lead.placeId)) found.set(lead.placeId, lead);
+    let apiCalls = 0;
+
+    outer: for (const centre of centres) {
+      const places = await searchText(`${input.query} in ${input.location}`, key, {
+        bias: { centre, radiusM: zoneRadiusM },
+        pages
+      });
+      apiCalls += pages;
+
+      for (const place of places) {
+        const lead = toLead(place, input.type);
+        if (lead && !found.has(lead.placeId)) found.set(lead.placeId, lead);
+        // Stops the moment the target is met, so a modest search still costs a
+        // modest number of billed requests.
+        if (found.size >= input.resultLimit) break outer;
+      }
     }
 
-    const payload = { items: [...found.values()], apiCalls: pages };
+    const payload = { items: [...found.values()], apiCalls };
     cache.leadSearchCache?.set(cacheKey, { expires: Date.now() + 10 * 60 * 1000, payload });
     return ok({ ...payload, cached: false });
   } catch (error) {

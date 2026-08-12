@@ -2,34 +2,12 @@ import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
 import { badRequest, fail, ok } from "@/lib/api";
 import { discoverySchema, type DiscoveredDoctor } from "@/lib/doctors/discovery";
-import { geocode, searchText, toDiscovered, type Centre } from "@/lib/doctors/places";
+import { geocode, searchCentres, searchText, toDiscovered } from "@/lib/doctors/places";
 import { haversineKm } from "@/lib/routing";
 
 type Cached = { expires: number; payload: unknown };
 const cache = globalThis as typeof globalThis & { discoveryCache?: Map<string, Cached> };
 cache.discoveryCache ??= new Map();
-
-/**
- * One Places call only returns about 20 results near a single point, so a wide
- * radius is covered by searching a ring of sub-centres and merging by Place ID.
- * Each centre yields up to 40 results across two pages.
- */
-function searchCentres(origin: Centre, radiusKm: number, target: number): Centre[] {
-  const zones = Math.min(16, Math.max(1, Math.ceil(target / 40)));
-  if (zones === 1 || radiusKm <= 3) return [origin];
-
-  const centres: Centre[] = [origin];
-  const kmPerLng = 111 * Math.max(0.2, Math.cos(origin.lat * Math.PI / 180));
-  for (let i = 0; i < zones - 1; i++) {
-    const angle = (2 * Math.PI * i) / (zones - 1);
-    const ring = radiusKm * (i % 2 === 0 ? 0.65 : 0.35);
-    centres.push({
-      lat: origin.lat + (Math.cos(angle) * ring) / 111,
-      lng: origin.lng + (Math.sin(angle) * ring) / kmPerLng
-    });
-  }
-  return centres;
-}
 
 export async function POST(request: Request) {
   try {

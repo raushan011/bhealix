@@ -128,3 +128,40 @@ export function toDiscovered(place: Place, doctorType: string, distanceKm = 0): 
     distanceKm: Number(distanceKm.toFixed(1))
   };
 }
+
+/**
+ * A ring of sub-centres covering a radius.
+ *
+ * One Places call returns about twenty results near a single point, and one
+ * query is capped at three pages however it is asked — so the only way to cover
+ * a wide area is to ask the same question from several places and merge the
+ * answers by Place ID. Neighbouring centres overlap heavily, which is the
+ * point: it is what stops the seams between them having holes in them.
+ *
+ * Reckoned at forty per centre rather than the sixty a query can return,
+ * because most of what a neighbouring centre finds has already been found.
+ * Capped at sixteen, beyond which the extra centres cost billed requests and
+ * return almost nothing new.
+ *
+ * Shared by the doctor sweep and the lead search — two implementations of this
+ * would be two sets of geo arithmetic drifting apart.
+ */
+export function searchCentres(origin: Centre, radiusKm: number, target: number): Centre[] {
+  const zones = Math.min(16, Math.max(1, Math.ceil(target / 40)));
+  if (zones === 1 || radiusKm <= 3) return [origin];
+
+  const centres: Centre[] = [origin];
+  // Longitude degrees shrink towards the poles; without this the ring is an
+  // ellipse and the eastern and western edges are under-covered.
+  const kmPerLng = 111 * Math.max(0.2, Math.cos(origin.lat * Math.PI / 180));
+  for (let i = 0; i < zones - 1; i++) {
+    const angle = (2 * Math.PI * i) / (zones - 1);
+    // Two rings, so the middle distances are covered as well as the rim.
+    const ring = radiusKm * (i % 2 === 0 ? 0.65 : 0.35);
+    centres.push({
+      lat: origin.lat + (Math.cos(angle) * ring) / 111,
+      lng: origin.lng + (Math.sin(angle) * ring) / kmPerLng
+    });
+  }
+  return centres;
+}

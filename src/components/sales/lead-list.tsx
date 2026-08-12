@@ -5,7 +5,7 @@ import { ExternalLink, MapPin, Phone, Star, Trash2, UsersRound } from "lucide-re
 import { Badge, Button, Card, EmptyState, Field, Notice, Spinner } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import { formatDate } from "@/lib/time";
-import { LEAD_STATUSES, LEAD_TYPE_SUGGESTIONS, leadTone, type LeadStatus } from "@/lib/sales/leads";
+import { LEAD_STATUSES, LEAD_TYPE_SUGGESTIONS, leadTone, whatsappUrl, type LeadStatus } from "@/lib/sales/leads";
 import type { SalesLeadRecord } from "@/lib/sales/types";
 
 type Response = {
@@ -139,11 +139,24 @@ export function LeadList({ mayEdit, reloadToken }: { mayEdit: boolean; reloadTok
             </p>
 
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted)]">
+              {/*
+                * WhatsApp rather than a dial tone.
+                *
+                * This is how the office actually opens a conversation with a
+                * salon: a message they can answer between customers, not a call
+                * that interrupts one. `tel:` stays alongside for when somebody
+                * does want to ring.
+                */}
               <span className="flex items-center gap-1">
                 <Phone size={11} />
-                {/* A number that can be tapped on a phone, because that is the
-                    entire point of the row. */}
-                {lead.phone ? <a href={`tel:${lead.phone}`} className="font-semibold text-[var(--brand)]">{lead.phone}</a> : "No number"}
+                {lead.phone ? <>
+                  {whatsappUrl(lead.phone)
+                    ? <a href={whatsappUrl(lead.phone)!} target="_blank" rel="noreferrer"
+                        className="font-semibold text-[var(--brand)] hover:underline">{lead.phone}</a>
+                    : <span className="font-semibold">{lead.phone}</span>}
+                  <a href={`tel:${lead.phone}`} aria-label={`Call ${lead.name}`}
+                    className="text-[var(--muted)] hover:text-[var(--ink)]">· call</a>
+                </> : "No number"}
               </span>
               {lead.rating !== undefined && (
                 <span className="flex items-center gap-1">

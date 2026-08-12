@@ -58,14 +58,20 @@ export const LEAD_TYPE_SUGGESTIONS = [
 ] as const;
 
 /**
- * Google returns at most three pages of twenty for one text search, and then
- * stops — there is no fourth page to ask for at any price.
+ * Google returns at most three pages of twenty for **one** text search, and
+ * then stops — there is no fourth page to ask for at any price.
  *
- * So sixty is the ceiling the API imposes, not one this code chose, and asking
- * for more would be a promise the screen could not keep. A wider sweep is a
- * narrower location: "beauty parlour" across two districts is two searches.
+ * Sixty is therefore the ceiling on a single query, not on a search. The way
+ * past it is the way the doctor sweep next door gets to five hundred: ask the
+ * same question from a ring of sub-centres around the location and merge the
+ * answers by Place ID. Each centre returns its own sixty, and the overlap
+ * between neighbouring centres is what stops the seams from having holes in
+ * them.
  */
-export const MAX_LEAD_RESULTS = 60;
+export const MAX_LEAD_RESULTS = 500;
+
+/** What one query can ever return, whatever it is asked for. */
+export const LEAD_QUERY_CEILING = 60;
 
 /** Results per Google page, and so the granularity of the pages we ask for. */
 export const LEAD_PAGE_SIZE = 20;
@@ -73,6 +79,58 @@ export const LEAD_PAGE_SIZE = 20;
 /** How many Places pages a limit actually needs. One call each, one billed request each. */
 export const leadSearchPages = (resultLimit: number) =>
   Math.min(3, Math.max(1, Math.ceil(resultLimit / LEAD_PAGE_SIZE)));
+
+/**
+ * How many sub-centres a target needs.
+ *
+ * Deliberately reckoned at forty per centre rather than sixty: neighbouring
+ * centres return many of the same places, and sizing the ring for the ceiling
+ * would leave a wide search short of what it promised. Capped at sixteen, which
+ * is where the doctor sweep caps too — beyond that the extra centres cost
+ * billed requests and return almost nothing new.
+ */
+export const leadSearchZones = (resultLimit: number) =>
+  Math.min(16, Math.max(1, Math.ceil(resultLimit / 40)));
+
+/** Billed Google requests a search will cost at worst: every centre, every page. */
+export const estimateLeadRequests = (resultLimit: number) =>
+  leadSearchZones(resultLimit) * leadSearchPages(Math.min(resultLimit, LEAD_QUERY_CEILING));
+
+// --------------------------------------------------------------- reaching out
+
+/** Every lead in this directory is Indian; Google returns local numbers as often as not. */
+export const DEFAULT_DIAL_CODE = "91";
+
+/**
+ * A number as WhatsApp wants it: digits only, country code included, no plus.
+ *
+ * Google Places hands these back however the listing typed them —
+ * `096503 06893`, `+91 96503 06893`, `0120-4567890`. `wa.me` accepts exactly
+ * one of those shapes and answers the rest with "phone number shared via url is
+ * invalid", so the normalising *is* the feature.
+ *
+ * The leading zero is a trunk prefix for dialling inside the country and has no
+ * meaning once a country code is on the front — leaving it in is the single
+ * commonest way one of these links dies.
+ */
+export function whatsappNumber(phone: string | null | undefined): string | null {
+  const digits = (phone ?? "").replace(/\D/g, "");
+  if (!digits) return null;
+
+  // Already international: 91 followed by a ten-digit number.
+  if (digits.length === 12 && digits.startsWith(DEFAULT_DIAL_CODE)) return digits;
+
+  const local = digits.replace(/^0+/, "");
+  // Too short to be a number anybody can be reached on.
+  if (local.length < 8) return null;
+  return `${DEFAULT_DIAL_CODE}${local}`;
+}
+
+/** The link itself, or nothing when the number cannot be made sense of. */
+export const whatsappUrl = (phone: string | null | undefined) => {
+  const number = whatsappNumber(phone);
+  return number ? `https://wa.me/${number}` : null;
+};
 
 const typeField = z.string().trim()
   .min(2, "Give the results a type, so the list can be found again")

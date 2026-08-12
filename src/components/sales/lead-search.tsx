@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ExternalLink, MapPin, Phone, Save, Search, Star } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Field, Notice, Spinner } from "@/components/ui/kit";
 import {
-  LEAD_TYPE_SUGGESTIONS, MAX_LEAD_RESULTS, leadSearchSchema, type DiscoveredLead
+  LEAD_QUERY_CEILING, LEAD_TYPE_SUGGESTIONS, MAX_LEAD_RESULTS, leadSearchSchema, type DiscoveredLead
 } from "@/lib/sales/leads";
 
 /**
@@ -151,9 +151,10 @@ export function LeadSearch({ onSaved }: { onSaved: () => void }) {
       </Field>
 
       <p className="text-xs text-[var(--muted)]">
-        Google returns at most {MAX_LEAD_RESULTS} results for one search, however many are asked for — there is no
-        further page to fetch at any price. To cover a city, search its areas one at a time under the same type;
-        anything already saved is refreshed rather than filed twice.
+        Google caps a single query at {LEAD_QUERY_CEILING} results, so anything past that is covered by asking from a
+        ring of points around the location and merging the answers — the same sweep the doctor search uses. A wider
+        search therefore costs proportionally more billed requests, and stops the moment it has what you asked for.
+        Anything already saved is refreshed rather than filed twice.
       </p>
     </Card>
 
