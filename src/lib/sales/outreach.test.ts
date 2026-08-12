@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_MESSAGE_LENGTH, advancesOnSend, buildQueue, render, templateSchema,
-  templateUpdateSchema, unknownFields, whatsappSendUrl
+  templateUpdateSchema, unknownFields, whatsappAppUrl, whatsappSendUrl
 } from "./outreach";
 
 const parlour = {
@@ -84,6 +84,33 @@ describe("the WhatsApp link", () => {
     expect(whatsappSendUrl("call the shop", "Hi")).toBeNull();
     expect(whatsappSendUrl("", "Hi")).toBeNull();
     expect(whatsappSendUrl(null, "Hi")).toBeNull();
+  });
+});
+
+describe("the app link", () => {
+  it("hands the phone a scheme the OS routes, not a page to navigate to", () => {
+    expect(whatsappAppUrl("096503 06893", "Hi there"))
+      .toBe("whatsapp://send?phone=919650306893&text=Hi%20there");
+  });
+
+  it("normalises the number exactly as the web link does", () => {
+    const number = (url: string) => url.match(/phone=(\d+)/)![1];
+    expect(number(whatsappAppUrl("0120-4567890", "Hi")!))
+      .toBe(number(whatsappSendUrl("0120-4567890", "Hi")!.replace("https://wa.me/", "phone=")));
+  });
+
+  it("escapes the message the same way", () => {
+    expect(whatsappAppUrl("9650306893", "50% off & free?")!)
+      .toContain("text=50%25%20off%20%26%20free%3F");
+  });
+
+  it("drops the text parameter rather than sending an empty one", () => {
+    expect(whatsappAppUrl("9650306893", "   ")).toBe("whatsapp://send?phone=919650306893");
+  });
+
+  it("refuses the same numbers the web link refuses", () => {
+    expect(whatsappAppUrl("call the shop", "Hi")).toBeNull();
+    expect(whatsappAppUrl(null, "Hi")).toBeNull();
   });
 });
 

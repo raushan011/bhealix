@@ -1,16 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft, CheckCircle2, MapPin, MessageSquare, PhoneOff, Send, SkipForward
 } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Field, Notice, Spinner } from "@/components/ui/kit";
 import { MessageTemplates } from "@/components/sales/message-templates";
-import { buildQueue, whatsappSendUrl, type QueueEntry, type TemplateRecord } from "@/lib/sales/outreach";
+import {
+  buildQueue, whatsappAppUrl, whatsappSendUrl, type QueueEntry, type TemplateRecord
+} from "@/lib/sales/outreach";
 import type { SalesLeadRecord } from "@/lib/sales/types";
 
 /** How many leads one sitting pulls. The API's own ceiling per page. */
 const BATCH = 100;
+
+/**
+ * Where a half-worked queue waits while WhatsApp is in front.
+ *
+ * Opening WhatsApp puts this browser in the background, and a phone under
+ * memory pressure discards a backgrounded tab without ceremony — the tab is
+ * still listed, but coming back to it re-runs the page from scratch. React
+ * state does not survive that, so somebody who sent forty messages returns to
+ * an empty setup form and reasonably concludes the thing has lost their place.
+ *
+ * Session storage rather than local: a queue is one sitting's work, and finding
+ * last Tuesday's half-finished batch waiting silently would be worse than being
+ * asked to start it again.
+ */
+const RESUME_KEY = "bhealix.outreach.queue";
 
 type Entry = QueueEntry & { lead: SalesLeadRecord };
 
@@ -41,6 +58,57 @@ export function OutreachQueue({ mayEdit }: { mayEdit: boolean }) {
   const [sent, setSent] = useState<Set<string>>(new Set());
   const [managing, setManaging] = useState(false);
   const [error, setError] = useState("");
+
+  /**
+   * Whether WhatsApp here is an installed app or a website.
+   *
+   * Read in an effect rather than during render because the server has no user
+   * agent to read, and a value that differs between the server's HTML and the
+   * browser's first paint is a hydration mismatch. Defaulting to desktop is the
+   * safe way round: `wa.me` works on a phone too, it is merely the worse of the
+   * two, whereas `whatsapp://` on a desktop browser does nothing at all.
+   */
+  const [onPhone, setOnPhone] = useState(false);
+  useEffect(() => {
+    setOnPhone(/android|iphone|ipad|ipod/i.test(navigator.userAgent));
+  }, []);
+
+  /** Nothing may be written to storage until what was there has been read. */
+  const restored = useRef(false);
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(RESUME_KEY);
+      if (saved) {
+        const state = JSON.parse(saved) as
+          { queue: Entry[]; index: number; sent: string[]; templateId: string };
+        if (state.queue?.length) {
+          setQueue(state.queue);
+          setIndex(state.index ?? 0);
+          setSent(new Set(state.sent ?? []));
+          if (state.templateId) setTemplateId(state.templateId);
+        }
+      }
+    } catch {
+      // A half-written or outdated entry is not worth failing the screen over.
+      // Losing the resume point costs a restart; throwing here costs the tab.
+    }
+    restored.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!restored.current) return;
+    try {
+      if (queue) {
+        sessionStorage.setItem(RESUME_KEY, JSON.stringify({ queue, index, sent: [...sent], templateId }));
+      } else {
+        sessionStorage.removeItem(RESUME_KEY);
+      }
+    } catch {
+      // Private browsing and a full quota both land here. The queue still works
+      // for as long as the tab survives, which is the common case anyway.
+    }
+  }, [queue, index, sent, templateId]);
 
   const loadTemplates = useCallback(async () => {
     const response = await fetch("/api/sales/templates");
@@ -112,6 +180,30 @@ export function OutreachQueue({ mayEdit }: { mayEdit: boolean }) {
   }
 
   /**
+   * Hands the message over, and leaves this page showing the next lead.
+   *
+   * On a phone the app scheme is assigned to `location` rather than opened in a
+   * tab, and the difference is the entire bug it fixes: `target="_blank"` put
+   * WhatsApp behind a *second tab*, so coming back landed on that tab's wa.me
+   * interstitial while the queue — correctly advanced — sat invisible in the
+   * first one. Assigning a scheme the browser cannot navigate to leaves the
+   * document alone, so returning is a swipe back onto a page already showing
+   * the next number.
+   *
+   * Returning still has to be done by hand. WhatsApp is a separate application
+   * and there is no callback, no redirect and no web API that brings somebody
+   * back automatically; anything claiming to is fighting the OS. What can be
+   * fixed is what they find when they do come back, which is this.
+   */
+  function send(entry: Entry) {
+    markSent(entry);
+
+    const app = whatsappAppUrl(entry.lead.phone, entry.message);
+    if (onPhone && app) window.location.href = app;
+    else if (entry.url) window.open(entry.url, "_blank", "noopener,noreferrer");
+  }
+
+  /**
    * Editing what this one lead gets, without touching the saved template.
    *
    * The link is rebuilt from the number rather than patched, so a reworded
@@ -125,7 +217,14 @@ export function OutreachQueue({ mayEdit }: { mayEdit: boolean }) {
     ));
   }
 
-  if (!templates || counting && matches === null) return <Spinner label="Loading…" />;
+  /*
+   * The queue is checked before the loading guard below, not after.
+   *
+   * A batch restored from storage needs none of what that guard waits for —
+   * not the template list, not the match count — and making it wait shows a
+   * spinner to somebody who has just swiped back from WhatsApp expecting the
+   * next number. The wait is the setup form's alone.
+   */
 
   // ------------------------------------------------------------- the queue itself
 
@@ -189,12 +288,23 @@ export function OutreachQueue({ mayEdit }: { mayEdit: boolean }) {
           </Field>
         </div>
 
-        {entry.url ? (
-          <a href={entry.url} target="_blank" rel="noreferrer" onClick={() => markSent(entry)}
+        {entry.url ? (<>
+          <button type="button" onClick={() => send(entry)}
             className="mt-4 inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-[10px] bg-[var(--brand)] px-4 text-sm font-semibold text-[var(--on-brand)] transition-colors hover:bg-[var(--brand-hover)]">
             <Send size={17} />Send on WhatsApp
-          </a>
-        ) : (
+          </button>
+          {/*
+            * The escape hatch for a phone with no WhatsApp installed, where the
+            * scheme resolves to nothing and the tap appears to do nothing at
+            * all. Small, underneath, and the ordinary path never needs it.
+            */}
+          {onPhone && (
+            <a href={entry.url} target="_blank" rel="noreferrer"
+              className="mt-2 block text-center text-xs text-[var(--muted)] underline">
+              Nothing opened? Try the browser link
+            </a>
+          )}
+        </>) : (
           <Notice tone="warning">
             <span className="flex items-center gap-1.5">
               <PhoneOff size={14} />
@@ -218,12 +328,15 @@ export function OutreachQueue({ mayEdit }: { mayEdit: boolean }) {
       </Card>
 
       <p className="text-center text-xs text-[var(--muted)]">
-        WhatsApp opens with the message ready. You press send.
+        WhatsApp opens with the message ready. Press send, then come back here —
+        this page will already be on the next one.
       </p>
     </div>;
   }
 
   // ------------------------------------------------------------------- setup
+
+  if (!templates || counting && matches === null) return <Spinner label="Loading…" />;
 
   return <div className="space-y-5">
     {error && <Notice tone="error">{error}</Notice>}

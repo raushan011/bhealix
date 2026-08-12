@@ -140,6 +140,32 @@ export function whatsappSendUrl(phone: string | null | undefined, message: strin
     : `https://wa.me/${number}`;
 }
 
+/**
+ * The same message, handed to the installed app instead of the web.
+ *
+ * `whatsapp://` matters on a phone for one reason that has nothing to do with
+ * WhatsApp: an `https://wa.me/` link is a *navigation*, and a navigation either
+ * replaces this page or opens a second tab. Both lose the queue — the first
+ * strands somebody on wa.me's "Continue to Chat" interstitial, the second
+ * leaves the advanced queue in a tab they cannot find, which reads exactly like
+ * the app having forgotten where they were.
+ *
+ * A custom scheme is not a navigation. The browser hands the URL to the OS and
+ * leaves the document alone, so WhatsApp opens *over* a page that is still
+ * sitting on the next lead. Coming back is then one swipe rather than a hunt
+ * through tabs.
+ *
+ * Desktop keeps `wa.me`, which is what routes to WhatsApp Web or the desktop
+ * client depending on what is installed — `whatsapp://` is registered by the
+ * desktop app alone and fails silently for everybody in a browser.
+ */
+export function whatsappAppUrl(phone: string | null | undefined, message: string): string | null {
+  const number = whatsappNumber(phone);
+  if (!number) return null;
+  const text = message.trim();
+  return `whatsapp://send?phone=${number}${text ? `&text=${encodeURIComponent(text)}` : ""}`;
+}
+
 /** One lead, ready to be tapped — or ready to explain why it cannot be. */
 export type QueueEntry = {
   lead: Addressable & { _id: string };
