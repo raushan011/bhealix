@@ -16,7 +16,8 @@
     "test:e2e": "playwright test",
     "icons": "node scripts/generate-icons.mjs",
     "seed": "node scripts/seed.mjs",
-    "backfill:samples": "node scripts/backfill-sample-ledger.mjs"
+    "backfill:samples": "node scripts/backfill-sample-ledger.mjs",
+    "coupons:delete": "node scripts/delete-coupons.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.1",
