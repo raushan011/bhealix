@@ -60,7 +60,16 @@ export const AUDIT_ACTIONS = {
   "sales.payout.approved": "Approved an affiliate payout run",
   "sales.payout.reopened": "Reopened an affiliate payout run",
   "sales.payout.paid": "Marked an affiliate payout paid",
-  "sales.payout.deleted": "Deleted a draft affiliate payout run"
+  "sales.payout.deleted": "Deleted a draft affiliate payout run",
+
+  /**
+   * Lead prospecting. Searching Google is billed and saving writes a batch, so
+   * both leave a line — "who ran up two thousand requests last Tuesday" is a
+   * question a quota bill eventually asks.
+   */
+  "sales.leads.saved": "Saved leads from a search",
+  "sales.lead.updated": "Updated a lead",
+  "sales.lead.deleted": "Removed a lead"
 } as const;
 
 export type AuditAction = keyof typeof AUDIT_ACTIONS;

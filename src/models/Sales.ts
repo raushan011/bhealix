@@ -4,6 +4,7 @@ import {
   DELIVERY_STATES, ORDER_SOURCES, PAYOUT_MODES, PAYOUT_STATUSES
 } from "@/lib/sales/constants";
 import { DEFAULT_RULES } from "@/lib/sales/commission";
+import { LEAD_SOURCES, LEAD_STATUSES } from "@/lib/sales/leads";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -303,6 +304,48 @@ SalesPayoutLineSchema.index({ rep: 1, createdAt: -1 });
 
 export const SalesPayoutLine = models.SalesPayoutLine ?? model("SalesPayoutLine", SalesPayoutLineSchema);
 
+// -------------------------------------------------------------- coupon catalogue
+
+/**
+ * Every discount code known to exist, whoever it belongs to.
+ *
+ * Deliberately **not** where a coupon's owner is recorded — that stays on
+ * `SalesRep.coupons`, so there is one answer to "whose is this" rather than two
+ * that can disagree. This is the catalogue: what Shopify has, and what has been
+ * seen on an order. The two are joined at read time.
+ *
+ * It exists because a coupon is created in Shopify and then has to be typed in
+ * here before an order using it can be attributed. A code in one place and not
+ * the other is money going out with nobody credited, and the only way to notice
+ * is to list both together.
+ */
+const SalesCouponSchema = new Schema({
+  code: { type: String, required: true, unique: true, uppercase: true, trim: true, index: true },
+  /** What Shopify calls the discount this code belongs to. */
+  title: String,
+  /** ACTIVE, EXPIRED, SCHEDULED — Shopify's own word, or Unknown for a code only seen on an order. */
+  status: { type: String, default: "Unknown", index: true },
+  /** "₹800 off", "10% off". */
+  summary: String,
+  startsAt: Date,
+  endsAt: Date,
+  /** Shopify's own count of how many times it has been used. */
+  usageCount: Number,
+
+  /** Where we learned of it: the shop's discount list, or an order carrying it. */
+  discoveredFrom: { type: String, enum: ["Shopify", "Order"], default: "Order" },
+  firstSeenAt: { type: Date, default: Date.now },
+  lastSeenAt: { type: Date, default: Date.now },
+
+  /**
+   * Marked as belonging to nobody — a launch promo, a campaign. Keeps the sync
+   * from naming it after every pass, which is how a warning becomes wallpaper.
+   */
+  ignored: { type: Boolean, default: false, index: true }
+}, { timestamps: true });
+
+export const SalesCoupon = models.SalesCoupon ?? model("SalesCoupon", SalesCouponSchema);
+
 // ---------------------------------------------------------------- sync history
 
 /**
@@ -344,6 +387,83 @@ const SalesSyncRunSchema = new Schema({
 SalesSyncRunSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 export const SalesSyncRun = models.SalesSyncRun ?? model("SalesSyncRun", SalesSyncRunSchema);
+
+// --------------------------------------------------------------------- leads
+
+/**
+ * A business somebody found and decided was worth approaching.
+ *
+ * The affiliate scheme grows one conversation at a time, and the conversations
+ * start with a list: every beauty parlour in Ghaziabad, every gym in Noida.
+ * Searching Google for that list is quick and it is billed; working through it
+ * takes a fortnight. Keeping the results is what stops the same search — and
+ * the same charge — happening again on Monday.
+ *
+ * Not a `SalesRep` and not a `Doctor`. A rep is somebody who already sells for
+ * this company and holds a coupon; a lead is a shopfront that has never heard
+ * of it. A doctor is visited on a planned route against a call window, which a
+ * parlour has none of. Filing a lead as either would mean a record that is
+ * mostly empty and a list that answers the wrong question.
+ */
+const SalesLeadSchema = new Schema({
+  name: { type: String, required: true, trim: true, index: true },
+
+  /**
+   * What kind of business this is, chosen at the moment of searching.
+   *
+   * Free text rather than an enum, and required rather than optional: it is the
+   * only thing that makes a saved lead findable again once the search that
+   * produced it is forgotten. Spelled `type: { type: String }` because a bare
+   * `String` on a key called `type` is read by mongoose as the field's own type
+   * declaration (§11).
+   */
+  type: { type: String, required: true, trim: true, index: true },
+
+  status: { type: String, enum: LEAD_STATUSES, default: "New", index: true },
+
+  phone: { type: String, trim: true },
+  website: { type: String, trim: true },
+  address: { type: String, trim: true },
+  area: { type: String, trim: true },
+  city: { type: String, trim: true, index: true },
+
+  /**
+   * Google's identity for the place, and the reason a second sweep of the same
+   * area updates the twenty rows already held instead of duplicating them.
+   * Sparse, because a lead typed in by hand has no Google identity to match on.
+   */
+  googlePlaceId: { type: String, unique: true, sparse: true, index: true },
+  googleMapsUrl: String,
+  rating: Number,
+  reviewCount: Number,
+  /**
+   * Plain numbers rather than a GeoJSON point. Nothing routes a lead, so the
+   * 2dsphere index — and the half-a-point save failure that comes with it
+   * (§6.2) — would be a trap kept for no gain.
+   */
+  latitude: Number,
+  longitude: Number,
+
+  /**
+   * The search that found it, kept verbatim. Six months on, "why is a nail bar
+   * filed under Beauty parlour" is answered by the words somebody actually
+   * typed, and not by anybody's memory of them.
+   */
+  searchQuery: String,
+  searchLocation: String,
+  source: { type: String, enum: LEAD_SOURCES, default: "Google" },
+
+  notes: String,
+  createdBy: { type: Schema.Types.ObjectId, ref: "User" },
+  updatedBy: { type: Schema.Types.ObjectId, ref: "User" }
+}, { timestamps: true });
+
+// The two questions the list screen asks: this trade, alphabetically, and
+// whatever still needs ringing, newest first.
+SalesLeadSchema.index({ type: 1, name: 1 });
+SalesLeadSchema.index({ status: 1, createdAt: -1 });
+
+export const SalesLead = models.SalesLead ?? model("SalesLead", SalesLeadSchema);
 
 // ------------------------------------------------------------------ settings
 
@@ -399,14 +519,6 @@ const SalesSettingsSchema = new Schema({
   lastShipmentSyncError: String,
 
   rules: { type: [RuleSchema], default: () => DEFAULT_RULES },
-  /**
-   * Codes that look like a rep's but are not — a launch promo, a campaign.
-   *
-   * Without this the sync names them after every pass, and a warning that is
-   * always there is one nobody reads. Silencing the known ones is what keeps
-   * the warning worth acting on when a *real* rep code turns up unclaimed.
-   */
-  ignoredCoupons: { type: [String], default: [] },
   /** Days a delivered order is held before its commission may be paid. */
   holdDays: { type: Number, min: 0, max: 90, default: DEFAULT_HOLD_DAYS },
   /** The day of the week payouts are ordinarily made, for the dashboard to propose. */

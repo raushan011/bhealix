@@ -43,7 +43,6 @@ export default function SalesSettingsPage() {
   const [shiprocketEmail, setShiprocketEmail] = useState("");
   const [shiprocketPassword, setShiprocketPassword] = useState("");
   const [rules, setRules] = useState<CommissionRule[]>([]);
-  const [ignoredCoupons, setIgnoredCoupons] = useState<string[]>([]);
   const [holdDays, setHoldDays] = useState(7);
   const [payoutWeekday, setPayoutWeekday] = useState(1);
   const [backfillDays, setBackfillDays] = useState(90);
@@ -63,7 +62,6 @@ export default function SalesSettingsPage() {
       setShopifyClientId(data.shopifyClientId ?? "");
       setShiprocketEmail(data.shiprocketEmail ?? "");
       setRules(data.rules ?? []);
-      setIgnoredCoupons(data.ignoredCoupons ?? []);
       setHoldDays(data.holdDays ?? 7);
       setPayoutWeekday(data.payoutWeekday ?? 1);
       setBackfillDays(data.backfillDays ?? 90);
@@ -123,8 +121,7 @@ export default function SalesSettingsPage() {
           shopifyAccessToken: shopifyAccessToken || undefined,
           shiprocketEmail,
           shiprocketPassword: shiprocketPassword || undefined,
-          rules, holdDays, payoutWeekday, backfillDays,
-          ignoredCoupons: ignoredCoupons.map(code => code.trim()).filter(Boolean)
+          rules, holdDays, payoutWeekday, backfillDays
         })
       });
       const json = await response.json() as { error?: string; data?: { recalculated: number } };
@@ -378,19 +375,14 @@ export default function SalesSettingsPage() {
         className="text-sm font-medium text-[var(--brand)] hover:underline">Add a rule</button>
 
       {/*
-        * A code shaped like a rep's that is nobody's — a launch promo, a
-        * campaign. Without somewhere to put these, the sync names them after
-        * every pass and the warning becomes wallpaper; the whole value of that
-        * warning is that it fires when a *real* rep code turns up unclaimed.
+        * Codes that belong to nobody are marked on the Coupons screen, beside
+        * the code itself, rather than retyped into a list here — the moment you
+        * see an unclaimed code is the moment you know whether it is anybody's.
         */}
-      <div className="border-t border-[var(--line)] pt-4">
-        <Field label="Codes that are not reps"
-          hint="One per line. A promo like SOFTLAUNCH30 looks exactly like a rep's code, so the sync flags it until you say otherwise.">
-          <textarea className="textarea" rows={3} value={ignoredCoupons.join("\n")}
-            placeholder="SOFTLAUNCH30&#10;SOFTLAUNCH20"
-            onChange={event => setIgnoredCoupons(event.target.value.split("\n").map(code => code.toUpperCase()))} />
-        </Field>
-      </div>
+      <p className="border-t border-[var(--line)] pt-4 text-xs text-[var(--muted)]">
+        A code that is a promo rather than a rep&rsquo;s is marked under <strong>Coupons</strong>, next to the code. One
+        Shopify has deactivated is passed over automatically — it cannot bring in another order.
+      </p>
     </Card>
 
     <Card className="space-y-4 p-5">

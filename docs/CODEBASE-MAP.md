@@ -130,7 +130,7 @@ Seed admin: `admin@bhealix.com` / `Bhealix@123` — **change before production**
 | Billing | `Invoice`, `Customer`, `PaymentProof`, `BillingSettings`, `Counter` | `lib/billing/{constants,gst,numbering,types,customers,attachments,follow-ups}` | `lib/billing/{invoices,compose}.ts` | `/api/invoices`, `/api/customers`, `/api/billing` |
 | HR | `LeaveRequest`, `Attendance`, `Holiday` | `lib/hr/{leave,attendance}` | `lib/hr/records.ts` | `/api/hr/{leave,attendance,holidays,overview}` |
 | Payroll | `SalaryStructure`, `PayrollRun`, `Payslip`, `PayrollSettings` | `lib/hr/payroll.ts` | `lib/hr/payroll-run.ts` | `/api/hr/{payroll,payslips,salary}` |
-| Affiliate sales | `SalesRep`, `SalesOrder`, `SalesPayout`, `SalesPayoutLine`, `SalesSettings` | `lib/sales/{constants,coupons,commission,delivery,payouts,types}` | `lib/sales/{settings,shopify,shiprocket,sync,payout-run,reporting,secrets,http,reps}` | `/api/sales/*` |
+| Affiliate sales | `SalesRep`, `SalesOrder`, `SalesPayout`, `SalesPayoutLine`, `SalesLead`, `SalesSettings` | `lib/sales/{constants,coupons,commission,delivery,payouts,leads,types}` | `lib/sales/{settings,shopify,shiprocket,sync,payout-run,reporting,secrets,http,reps}` | `/api/sales/*` |
 | Audit | `AuditEvent` | — | `lib/audit.ts` | — (written inline) |
 
 **The pure/server split is a rule, not an accident.** Files listed under "pure logic" contain no
@@ -163,6 +163,7 @@ src/
 │   │   ├── reports/page.tsx
 │   │   └── sales/                   The Sales CRM (layout.tsx guards can.viewSales)
 │   │       ├── page.tsx             affiliate dashboard
+│   │       ├── leads/page.tsx       Google Places business search + the saved lead list
 │   │       ├── reps/{page,[id]}
 │   │       ├── orders/page.tsx
 │   │       ├── payouts/{page,[id]}
@@ -184,7 +185,8 @@ src/
 │   ├── billing/     bill-form, customer-form, customer-picker, follow-up-editor,
 │   │                invoice-document, invoice-row, invoice-view, payment-form,
 │   │                payment-proof, payment-qr, print-button
-│   ├── sales/       sync-button, rep-form, order-list
+│   ├── sales/       sync-button, rep-form, order-list, import-orders, automation-panel,
+│   │                leads-screen, lead-search, lead-list
 │   ├── doctors/     call-schedule-editor, doctor-call-time-card, doctor-details-form, doctor-picker
 │   ├── visits/      visit-form, visit-photos
 │   ├── plans/       plan-assignment, delete-plan-button
@@ -202,7 +204,7 @@ src/
 │   ├── hr/          leave, attendance, payroll, payroll-run, records
 │   ├── inventory/   movements, ledger
 │   ├── samples/     movements, ledger
-│   ├── sales/       constants, coupons, commission, delivery, payouts, types  (pure)
+│   ├── sales/       constants, coupons, commission, delivery, payouts, leads, types (pure)
 │   │                secrets, http, shopify, shiprocket, settings, sync,
 │   │                payout-run, reporting, reps                                (server)
 │   └── workspace.ts Which CRM a path belongs to
@@ -709,6 +711,28 @@ bankAccountLastFour, panNumber}`, `orders[{order, name, placedAt, deliveredAt, b
 **Unique index `{run, rep}`.** The orders are copied on rather than joined at read time (§4.5): a rep
 asking in November what August's ₹1,800 was made of is owed the four orders exactly as they stood.
 
+**`SalesLead`** — a business somebody found and decided was worth approaching, before it is anybody's
+customer or affiliate. `name` (req, indexed), **`type`** (req, indexed — free text, the label the
+search filed it under), `status` enum `LEAD_STATUSES` (New / Contacted / Interested / Not interested,
+indexed), `phone`, `website`, `address`, `area`, `city` (indexed), `googlePlaceId` (**unique,
+sparse**), `googleMapsUrl`, `rating`, `reviewCount`, `latitude`, `longitude`, `searchQuery`,
+`searchLocation`, `source` enum `LEAD_SOURCES` (Google / Manual), `notes`, `createdBy`, `updatedBy`.
+Indexes: `{type, name}`, `{status, createdAt:-1}`.
+
+`type` is **required and free text**, not an enum. It is the only thing that makes a saved lead
+findable once the search that produced it is forgotten, and an enum would mean a deployment every
+time somebody sweeps a trade nobody thought of. `LEAD_TYPE_SUGGESTIONS` populates a `<datalist>`;
+nothing enforces it.
+
+Coordinates are **plain numbers, not a GeoJSON point** — nothing routes a lead, so the 2dsphere index
+and the half-a-point save failure that comes with it (§6.2) would be a trap kept for no gain. For the
+same reason a place with no coordinates is still saved, where `toDiscovered` drops one.
+
+The place id is what makes a second sweep of an area an update rather than a duplicate. A re-sweep
+overwrites what Google knows (name, phone, rating) and **never** what a person knows: `status`,
+`notes` and a corrected `type` are `$setOnInsert` only. A lead is deleted outright rather than
+archived (§4.10) because nothing anywhere references one.
+
 **`SalesSettings`** (`key: "sales"`, singleton) — `shopifyDomain`, `shopifyAccessToken`
 (**`select: false`**, encrypted), `shopifyApiVersion`, `shopifyConnectedAt`, `lastOrderSyncAt/Error`,
 `shiprocketEmail`, `shiprocketPassword` + `shiprocketToken` (**`select: false`**, encrypted),
@@ -915,6 +939,11 @@ warehouse are counted under the same name.
 | Route | Method | Guard | Notes |
 |---|---|---|---|
 | `/api/sales/overview` | GET | `viewSales` | `?from=&to=` (default last 30 days). Totals, delivery rate, earnings by commission status, top five reps, next payout date, proposed period, connection state and the last sync error |
+| `/api/sales/leads/search` | POST | `manageSales` | `{query, location, type, resultLimit}`. One Google Places text search, biased to the geocoded location. **Writes nothing** — searching is billed and saving is a second, deliberate step. Repeats inside 10 minutes are answered from an in-process cache. `manageSales` rather than `viewSales` because this spends quota |
+| `/api/sales/leads` | GET | `viewSales` | paginated; filters `q` (name/phone/address/area/city), `type`, `city`, `status`. `counts` are taken **before** the status filter, so the status labels show real numbers; `types` is every trade ever saved |
+| | POST | `manageSales` | `{leads[], searchQuery?, searchLocation?}`. Upserts on `googlePlaceId`, returning `{created, updated}`. Audits `sales.leads.saved` |
+| `/api/sales/leads/[id]` | PATCH | `manageSales` | `{status?, type?, phone?, notes?}`. Audits `sales.lead.updated` |
+| | DELETE | `manageSales` | removes it outright. Audits `sales.lead.deleted` |
 | `/api/sales/reps` | GET | `viewSales` | `{reps, summaries}`; `?active=1` |
 | | POST | `manageSales` | `{name, code, phone?, email?, coupons?, payMethod, upiId?, bank…, panNumber?, joinedAt?, notes?}`. Coupons omitted are built from the active rules (`couponsFor`), so a rep gets one code per rule. Refuses a code already held by anybody, and any coupon that does not split back into a name and digits. Audits `sales.rep.created` |
 | `/api/sales/reps/[id]` | GET | `viewSales` | rep + summary + last 200 orders |
@@ -1068,6 +1097,26 @@ and merges by Place ID; `estimateGoogleRequests()` gives the ceiling before spen
 `toBulkPayload()` is shared by both save paths (office discovery and a rep adding one doctor) so the
 mapping cannot drift. Excel round-trip: `EXCEL_COLUMNS`, `toExcelRow`, `fromExcelRow`.
 
+### 8.7a Lead prospecting — `lib/sales/leads.ts` (pure, tested)
+
+`LEAD_STATUSES`, `LEAD_SOURCES`, `LEAD_TYPE_SUGGESTIONS`, `MAX_LEAD_RESULTS 60`, `leadSearchSchema`,
+`leadSaveSchema`, `leadUpdateSchema`, `toLead(place, type)`, `toLeadFields(row)`, `leadTone(status)`.
+
+Reuses `lib/doctors/places.ts::{geocode, searchText}` rather than reimplementing them — the Places
+call is the same call, only the mapping differs. **Sixty is Google's ceiling, not this code's**: text
+search stops after three pages of twenty and there is no fourth page to ask for, so the screen says
+so rather than promising a figure it cannot reach. `leadSearchPages()` asks for only the pages a
+limit needs, because each one is billed.
+
+`toLeadFields` exists for exactly two renames — `placeId` → `googlePlaceId`, `mapsUrl` →
+`googleMapsUrl` — which are the two a spread would drop in silence, leaving a lead with no Maps link
+and nothing to dedupe on.
+
+There is **no radius and no sub-centre sweep** here, unlike doctor discovery. A route has to be
+drivable, so that search sweeps a ring of centres and measures distance; a list of numbers to ring
+does not, so the location only biases the query. Covering a city means searching its areas one at a
+time under the same type.
+
 ### 8.8 Affiliate commission — `lib/sales/*` (pure parts tested)
 
 **Everything is in whole rupees** (`rupees()` = `Math.round`): a payout advice reading ₹449.70
@@ -1206,7 +1255,7 @@ samples, history, leave, payslips and profile behind **More**.
 | Visits | `VisitForm`, `VisitPhotos` |
 | Plans | `PlanAssignment`, `DeletePlanButton` |
 | HR | `PayslipDocument`, `SalaryCard` |
-| Sales | `SyncButton` (reports what a sync did, not just that it ran), `RepForm` (previews the coupon codes it will create), `OrderList` (+ the delivery override) |
+| Sales | `SyncButton` (reports what a sync did, not just that it ran), `RepForm` (previews the coupon codes it will create), `OrderList` (+ the delivery override), `ImportOrders`, `AutomationPanel`, `LeadsScreen` (Search / Saved tabs), `LeadSearch` (results arrive ticked; saving is the second step), `LeadList` (status saves from the row, everything else from a dialog) |
 | PWA | `ServiceWorker`, `InstallPrompt`, `ConnectionStatus` |
 
 ### 9.5 Print documents
@@ -1381,6 +1430,7 @@ the server knows more about than the request does belongs there too, not in `fie
 | Warehouse stock | `lib/inventory/{movements,ledger}.ts`, `app/api/inventory/**`, `app/admin/inventory/page.tsx` |
 | Product catalogue | `models/Catalog.ts`, `app/api/products/**`, `app/admin/products/page.tsx` |
 | Google discovery | `lib/doctors/{discovery,places}.ts`, `app/api/google/**`, `app/admin/discover/page.tsx` |
+| Lead prospecting (Sales CRM) | `lib/sales/leads.ts` (+ `leads.test.ts`), `app/api/sales/leads/**`, `components/sales/{leads-screen,lead-search,lead-list}.tsx` |
 | Excel import/export | `lib/doctors/discovery.ts`, `app/api/doctors/{export,bulk}/route.ts` |
 | Commission arithmetic | `lib/sales/commission.ts` (+ `commission.test.ts`) |
 | Coupon → rep attribution | `lib/sales/coupons.ts`, `lib/sales/sync.ts::couponIndex` |
@@ -1427,6 +1477,7 @@ Co-located `*.test.ts` next to the module they cover; `npm test` runs vitest onc
 | `lib/sales/secrets.test.ts` | credential round-trip, and that the stored form is parsed from the **end** — the `enc.v1` prefix carries a dot, so a value has six parts and not five |
 | `lib/sales/shopify.test.ts` | shop-address normalisation (admin URL, bare handle, storefront domain), and the discount-allocation mapping that decides whose commission an order is |
 | `lib/sales/oauth.test.ts` | the shop-domain guard against a forged `shop` parameter, the authorize URL, and HMAC verification against a tampered or wrongly-signed callback |
+| `lib/sales/leads.test.ts` | Places → lead mapping (including the place with no coordinates, which is kept), the two renames in `toLeadFields`, the search schema's insistence on a type, and that no fourth Google page is ever asked for |
 | `components/ui/modal.test.tsx` | the one rendered-component test |
 
 **New arithmetic belongs in a pure module with a test.** Database code is exercised through the

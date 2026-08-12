@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BadgePercent, BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, HeartHandshake, LayoutDashboard, LogOut, Menu, Package, Receipt, Repeat, Search, Settings, ShoppingBag, Stethoscope, Users, Wallet, Warehouse, X } from "lucide-react";
+import { BadgePercent, BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, HeartHandshake, LayoutDashboard, LogOut, Menu, Package, Receipt, Repeat, Search, Settings, ShoppingBag, Stethoscope, Tag, Users, Wallet, Warehouse, X } from "lucide-react";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { Brand, BrandMark } from "@/components/ui/brand";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -41,7 +41,9 @@ const NAV = [
   { href: "/admin/hr/payroll", label: "Payroll", icon: Wallet, roles: ["ADMIN", "HR"], group: "People", workspace: "doctor" },
 
   { href: "/admin/sales", label: "Overview", icon: LayoutDashboard, roles: ["ADMIN", "HR"], group: "", workspace: "sales" },
+  { href: "/admin/sales/leads", label: "Leads", icon: Search, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
   { href: "/admin/sales/reps", label: "Sales team", icon: Users, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
+  { href: "/admin/sales/coupons", label: "Coupons", icon: Tag, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
   { href: "/admin/sales/orders", label: "Orders", icon: ShoppingBag, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
   { href: "/admin/sales/payouts", label: "Payouts", icon: BadgePercent, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
   { href: "/admin/sales/settings", label: "Settings", icon: Settings, roles: ["ADMIN"], group: "Affiliate", workspace: "sales" }

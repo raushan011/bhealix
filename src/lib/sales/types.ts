@@ -1,5 +1,6 @@
 import type { CommissionRule } from "./commission";
 import type { CommissionStatus, DeliveryState, OrderSource, PayoutMode, PayoutStatus } from "./constants";
+import type { LeadSource, LeadStatus } from "./leads";
 
 /**
  * The shapes the browser reads back.
@@ -29,6 +30,30 @@ export type SalesRepRecord = {
   panNumber?: string;
   active: boolean;
   joinedAt?: string;
+  notes?: string;
+  createdAt?: string;
+};
+
+/** A business found by the lead search and kept, as the screens read it back. */
+export type SalesLeadRecord = {
+  _id: Id;
+  name: string;
+  type: string;
+  status: LeadStatus;
+  phone?: string;
+  website?: string;
+  address?: string;
+  area?: string;
+  city?: string;
+  googlePlaceId?: string;
+  googleMapsUrl?: string;
+  rating?: number;
+  reviewCount?: number;
+  latitude?: number;
+  longitude?: number;
+  searchQuery?: string;
+  searchLocation?: string;
+  source?: LeadSource;
   notes?: string;
   createdAt?: string;
 };
@@ -166,8 +191,6 @@ export type SalesSettingsRecord = {
   lastShipmentSyncError?: string;
 
   rules: CommissionRule[];
-  /** Codes known not to belong to any rep, so the sync stops naming them. */
-  ignoredCoupons: string[];
   holdDays: number;
   payoutWeekday: number;
   backfillDays: number;

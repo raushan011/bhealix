@@ -1,4 +1,5 @@
-import { SalesOrder, SalesRep, SalesSettings, SalesSyncRun } from "@/models/Sales";
+import { SalesCoupon, SalesOrder, SalesRep, SalesSettings, SalesSyncRun } from "@/models/Sales";
+import { noteCodesSeen, refreshFromShopify } from "./catalogue";
 import { toDateInput, todayIso } from "@/lib/time";
 import { recalculateCommission } from "./commission";
 import { attributeOrder, normaliseCode, parseCoupon } from "./coupons";
@@ -145,11 +146,26 @@ export async function syncOrders(options: { since?: Date } = {}): Promise<SyncRe
   const rules = rulesOf(settings);
   const holdDays = holdDaysOf(settings);
   const unknown = new Set<string>();
-  // Codes already known not to be anybody's — a promo, a campaign.
-  const ignored = new Set((settings.ignoredCoupons ?? []).map(normaliseCode));
+
+  /*
+   * Codes already marked as belonging to nobody — a launch promo, a campaign.
+   *
+   * Read from the catalogue rather than a list typed into settings, so that
+   * marking a code on the Coupons screen is what silences it. A code Shopify
+   * has since deactivated is silenced too: it cannot bring in another order, so
+   * naming it every pass is noise about something nobody can act on.
+   */
+  const ignored = new Set((await SalesCoupon.find({ $or: [{ ignored: true }, { status: { $in: ["EXPIRED", "SCHEDULED"] } }] })
+    .select("code").lean() as { code?: string }[])
+    .map(entry => normaliseCode(entry.code ?? "")));
 
   const ids = orders.map(order => String(order.id));
   const existing = new Map((await SalesOrder.find({ shopifyOrderId: { $in: ids } })).map(doc => [doc.shopifyOrderId, doc]));
+
+  // Every code on every order goes into the catalogue, attributed or not — an
+  // unattributed one is exactly the code nobody has claimed yet, which is the
+  // whole reason the Coupons screen exists.
+  await noteCodesSeen(orders.flatMap(codesOn));
 
   for (const raw of orders) {
     const codes = codesOn(raw);
@@ -170,9 +186,23 @@ export async function syncOrders(options: { since?: Date } = {}): Promise<SyncRe
     report.commissionsRecalculated++;
   }
 
+  /*
+   * The shop's own discount list, so a coupon created this morning appears on
+   * the Coupons screen before anybody has used it.
+   *
+   * Needs `read_discounts`, which an older connection will not have — so a
+   * failure is a note, not an error. Everything above it has already been
+   * written and is not lost because the catalogue could not be refreshed.
+   */
+  try {
+    await refreshFromShopify();
+  } catch (error) {
+    report.warnings.push(`Could not read the shop's discount list (${messageOf(error)}). Codes still appear once an order uses one; add the read_discounts scope to see them sooner.`);
+  }
+
   report.unknownCoupons = [...unknown];
   if (unknown.size) {
-    report.warnings.push(`${unknown.size} coupon code${unknown.size === 1 ? "" : "s"} on recent orders belong to no rep here: ${[...unknown].join(", ")}. Add the rep, or the orders will never be attributed.`);
+    report.warnings.push(`${unknown.size} coupon code${unknown.size === 1 ? "" : "s"} on recent orders belong to no rep here: ${[...unknown].join(", ")}. Assign ${unknown.size === 1 ? "it" : "them"} under Coupons, or the orders will never be attributed.`);
   }
 
   await SalesSettings.updateOne({ key: "sales" }, { $set: { lastOrderSyncAt: new Date() }, $unset: { lastOrderSyncError: "" } });
