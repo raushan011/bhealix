@@ -145,6 +145,8 @@ export async function syncOrders(options: { since?: Date } = {}): Promise<SyncRe
   const rules = rulesOf(settings);
   const holdDays = holdDaysOf(settings);
   const unknown = new Set<string>();
+  // Codes already known not to be anybody's — a promo, a campaign.
+  const ignored = new Set((settings.ignoredCoupons ?? []).map(normaliseCode));
 
   const ids = orders.map(order => String(order.id));
   const existing = new Map((await SalesOrder.find({ shopifyOrderId: { $in: ids } })).map(doc => [doc.shopifyOrderId, doc]));
@@ -158,7 +160,7 @@ export async function syncOrders(options: { since?: Date } = {}): Promise<SyncRe
       // A code shaped like a rep's — NAME then digits — that belongs to nobody
       // is nearly always a coupon created in Shopify and never added here. Worth
       // naming, because the money is already out of the door.
-      for (const code of codes) if (parseCoupon(code)) unknown.add(code);
+      for (const code of codes) if (parseCoupon(code) && !ignored.has(code)) unknown.add(code);
       continue;
     }
 

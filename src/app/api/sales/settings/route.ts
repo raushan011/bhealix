@@ -32,6 +32,7 @@ const schema = z.object({
   shiprocketEmail: z.email("Enter the Shiprocket API user's email").optional().or(z.literal("")),
   shiprocketPassword: z.string().trim().max(200).optional(),
   rules: z.array(ruleSchema).max(12).optional(),
+  ignoredCoupons: z.array(z.string().trim().max(40)).max(100).optional(),
   holdDays: z.number().int().min(0).max(90).optional(),
   payoutWeekday: z.number().int().min(0).max(6).optional(),
   backfillDays: z.number().int().min(1).max(730).optional()
@@ -78,6 +79,7 @@ export async function GET() {
       lastShipmentSyncError: settings.lastShipmentSyncError,
 
       rules: settings.rules ?? [],
+      ignoredCoupons: settings.ignoredCoupons ?? [],
       holdDays: settings.holdDays ?? 7,
       payoutWeekday: settings.payoutWeekday ?? 1,
       backfillDays: settings.backfillDays ?? 90,
@@ -105,6 +107,9 @@ export async function PUT(request: Request) {
     if (input.shopifyClientId !== undefined) set.shopifyClientId = input.shopifyClientId || undefined;
     if (input.shiprocketEmail !== undefined) set.shiprocketEmail = input.shiprocketEmail || undefined;
     if (input.rules !== undefined) set.rules = input.rules;
+    if (input.ignoredCoupons !== undefined) {
+      set.ignoredCoupons = [...new Set(input.ignoredCoupons.map(code => code.trim().toUpperCase()).filter(Boolean))];
+    }
     if (input.holdDays !== undefined) set.holdDays = input.holdDays;
     if (input.payoutWeekday !== undefined) set.payoutWeekday = input.payoutWeekday;
     if (input.backfillDays !== undefined) set.backfillDays = input.backfillDays;

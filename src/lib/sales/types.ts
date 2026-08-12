@@ -166,6 +166,8 @@ export type SalesSettingsRecord = {
   lastShipmentSyncError?: string;
 
   rules: CommissionRule[];
+  /** Codes known not to belong to any rep, so the sync stops naming them. */
+  ignoredCoupons: string[];
   holdDays: number;
   payoutWeekday: number;
   backfillDays: number;

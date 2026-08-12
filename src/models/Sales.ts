@@ -399,6 +399,14 @@ const SalesSettingsSchema = new Schema({
   lastShipmentSyncError: String,
 
   rules: { type: [RuleSchema], default: () => DEFAULT_RULES },
+  /**
+   * Codes that look like a rep's but are not — a launch promo, a campaign.
+   *
+   * Without this the sync names them after every pass, and a warning that is
+   * always there is one nobody reads. Silencing the known ones is what keeps
+   * the warning worth acting on when a *real* rep code turns up unclaimed.
+   */
+  ignoredCoupons: { type: [String], default: [] },
   /** Days a delivered order is held before its commission may be paid. */
   holdDays: { type: Number, min: 0, max: 90, default: DEFAULT_HOLD_DAYS },
   /** The day of the week payouts are ordinarily made, for the dashboard to propose. */

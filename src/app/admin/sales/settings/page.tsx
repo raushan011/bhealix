@@ -43,6 +43,7 @@ export default function SalesSettingsPage() {
   const [shiprocketEmail, setShiprocketEmail] = useState("");
   const [shiprocketPassword, setShiprocketPassword] = useState("");
   const [rules, setRules] = useState<CommissionRule[]>([]);
+  const [ignoredCoupons, setIgnoredCoupons] = useState<string[]>([]);
   const [holdDays, setHoldDays] = useState(7);
   const [payoutWeekday, setPayoutWeekday] = useState(1);
   const [backfillDays, setBackfillDays] = useState(90);
@@ -62,6 +63,7 @@ export default function SalesSettingsPage() {
       setShopifyClientId(data.shopifyClientId ?? "");
       setShiprocketEmail(data.shiprocketEmail ?? "");
       setRules(data.rules ?? []);
+      setIgnoredCoupons(data.ignoredCoupons ?? []);
       setHoldDays(data.holdDays ?? 7);
       setPayoutWeekday(data.payoutWeekday ?? 1);
       setBackfillDays(data.backfillDays ?? 90);
@@ -121,7 +123,8 @@ export default function SalesSettingsPage() {
           shopifyAccessToken: shopifyAccessToken || undefined,
           shiprocketEmail,
           shiprocketPassword: shiprocketPassword || undefined,
-          rules, holdDays, payoutWeekday, backfillDays
+          rules, holdDays, payoutWeekday, backfillDays,
+          ignoredCoupons: ignoredCoupons.map(code => code.trim()).filter(Boolean)
         })
       });
       const json = await response.json() as { error?: string; data?: { recalculated: number } };
@@ -373,6 +376,21 @@ export default function SalesSettingsPage() {
       <button
         onClick={() => setRules(current => [...current, { suffix: "", label: "", rate: 10, base: "Discounted lines", products: [], active: true }])}
         className="text-sm font-medium text-[var(--brand)] hover:underline">Add a rule</button>
+
+      {/*
+        * A code shaped like a rep's that is nobody's — a launch promo, a
+        * campaign. Without somewhere to put these, the sync names them after
+        * every pass and the warning becomes wallpaper; the whole value of that
+        * warning is that it fires when a *real* rep code turns up unclaimed.
+        */}
+      <div className="border-t border-[var(--line)] pt-4">
+        <Field label="Codes that are not reps"
+          hint="One per line. A promo like SOFTLAUNCH30 looks exactly like a rep's code, so the sync flags it until you say otherwise.">
+          <textarea className="textarea" rows={3} value={ignoredCoupons.join("\n")}
+            placeholder="SOFTLAUNCH30&#10;SOFTLAUNCH20"
+            onChange={event => setIgnoredCoupons(event.target.value.split("\n").map(code => code.toUpperCase()))} />
+        </Field>
+      </div>
     </Card>
 
     <Card className="space-y-4 p-5">

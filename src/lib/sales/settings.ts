@@ -33,6 +33,7 @@ type SettingsDoc = {
   lastShipmentSyncAt?: Date;
   lastShipmentSyncError?: string;
   rules?: CommissionRule[];
+  ignoredCoupons?: string[];
   holdDays?: number;
   payoutWeekday?: number;
   backfillDays?: number;
