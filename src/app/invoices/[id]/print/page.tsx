@@ -8,6 +8,7 @@ import { can, usesFieldPanel, homeFor } from "@/constants/access";
 import { OBJECT_ID } from "@/lib/api";
 import { loadSettings } from "@/lib/billing/invoices";
 import { InvoiceDocument } from "@/components/billing/invoice-document";
+import { DownloadInvoice } from "@/components/billing/download-invoice";
 import { PrintButton } from "@/components/billing/print-button";
 import type { InvoiceRecord } from "@/lib/billing/types";
 
@@ -53,6 +54,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
           className="inline-flex min-h-[44px] items-center rounded-[10px] border border-[var(--line-2)] bg-[var(--surface)] px-4 text-sm font-semibold">
           Home
         </Link>
+        <DownloadInvoice invoiceId={id} invoiceNo={record.invoiceNo} />
         <PrintButton />
       </div>
     </div>
@@ -60,7 +62,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
     <InvoiceDocument invoice={record} settings={settings} />
 
     <p className="no-print mx-auto mt-4 max-w-[210mm] px-4 text-center text-xs text-[var(--muted)]">
-      Choose “Save as PDF” as the printer to download this bill.
+      Download saves this bill as a PDF file. Print sends it to paper.
     </p>
   </div>;
 }

@@ -4,11 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  AlertTriangle, ArrowLeft, Ban, CalendarClock, CalendarPlus, Check, Download, Pencil, Phone, Receipt,
+  AlertTriangle, ArrowLeft, Ban, CalendarClock, CalendarPlus, Check, Pencil, Phone, Printer, Receipt,
   Trash2, Undo2, User
 } from "lucide-react";
 import { Badge, Button, Card, Field, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
+import { DownloadInvoice } from "@/components/billing/download-invoice";
 import { PaymentForm } from "@/components/billing/payment-form";
 import { PaymentProof } from "@/components/billing/payment-proof";
 import { invoiceLabel, invoiceTone } from "@/components/billing/invoice-row";
@@ -133,10 +134,13 @@ export function InvoiceView({ invoiceId, backHref }: { invoiceId: string; backHr
     <PageTitle title={invoice.invoiceNo}
       subtitle={`${invoice.taxed ? "Tax invoice" : "Bill of supply"} · ${formatDate(invoice.invoiceDate)}`}
       actions={<>
-        {/* Opened in its own tab so the print dialog does not take the app with it. */}
+        <DownloadInvoice invoiceId={invoiceId} invoiceNo={invoice.invoiceNo}
+          onError={text => setNotice({ tone: "error", text })} />
+        {/* Paper is its own thing, and no longer what Download means. Opened in
+            its own tab so the print dialog does not take the app with it. */}
         <a href={`/invoices/${invoiceId}/print?auto=1`} target="_blank" rel="noopener noreferrer"
           className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] bg-[var(--surface)] px-4 text-sm font-semibold">
-          <Download size={16} />Download
+          <Printer size={16} />Print
         </a>
         {/* Shown whenever the bill still stands, even when a receipt currently
             blocks it: hiding the button taught nobody why it was missing, and
