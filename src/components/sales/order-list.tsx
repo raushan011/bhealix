@@ -35,6 +35,13 @@ export function OrderList({ orders, mayOverride, onChanged, showRep = true }: {
     <Card className="divide-y divide-[var(--line)]">
       {orders.map(order => {
         const rep = typeof order.rep === "object" && order.rep ? order.rep : null;
+        /*
+         * A partner whose record was deleted. The name was copied onto the
+         * order on the way out precisely so this row does not read as revenue
+         * that nobody brought in — but it is labelled, because a name shown
+         * plainly would imply the partner is still on the books.
+         */
+        const formerPartner = !rep && order.repSnapshot?.name ? order.repSnapshot.name : null;
         return <div key={order._id} className="flex flex-wrap items-start gap-4 px-5 py-4">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -56,6 +63,7 @@ export function OrderList({ orders, mayOverride, onChanged, showRep = true }: {
               {formatDate(order.placedAt)}
               {order.couponCode ? ` · ${order.couponCode}` : ""}
               {showRep && rep ? ` · ${rep.name}` : ""}
+              {showRep && formerPartner ? ` · ${formerPartner} (deleted)` : ""}
               {order.customer?.city ? ` · ${order.customer.city}` : ""}
               {order.paymentMethod ? ` · ${order.paymentMethod}` : ""}
             </p>

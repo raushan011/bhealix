@@ -330,6 +330,59 @@ payroll.
 **Partners → Waiting for a decision** is where you approve or turn one down. Turning one down asks
 for a reason, and the reason is shown to them.
 
+### Seeing everything about a partner
+
+**Partners → click a name.** The record is shown in full and unabbreviated: name, code, email,
+phone, how they want to be paid, their UPI ID or their complete bank account and IFSC, PAN, when
+they applied, when they were approved, whether they signed themselves up, and when they last signed
+in. Their coupon codes are listed with whether each one actually exists in Shopify, and every order
+and rupee follows underneath.
+
+The bank account is shown in full here, unlike on a payout advice where only the last four digits
+appear. Different readers: an advice is a document that gets forwarded and printed, and this screen
+belongs to the person who has to check the number before releasing money to it.
+
+### Their password, and why you cannot see it
+
+**You cannot, and neither can anybody else — including whoever holds the database.** What is stored
+is a *bcrypt hash*: a one-way transformation with no plaintext behind it to read back. That is the
+entire reason a leaked copy of this database is not a leaked set of accounts, and it is the same
+choice the staff side has always made. It also matters for the partner personally — people reuse
+passwords, and the one on this screen would quite possibly also open their email and their bank.
+
+So the answer to "they are locked out" is to **give them a new one**:
+
+**Partners → the partner → Portal login → Set a new password.** Leave the box empty and a memorable
+one is generated — four short words, which survive a bad phone line and a phone keyboard where
+`xK7#pQ2!` produces a second call. It is shown **once**, with a copy button. Read it to them, and ask
+them to change it from their own profile afterwards.
+
+> **This is also how a partner gets a login at all.** Everybody entered by hand before the portal
+> existed has no password, and until now no way to be given one — their sign-in attempts were
+> refused as though the password were wrong. The button reads *Create their login* for those people.
+
+Every reset leaves a line in the audit trail naming who did it. The password itself is never written
+to the trail, for the reason it is not shown anywhere else either.
+
+### Deleting a partner
+
+**Partners → the partner → Delete permanently**, at the bottom of the screen. It asks you to type
+their code — RAUSHAN — because a checkbox gets clicked without being read, and the server checks it
+too.
+
+| | |
+|---|---|
+| **What goes** | the record, their login, and their coupon codes |
+| **What stays** | their orders, which keep their name and coupon code so the revenue still reads correctly, and every payout advice already issued, which already carries their details |
+
+Nothing about the money changes. What was earned was earned, and an advice for a payment that really
+happened is evidence of it — deleting the person does not unmake either. Orders belonging to a
+deleted partner show their name with *(deleted)* beside it rather than going blank.
+
+> **Their codes are not switched off in Shopify by a delete.** Suspend them first if you want the
+> discounts to stop working at the checkout — suspension is what talks to the shop, and once the
+> record is gone so is the id it needs. The confirmation box says so if any code is still live.
+
 ### Suspending somebody
 
 **Partners → the partner → Suspend.** They can no longer sign in, their codes stop attributing new
@@ -360,6 +413,9 @@ Two ways to clear one, both on that row:
 | See the Sales CRM, orders, earnings | ✓ | ✓ | own only |
 | Add partners, issue coupons, correct a delivery | ✓ | | |
 | Approve, turn down or suspend a partner | ✓ | | |
+| See a partner's full record and bank details | ✓ | ✓ | own only |
+| Set a partner's password / create their login | ✓ | | own only |
+| Delete a partner permanently | ✓ | | |
 | Create their own coupon code | ✓ | | ✓ once approved |
 | Hold the Shopify/Shiprocket credentials and rates | ✓ | | |
 | Prepare a payout run | ✓ | ✓ | |

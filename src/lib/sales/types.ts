@@ -101,6 +101,8 @@ export type SalesOrderRecord = {
   customer?: { name?: string; email?: string; phone?: string; city?: string; state?: string; pinCode?: string };
   couponCode?: string;
   rep?: { _id: Id; name: string; code: string } | Id | null;
+  /** Who the partner was, written on only when their record was deleted. */
+  repSnapshot?: { name?: string; code?: string; deletedAt?: string };
   ruleSuffix?: string;
   discountCodes: string[];
   items: SalesOrderItem[];

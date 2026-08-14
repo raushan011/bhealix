@@ -202,9 +202,28 @@ const SalesOrderSchema = new Schema({
     pinCode: String
   },
 
-  /** The coupon that attributed it, and the rep behind that coupon. */
+  /** The coupon that attributed it, and the partner behind that coupon. */
   couponCode: { type: String, uppercase: true, index: true },
   rep: { type: Schema.Types.ObjectId, ref: "SalesRep", index: true },
+  /**
+   * Who that partner was, written on at the moment their record is deleted.
+   *
+   * Empty for every live order, because `rep` answers the question better — a
+   * renamed partner should follow the reference rather than leave a stale copy
+   * behind. It is filled in only on the way out.
+   *
+   * A deleted partner would otherwise leave this order pointing at nothing, and
+   * a year of revenue would read as having been brought in by nobody. The payout
+   * advices next door already solve this for money that has been paid, by
+   * copying the partner onto the line when the run is generated (§4.5); an
+   * order needs the same protection for the same reason.
+   */
+  repSnapshot: {
+    name: String,
+    code: String,
+    /** So the row can say the record is gone rather than implying it is still there. */
+    deletedAt: Date
+  },
   /** Which rule applied, by suffix. Stored so a renamed rule cannot restate an old order. */
   ruleSuffix: String,
   /** Every code on the order, including offers that belong to nobody. */

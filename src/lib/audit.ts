@@ -68,6 +68,14 @@ export const AUDIT_ACTIONS = {
   "sales.rep.reinstated": "Reinstated an affiliate",
   "sales.rep.profile.updated": "An affiliate updated their own details",
   "sales.rep.password.changed": "An affiliate changed their own password",
+  /**
+   * Somebody at the company setting an affiliate's password for them, which is
+   * the only answer to "what is their password" that a hashed credential
+   * allows. It leaves a line because it is a takeover of an account that can be
+   * paid money — the new password is read down a telephone and the trail is the
+   * only record that the change was deliberate.
+   */
+  "sales.rep.password.reset": "Reset an affiliate's password",
   "sales.coupon.generated": "An affiliate created their own coupon code",
   "sales.coupon.provisioned": "Created a coupon's discount in Shopify",
   "sales.coupon.setup.failed": "Could not create a coupon's discount in Shopify",
