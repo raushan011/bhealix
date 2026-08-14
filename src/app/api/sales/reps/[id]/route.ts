@@ -37,13 +37,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const auth = await apiSession(can.viewSales);
     if ("response" in auth) return auth.response;
     const { id } = await params;
-    if (!OBJECT_ID.test(id)) return badRequest("Not a valid rep id");
+    if (!OBJECT_ID.test(id)) return badRequest("Not a valid partner id");
     await connectDb();
 
     // `+passwordHash` only to answer "can this person sign in"; it is stripped
     // below and never reaches a browser.
     const rep = await SalesRep.findById(id).select("+passwordHash").lean() as { passwordHash?: string } | null;
-    if (!rep) return badRequest("No such rep", 404);
+    if (!rep) return badRequest("No such partner", 404);
 
     const [summary, orders] = await Promise.all([
       repSummary(id),
@@ -62,12 +62,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const auth = await apiSession(can.manageSales);
     if ("response" in auth) return auth.response;
     const { id } = await params;
-    if (!OBJECT_ID.test(id)) return badRequest("Not a valid rep id");
+    if (!OBJECT_ID.test(id)) return badRequest("Not a valid partner id");
     await connectDb();
 
     const input = patchSchema.parse(await request.json());
     const rep = await SalesRep.findById(id);
-    if (!rep) return badRequest("No such rep", 404);
+    if (!rep) return badRequest("No such partner", 404);
 
     if (input.coupons) {
       // A coupon may be called anything Shopify will accept — the rule it pays
@@ -125,11 +125,11 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     const auth = await apiSession(can.manageSales);
     if ("response" in auth) return auth.response;
     const { id } = await params;
-    if (!OBJECT_ID.test(id)) return badRequest("Not a valid rep id");
+    if (!OBJECT_ID.test(id)) return badRequest("Not a valid partner id");
     await connectDb();
 
     const rep = await SalesRep.findById(id);
-    if (!rep) return badRequest("No such rep", 404);
+    if (!rep) return badRequest("No such partner", 404);
 
     const orders = await SalesOrder.countDocuments({ rep: rep._id });
     if (orders) {

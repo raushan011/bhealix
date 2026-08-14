@@ -164,7 +164,16 @@ function AddMember({ onClose, onAdded }: { onClose: () => void; onAdded: () => v
       <Field label="Temporary password" hint="At least 8 characters. Ask them to change it after signing in.">
         <input name="password" type="text" minLength={8} required className="input" />
       </Field>
-      <Field label="Role">
+      {/*
+        * The one place somebody could file the wrong kind of person.
+        *
+        * "Field sales executive" is an employee of this company on the payroll.
+        * An outside seller with a coupon code is a **sales partner**, belongs in
+        * the Sales CRM, and must never be created here — an affiliate given an
+        * employee record would appear in attendance and, worse, in the
+        * collection payroll iterates over when it pays salaries.
+        */}
+      <Field label="Role" hint="Somebody selling on commission with their own coupon code is not an employee — add them under Sales CRM → Partners.">
         <select name="role" defaultValue="MR" className="select">
           {ROLES.map(role => <option key={role} value={role}>{ROLE_LABEL[role]}</option>)}
         </select>

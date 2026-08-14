@@ -105,7 +105,7 @@ export default function SalesPayoutPage({ params }: { params: Promise<{ id: stri
     </Card>
 
     <Card className="grid grid-cols-2 gap-5 p-5 lg:grid-cols-4">
-      <Stat label="Reps" value={run.totals?.reps ?? 0} />
+      <Stat label="Partners" value={run.totals?.reps ?? 0} />
       <Stat label="Orders" value={run.totals?.orders ?? 0} />
       <Stat label="Commission" value={formatRupees(run.totals?.gross ?? 0)} />
       <Stat label="Net payable" value={formatRupees(run.totals?.net ?? 0)} tone="text-[var(--ok-ink)]" />
@@ -200,7 +200,7 @@ function MarkPaid({ payoutNo, onClose, onDone }: {
           {PAYOUT_MODES.map(mode => <option key={mode} value={mode}>{mode}</option>)}
         </select>
       </Field>
-      <Field label="Reference" hint="UTR, transaction id — whatever a rep would quote back to you.">
+      <Field label="Reference" hint="UTR, transaction id — whatever a partner would quote back to you.">
         <input className="input" value={reference} onChange={event => setReference(event.target.value)} />
       </Field>
       <Notice tone="warning">Once a run is paid it can never be reopened. Corrections go on a later run.</Notice>

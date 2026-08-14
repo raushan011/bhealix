@@ -95,7 +95,7 @@ export default function SalesPayoutsPage() {
       </Card>
     ) : (
       <EmptyState icon={BadgePercent} title="No payouts yet"
-        description="A run gathers every commission that has matured — delivered, and past the hold period — and sets it out per rep."
+        description="A run gathers every commission that has matured — delivered, and past the hold period — and sets it out per partner."
         action={data.mayRun ? <Button onClick={() => setPreparing(true)}>Prepare the first payout</Button> : undefined} />
     )}
 
@@ -181,7 +181,7 @@ function PreparePayout({ proposed, onClose, onDone, onFailed }: {
         </Notice>
 
         <Card className="grid grid-cols-3 gap-4 p-4">
-          <Stat label="Reps" value={preview.totals.reps} />
+          <Stat label="Partners" value={preview.totals.reps} />
           <Stat label="Orders" value={preview.totals.orders} />
           <Stat label="Total" value={formatRupees(preview.totals.gross)} />
         </Card>

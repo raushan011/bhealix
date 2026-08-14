@@ -66,7 +66,7 @@ function OrdersScreen() {
   };
 
   return <div className="space-y-5">
-    <PageTitle title="Orders" subtitle="Every order an affiliate coupon brought in"
+    <PageTitle title="Orders" subtitle="Every order a partner's coupon brought in"
       actions={<>
         <Button tone="secondary" onClick={() => setImporting(true)}><Upload size={16} />Import file</Button>
         <SyncButton tone="secondary" onDone={report => {
@@ -101,7 +101,7 @@ function OrdersScreen() {
         <input className="input" value={filters.q} placeholder="Order, coupon or customer"
           onChange={event => set("q")(event.target.value)} />
       </Field>
-      <Field label="Rep">
+      <Field label="Partner">
         <select className="select" value={filters.rep} onChange={event => set("rep")(event.target.value)}>
           <option value="">Everybody</option>
           {reps.map(rep => <option key={String(rep._id)} value={String(rep._id)}>{rep.name} ({rep.code})</option>)}

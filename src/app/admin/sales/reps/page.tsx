@@ -10,7 +10,14 @@ import { repStatusOf, repStatusTone } from "@/lib/sales/partners";
 import { formatRupees, type RepSummary, type SalesRepRecord } from "@/lib/sales/types";
 
 /**
- * The sales team, with what each of them has actually brought in.
+ * The sales partners, with what each of them has actually brought in.
+ *
+ * **Partners, not employees.** Everybody on this screen is an outsider who
+ * sells with a coupon code and takes a share of what arrives. The company's own
+ * field sales executives are staff, live in the Doctor CRM's Employees screen,
+ * and have nothing to do with any of this — see `models/Sales.ts`. The two were
+ * both called "sales reps" until the vocabulary was separated, which is the only
+ * reason anybody ever had to be told they were different things.
  *
  * Sorted by what is payable rather than alphabetically: the list is read on
  * payout day, and the person owed the most is the one worth checking first.
@@ -63,8 +70,9 @@ export default function SalesRepsPage() {
   );
 
   return <div className="space-y-5">
-    <PageTitle title="Sales team" subtitle="Affiliates selling on commission, and what each has earned"
-      actions={<Button onClick={() => setAdding(true)}><UserPlus size={16} />Add rep</Button>} />
+    <PageTitle title="Sales partners"
+      subtitle="Outside sellers on commission, each with their own coupon code. Not employees — your field sales executives are under Employees in the Doctor CRM."
+      actions={<Button onClick={() => setAdding(true)}><UserPlus size={16} />Add partner</Button>} />
 
     {notice && <Notice tone="success">{notice}</Notice>}
 
@@ -75,8 +83,9 @@ export default function SalesRepsPage() {
           <span className="ml-2 rounded-full bg-[var(--warn-bg)] px-2 py-0.5 text-[11px] font-bold text-[var(--warn-ink)]">{waiting.length}</span>
         </h2>
         <p className="mb-2 text-xs text-[var(--muted)]">
-          These people applied through the partner sign-up. They can sign in and see they are waiting; they cannot create
-          a coupon code or earn anything until they are approved.
+          These people applied at <strong className="text-[var(--ink-2)]">/partner/register</strong>. They can sign in and
+          see they are waiting; they cannot create a coupon code or earn anything until they are approved. Approving
+          somebody here does not make them an employee — it lets them sell with a code and be paid a commission on it.
         </p>
         <Card className="divide-y divide-[var(--line)]">
           {waiting.map(rep => <PendingRep key={String(rep._id)} rep={rep}
@@ -87,7 +96,7 @@ export default function SalesRepsPage() {
 
     {reps.length > 0 && (
       <Card className="grid grid-cols-2 gap-5 p-5 lg:grid-cols-4">
-        <Stat label="Reps" value={reps.filter(rep => rep.active).length} />
+        <Stat label="Partners" value={reps.filter(rep => rep.active).length} />
         <Stat label="Orders brought in" value={totals.orders} />
         <Stat label="Revenue" value={formatRupees(totals.revenue)} />
         <Stat label="Payable now" value={formatRupees(totals.payable)} tone="text-[var(--ok-ink)]" />
@@ -129,9 +138,9 @@ export default function SalesRepsPage() {
         })}
       </Card>
     ) : (
-      <EmptyState icon={Users} title="No sales reps yet"
-        description="A rep is added here with a code — RAUSHAN — and gets a coupon per commission rule. Create the matching discount codes in Shopify so orders can be attributed."
-        action={<Button onClick={() => setAdding(true)}><UserPlus size={16} />Add the first rep</Button>} />
+      <EmptyState icon={Users} title="No sales partners yet"
+        description="Send people to /partner/register and approve them here, or add one yourself with a code — RAUSHAN — and the coupons they already hold in Shopify."
+        action={<Button onClick={() => setAdding(true)}><UserPlus size={16} />Add the first partner</Button>} />
     )}
 
     {adding && <RepForm onClose={() => setAdding(false)} onSaved={message => { setAdding(false); setNotice(message); load(); }} />}

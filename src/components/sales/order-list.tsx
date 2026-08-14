@@ -28,7 +28,7 @@ export function OrderList({ orders, mayOverride, onChanged, showRep = true }: {
 
   if (!orders.length) {
     return <EmptyState icon={PackageSearch} title="No orders here"
-      description="Orders appear once a coupon belonging to one of your reps is used and a sync has run." />;
+      description="Orders appear once a coupon belonging to one of your partners is used and a sync has run." />;
   }
 
   return <>

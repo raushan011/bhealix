@@ -1,11 +1,23 @@
 export const ROLES = ["ADMIN", "HR", "MR", "SALES"] as const;
 export type Role = (typeof ROLES)[number];
 
+/**
+ * What each role is called on screen.
+ *
+ * `SALES` is **field sales executive**, and the word "field" is doing real work
+ * there rather than decorating. This application runs two businesses that both
+ * use the word "sales": the doctor operation, where a sales executive is an
+ * employee on the payroll working a round of clinics, and the affiliate
+ * operation, where a *sales partner* is an outsider selling online with a
+ * coupon code. They share no record, no panel and no login — see
+ * `models/Sales.ts` — and calling both of them "sales rep" on screen was how
+ * that separation stopped being obvious to anybody reading it.
+ */
 export const ROLE_LABEL: Record<Role, string> = {
   ADMIN: "Administrator",
   HR: "HR",
   MR: "Medical representative",
-  SALES: "Sales executive"
+  SALES: "Field sales executive"
 };
 
 /** ADMIN and HR work at a desk; MR and SALES work from a phone in the field. */

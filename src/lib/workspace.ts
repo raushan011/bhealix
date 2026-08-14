@@ -25,9 +25,19 @@ export const WORKSPACE_LABEL: Record<Workspace, string> = {
   sales: "Sales CRM"
 };
 
+/**
+ * The one place the two businesses are described side by side, so it is also
+ * the place to be explicit about who works in each.
+ *
+ * A **field sales executive** is staff in the Doctor CRM — on the payroll,
+ * marked present, working a round of clinics. A **sales partner** is an outsider
+ * in the Sales CRM — no employment, paid a commission on what their coupon
+ * brought in. Both used to be called "sales", which made two entirely separate
+ * businesses look like one confused one.
+ */
 export const WORKSPACE_BLURB: Record<Workspace, string> = {
-  doctor: "Doctor discovery, call planning, field visits, billing and the people who do it.",
-  sales: "Affiliate coupons, Shopify orders, delivery status and weekly commission payouts."
+  doctor: "Doctor discovery, call planning, field visits, billing, and the employees who do it — including field sales executives.",
+  sales: "Outside partners selling with their own coupon codes: sign-ups, Shopify orders, delivery status and commission payouts."
 };
 
 export const WORKSPACE_HOME: Record<Workspace, string> = {

@@ -68,8 +68,8 @@ export default function SalesRepPage({ params }: { params: Promise<{ id: string 
     } finally { setDeciding(null); }
   }
 
-  if (loading) return <Spinner label="Loading the rep…" />;
-  if (!data) return <Notice tone="error">Could not load this rep.</Notice>;
+  if (loading) return <Spinner label="Loading the partner…" />;
+  if (!data) return <Notice tone="error">Could not load this partner.</Notice>;
 
   const { rep, summary, orders } = data;
   const earned = summary?.earned;
@@ -78,7 +78,7 @@ export default function SalesRepPage({ params }: { params: Promise<{ id: string 
 
   return <div className="space-y-5">
     <Link href="/admin/sales/reps" className="inline-flex items-center gap-1.5 text-sm text-[var(--muted)] hover:text-[var(--ink)]">
-      <ArrowLeft size={15} />Sales team
+      <ArrowLeft size={15} />Sales partners
     </Link>
 
     <PageTitle title={rep.name} subtitle={`${rep.code} · ${rep.phone || rep.email || "no contact details"}`}
@@ -110,12 +110,12 @@ export default function SalesRepPage({ params }: { params: Promise<{ id: string 
     )}
     {status === "Suspended" && <Notice tone="error">Suspended. They cannot sign in, and their codes have been switched off in the shop. Everything already earned is unaffected.</Notice>}
     {status === "Rejected" && <Notice tone="error">This application was turned down. They cannot sign in.</Notice>}
-    {rep.active === false && status === "Active" && <Notice tone="warning">This rep is inactive. Their codes no longer attribute new orders, and what they have already earned is unaffected.</Notice>}
+    {rep.active === false && status === "Active" && <Notice tone="warning">This partner is inactive. Their codes no longer attribute new orders, and what they have already earned is unaffected.</Notice>}
 
     {unset.length > 0 && (
       <Notice tone="error">
         {unset.map(coupon => coupon.code).join(", ")} {unset.length === 1 ? "does" : "do"} not exist in Shopify, so
-        {unset.length === 1 ? " it is" : " they are"} refused at the checkout — while this rep can see
+        {unset.length === 1 ? " it is" : " they are"} refused at the checkout — while this partner can see
         {unset.length === 1 ? " it" : " them"} in their portal. Fix {unset.length === 1 ? "it" : "them"} on the{" "}
         <Link href="/admin/sales/coupons" className="font-semibold underline">coupons screen</Link>.
       </Notice>

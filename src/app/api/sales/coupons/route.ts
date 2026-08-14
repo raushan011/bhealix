@@ -30,8 +30,8 @@ const createRep = z.object({
   action: z.literal("create-rep"),
   code: z.string().trim().min(2).max(40),
   suffix: z.string().trim().regex(/^\d{1,3}$/, "Choose which rule this code pays under"),
-  name: z.string().trim().min(2, "Enter the rep's name"),
-  repCode: z.string().trim().regex(REP_CODE_SHAPE, "A rep code is letters and digits with no spaces"),
+  name: z.string().trim().min(2, "Enter the partner's name"),
+  repCode: z.string().trim().regex(REP_CODE_SHAPE, "A partner code is letters and digits with no spaces"),
   phone: z.string().trim().max(20).optional(),
   payMethod: z.enum(PAYOUT_MODES).default("UPI"),
   upiId: z.string().trim().max(80).optional()
@@ -113,8 +113,8 @@ export async function POST(request: Request) {
 
     if (input.action === "create-rep") {
       const repCode = normaliseCode(input.repCode);
-      if (!isRepCode(repCode)) return badRequest("A rep code is letters and digits with no spaces, like RAUSHAN.");
-      if (await SalesRep.findOne({ code: repCode }).lean()) return badRequest(`A rep with the code ${repCode} already exists. Assign this coupon to them instead.`, 409);
+      if (!isRepCode(repCode)) return badRequest("A partner code is letters and digits with no spaces, like RAUSHAN.");
+      if (await SalesRep.findOne({ code: repCode }).lean()) return badRequest(`A partner with the code ${repCode} already exists. Assign this coupon to them instead.`, 409);
 
       const rep = await SalesRep.create({
         name: input.name,
@@ -136,7 +136,7 @@ export async function POST(request: Request) {
 
     if (input.action === "assign") {
       const rep = await SalesRep.findById(input.rep);
-      if (!rep) return badRequest("No such rep", 404);
+      if (!rep) return badRequest("No such partner", 404);
 
       rep.coupons = [...(rep.coupons ?? []), { code, suffix: input.suffix, active: true }];
       await rep.save();
@@ -154,10 +154,10 @@ export async function POST(request: Request) {
 
     if (input.action === "retry-setup" || input.action === "mark-live") {
       const rep = await SalesRep.findOne({ "coupons.code": code });
-      if (!rep) return badRequest("No rep holds that code.", 404);
+      if (!rep) return badRequest("No partner holds that code.", 404);
 
       const coupon = (rep.coupons ?? []).find((held: { code: string }) => held.code === code);
-      if (!coupon) return badRequest("No rep holds that code.", 404);
+      if (!coupon) return badRequest("No partner holds that code.", 404);
 
       if (input.action === "mark-live") {
         // Taking the administrator's word for it. There is no way to verify

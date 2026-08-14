@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ROLES, ROLE_LABEL, usesAdminPanel, usesFieldPanel } from "@/constants/access";
 import { parseCoupon } from "./coupons";
 import {
   couponSetupOf, generatedCode, generatedCodeProblem, mayHoldSession, mayTrade,
@@ -13,6 +14,37 @@ import {
  * direct money at themselves, and the second decides whether they can direct
  * somebody else's money at themselves.
  */
+
+/**
+ * The two populations, held apart.
+ *
+ * This application runs two businesses that both use the word "sales", and
+ * conflating them is the most expensive mistake available in it: a sales
+ * partner given a staff role would appear in the HR register and, worse, in the
+ * collection payroll iterates over when it pays salaries. These assertions are
+ * here so the separation fails a test rather than failing quietly in a payroll
+ * month.
+ */
+describe("sales partners are not sales employees", () => {
+  it("has no affiliate role, because an affiliate is not staff", () => {
+    // A `SalesRep` is its own collection with its own credentials and its own
+    // portal. If somebody ever adds "PARTNER" or "AFFILIATE" to ROLES, they are
+    // about to give an outsider an employee record — this is where they find out.
+    expect(ROLES).toEqual(["ADMIN", "HR", "MR", "SALES"]);
+  });
+
+  it("names the staff role so it cannot be read as an affiliate", () => {
+    // "Sales executive" was ambiguous against "sales partner"; "field" is what
+    // makes it unmistakably the employee walking a round of clinics.
+    expect(ROLE_LABEL.SALES).toBe("Field sales executive");
+    expect(ROLE_LABEL.SALES.toLowerCase()).not.toContain("partner");
+  });
+
+  it("keeps the staff sales role in the field panel and out of the desk", () => {
+    expect(usesFieldPanel("SALES")).toBe(true);
+    expect(usesAdminPanel("SALES")).toBe(false);
+  });
+});
 
 describe("repStatusOf", () => {
   it("reads a status when there is one", () => {

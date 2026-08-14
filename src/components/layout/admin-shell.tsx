@@ -42,7 +42,10 @@ const NAV = [
 
   { href: "/admin/sales", label: "Overview", icon: LayoutDashboard, roles: ["ADMIN", "HR"], group: "", workspace: "sales" },
   { href: "/admin/sales/leads", label: "Leads", icon: Search, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
-  { href: "/admin/sales/reps", label: "Sales team", icon: Users, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
+  // "Partners", not "Sales team". The Doctor CRM's Employees screen next door
+  // holds field sales executives, who are staff; this holds outside affiliates.
+  // Two links reading "sales …" in one application is how the two got confused.
+  { href: "/admin/sales/reps", label: "Partners", icon: Users, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
   { href: "/admin/sales/coupons", label: "Coupons", icon: Tag, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
   { href: "/admin/sales/orders", label: "Orders", icon: ShoppingBag, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
   { href: "/admin/sales/payouts", label: "Payouts", icon: BadgePercent, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },

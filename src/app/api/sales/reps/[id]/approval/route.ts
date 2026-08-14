@@ -42,12 +42,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const auth = await apiSession(can.manageSales);
     if ("response" in auth) return auth.response;
     const { id } = await params;
-    if (!OBJECT_ID.test(id)) return badRequest("Not a valid rep id");
+    if (!OBJECT_ID.test(id)) return badRequest("Not a valid partner id");
     await connectDb();
 
     const input = schema.parse(await request.json());
     const rep = await SalesRep.findById(id);
-    if (!rep) return badRequest("No such rep", 404);
+    if (!rep) return badRequest("No such partner", 404);
 
     const before = repStatusOf(rep);
 

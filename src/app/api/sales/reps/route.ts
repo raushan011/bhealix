@@ -17,8 +17,8 @@ const couponSchema = z.object({
 });
 
 const repSchema = z.object({
-  name: z.string().trim().min(2, "Enter the rep's name"),
-  code: z.string().trim().regex(REP_CODE_SHAPE, "A rep code is letters and digits with no spaces, like RAUSHAN"),
+  name: z.string().trim().min(2, "Enter the partner's name"),
+  code: z.string().trim().regex(REP_CODE_SHAPE, "A partner code is letters and digits with no spaces, like RAUSHAN"),
   phone: z.string().trim().max(20).optional(),
   email: z.email("Enter a valid email").optional().or(z.literal("")),
   /** Omitted, the coupons are built from the rules in force. */
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
 
     const input = repSchema.parse(await request.json());
     const code = normaliseCode(input.code);
-    if (!isRepCode(code)) return badRequest("A rep code is letters and digits with no spaces, like RAUSHAN.");
+    if (!isRepCode(code)) return badRequest("A partner code is letters and digits with no spaces, like RAUSHAN.");
 
     /*
      * Coupons are entered by hand, never invented.
@@ -95,7 +95,7 @@ export async function POST(request: Request) {
     const clash = await SalesRep.findOne({ $or: [{ code }, { "coupons.code": { $in: coupons.map(coupon => coupon.code) } }] })
       .select("code name coupons").lean() as { code?: string; name?: string } | null;
     if (clash) {
-      return badRequest(`${clash.name} already holds that code. Two reps sharing a coupon would make every order it brings in unattributable.`, 409);
+      return badRequest(`${clash.name} already holds that code. Two partners sharing a coupon would make every order it brings in unattributable.`, 409);
     }
 
     const rep = await SalesRep.create({

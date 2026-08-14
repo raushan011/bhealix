@@ -97,7 +97,7 @@ export default function SalesCouponsPage() {
 
     <Card className="grid grid-cols-2 gap-5 p-5 lg:grid-cols-5">
       <Stat label="Codes known" value={data.coupons.length} />
-      <Stat label="Assigned to a rep" value={claimed.length} />
+      <Stat label="Assigned to a partner" value={claimed.length} />
       <Stat label="Live and unclaimed" value={unclaimed.length}
         tone={unclaimed.length ? "text-[var(--warn-ink)]" : undefined} />
       <Stat label="Not in Shopify" value={unset.length}
@@ -107,18 +107,18 @@ export default function SalesCouponsPage() {
 
     {unset.length > 0 && (
       <Notice tone="error">
-        {unset.length} code{unset.length === 1 ? "" : "s"} {unset.length === 1 ? "belongs" : "belong"} to a rep but
+        {unset.length} code{unset.length === 1 ? "" : "s"} {unset.length === 1 ? "belongs" : "belong"} to a partner but
         {unset.length === 1 ? " does" : " do"} not exist in Shopify, so {unset.length === 1 ? "it is" : "they are"} refused
-        at the checkout. The rep can see {unset.length === 1 ? "it" : "them"} in their portal and believes
+        at the checkout. The partner can see {unset.length === 1 ? "it" : "them"} in their portal and believes
         {unset.length === 1 ? " it works" : " they work"}. Fix {unset.length === 1 ? "it" : "them"} at the top of the list.
       </Notice>
     )}
 
     {unclaimed.length > 0 && (
       <Notice tone="warning">
-        {unclaimed.length} live code{unclaimed.length === 1 ? "" : "s"} belong{unclaimed.length === 1 ? "s" : ""} to no rep.
+        {unclaimed.length} live code{unclaimed.length === 1 ? "" : "s"} belong{unclaimed.length === 1 ? "s" : ""} to no partner.
         Any order using {unclaimed.length === 1 ? "it" : "them"} earns nobody anything — assign {unclaimed.length === 1 ? "it" : "them"} below,
-        or mark {unclaimed.length === 1 ? "it" : "them"} as not a rep&rsquo;s.
+        or mark {unclaimed.length === 1 ? "it" : "them"} as nobody&rsquo;s.
       </Notice>
     )}
 
@@ -132,7 +132,7 @@ export default function SalesCouponsPage() {
                 {entry.rep
                   ? <Badge tone="success">{entry.rep.name}</Badge>
                   : entry.ignored
-                    ? <Badge>Not a rep&rsquo;s</Badge>
+                    ? <Badge>Nobody&rsquo;s</Badge>
                     : entry.live
                       ? <Badge tone="warn">Unassigned</Badge>
                       : <Badge>Unassigned</Badge>}
@@ -140,7 +140,7 @@ export default function SalesCouponsPage() {
                 {entry.setup && entry.setup !== "Live" && (
                   <Badge tone={couponSetupTone(entry.setup)}>{entry.setup}</Badge>
                 )}
-                {entry.issuedBy === "Rep" && <Badge tone="info">Rep&rsquo;s own</Badge>}
+                {entry.issuedBy === "Rep" && <Badge tone="info">Partner&rsquo;s own</Badge>}
               </div>
 
               <p className="mt-0.5 text-xs text-[var(--muted)]">
@@ -193,7 +193,7 @@ export default function SalesCouponsPage() {
                   </button>
                   <button onClick={() => mark(entry.code, entry.ignored ? "unignore" : "ignore")}
                     className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted)] hover:underline">
-                    <EyeOff size={12} />{entry.ignored ? "Undo" : "Not a rep&rsquo;s"}
+                    <EyeOff size={12} />{entry.ignored ? "Undo" : "Nobody&rsquo;s"}
                   </button>
                 </div>
               )}
@@ -276,7 +276,7 @@ function ClaimCoupon({ entry, reps, rules, onClose, onDone }: {
     footer={<div className="flex gap-2">
       <Button tone="secondary" className="flex-1" onClick={onClose}>Cancel</Button>
       <Button className="flex-1" busy={busy} disabled={!valid} onClick={save}>
-        {mode === "existing" ? "Assign" : "Create rep and assign"}
+        {mode === "existing" ? "Assign" : "Create partner and assign"}
       </Button>
     </div>}>
 
@@ -297,13 +297,13 @@ function ClaimCoupon({ entry, reps, rules, onClose, onDone }: {
 
       <div className="flex gap-2">
         <Button tone={mode === "existing" ? "primary" : "secondary"} className="flex-1"
-          disabled={!reps.length} onClick={() => setMode("existing")}>Existing rep</Button>
+          disabled={!reps.length} onClick={() => setMode("existing")}>Existing partner</Button>
         <Button tone={mode === "new" ? "primary" : "secondary"} className="flex-1"
-          onClick={() => setMode("new")}>New rep</Button>
+          onClick={() => setMode("new")}>New partner</Button>
       </div>
 
       {mode === "existing" ? (
-        <Field label="Rep" hint={existing ? `${entry.code} looks like ${existing.name}'s — check before saving.` : undefined}>
+        <Field label="Partner" hint={existing ? `${entry.code} looks like ${existing.name}'s — check before saving.` : undefined}>
           <select className="select" value={rep} onChange={event => setRep(event.target.value)}>
             {reps.map(option => <option key={option._id} value={option._id}>{option.name} ({option.code})</option>)}
           </select>
@@ -313,7 +313,7 @@ function ClaimCoupon({ entry, reps, rules, onClose, onDone }: {
           <Field label="Name">
             <input className="input" value={name} autoFocus onChange={event => setName(event.target.value)} placeholder="Shree Shathya" />
           </Field>
-          <Field label="Rep code" hint="Their short code, not the coupon.">
+          <Field label="Partner code" hint="Their short code, not the coupon.">
             <input className="input" value={repCode} placeholder="SATHYA"
               onChange={event => setRepCode(event.target.value.toUpperCase())} />
           </Field>

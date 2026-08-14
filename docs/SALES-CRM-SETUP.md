@@ -37,9 +37,9 @@ Paste it into **Shop address**. (Pasting the whole URL is fine — it is reduced
    - `read_discounts`
    - `write_discounts`
 
-   > **`write_discounts` is what lets a rep create their own coupon code.** With it, a code a rep
+   > **`write_discounts` is what lets a partner create their own coupon code.** With it, a code a partner
    > mints in the partner portal is created in Shopify the same second and works at the checkout
-   > immediately. Without it the code is still reserved to that rep — orders carrying it are still
+   > immediately. Without it the code is still reserved to that partner — orders carrying it are still
    > attributed and still paid — but somebody has to create the discount in Shopify by hand before a
    > customer can use it. The CRM shows those codes as *Awaiting setup* on the Coupons screen rather
    > than pretending they work.
@@ -153,33 +153,33 @@ Each rule now carries a second figure, **customer gets**, beside the rate:
 
 | | What it means | Who it is for |
 |---|---|---|
-| **Rate** | 30% | the share of the sale paid to the **rep** |
+| **Rate** | 30% | the share of the sale paid to the **partner** |
 | **Customer gets** | ₹800 off, or 10% off | what the coupon takes off at the **checkout** |
 
 They are routinely different, and the CRM has never needed the second one until now — it read what
-Shopify charged and worked backwards. It needs it now because a rep minting their own code means the
+Shopify charged and worked backwards. It needs it now because a partner minting their own code means the
 CRM **creates** the discount rather than only reading it, and it cannot invent what the discount
 should be.
 
-> **Fill this in before reps start signing up.** A rule left at zero still pays commission exactly as
+> **Fill this in before partners start signing up.** A rule left at zero still pays commission exactly as
 > before, but codes created under it are reserved and marked *Awaiting setup* instead of being made
 > in Shopify. Nothing breaks; somebody just has to finish each one by hand.
 
-## 6. Add your reps
+## 6. Add your partners
 
 There are two ways in, and they end at the same record.
 
-**You add them: Sales team → Add rep.** Give the name and a code — `RAUSHAN`. Add how they are paid
+**You add them: Partners → Add partner.** Give the name and a code — `RAUSHAN`. Add how they are paid
 (UPI ID or bank details); this is copied onto their payout advice. Coupons are entered by hand here,
 which means they must already exist in Shopify — this route reads codes, it does not create them.
 
 **They add themselves: `/partner/register`.** Send them the link. They give their name, email, phone
 and the code they want at the front of their coupons, and the application lands in **Waiting for a
-decision** at the top of your Sales team screen. See *The partner portal*, below.
+decision** at the top of your Partners screen. See *The partner portal*, below.
 
 > **Codes must match Shopify exactly.** That is still true, and it is what the two new scopes are
-> for: a code a rep mints is created in Shopify by the CRM, so the two cannot drift. A code *you*
-> type in on the Add rep form is not — create it in Shopify as you do today, and import it into the
+> for: a code a partner mints is created in Shopify by the CRM, so the two cannot drift. A code *you*
+> type in on the Add partner form is not — create it in Shopify as you do today, and import it into the
 > Fastrr checkout as you do today.
 
 ## 7. Run the first sync
@@ -190,7 +190,7 @@ It reads Shopify back 90 days by default (Settings → *first sync reaches back*
 carrying one of your coupons, then asks Shiprocket about the parcels.
 
 **Read the report it gives you.** It says how many orders it saw, how many it attributed, and — the
-line that matters — any coupon code shaped like a rep's that belongs to nobody here. That is almost
+line that matters — any coupon code shaped like a partner's that belongs to nobody here. That is almost
 always a code created in Shopify and never added to the CRM, and it means those orders are earning
 nobody anything.
 
@@ -202,8 +202,8 @@ After that a nightly pass keeps it current (see *Scheduling*, below).
 
 Worth doing once, deliberately, before you trust the numbers:
 
-1. Take one recent order placed with a rep's code. Find it under **Orders**.
-2. Confirm the **coupon code** shown is the rep's, and the rep's name is beside it.
+1. Take one recent order placed with a partner's code. Find it under **Orders**.
+2. Confirm the **coupon code** shown is the partner's, and the partner's name is beside it.
 3. Confirm the **commission**: it prints as `30% of ₹1,499` so you can check the base, not just the
    total.
 4. If the row says *"Shopify reported no per-line discount for this coupon, so the whole order was
@@ -235,7 +235,7 @@ RTO, returned, cancelled, lost, or refunded in full at any point → **Void**, a
 
 Preparing and approving are deliberately different permissions — HR can prepare, only an
 administrator releases. Once a run is **paid it cannot be reopened**; a correction is a named
-negative adjustment on a later run, so the rep can see why their figure moved.
+negative adjustment on a later run, so the partner can see why their figure moved.
 
 Anything that matured but was missed by an earlier run is swept into the next one, so nothing gets
 stranded.
@@ -248,7 +248,7 @@ on the dashboard and nothing is deducted automatically — money already sent is
 agreement, and a background job editing an approved payout is not that. Add it as a negative
 adjustment on the next run.
 
-Shortening the hold pays reps sooner and makes this more likely. Lengthening it does the reverse.
+Shortening the hold pays partners sooner and makes this more likely. Lengthening it does the reverse.
 
 ---
 
@@ -297,17 +297,17 @@ who did it, and it beats whatever the courier's feed says.
 
 ## The partner portal
 
-Reps have their own application at **`/partner`**, on their own phone, behind their own sign-in.
+Partners have their own application at **`/partner`**, on their own phone, behind their own sign-in.
 Send them `/partner/register` and they do the rest.
 
-### What a rep can do
+### What a partner can do
 
 - **Apply** — name, email, phone, and the code they want at the front of their coupons. The form
   suggests one from their name and refuses anything that would not work as half a discount code.
 - **Create their own coupon codes.** They choose which of your published offers to take a code under
   and, optionally, add a word of their own: `PRIYA30`, or `PRIYAKIT30`. They cannot choose what the
   discount is — that is your rule — and they cannot mint a code that does not start with their own
-  rep code, so nobody can create `DIWALI30` and collect on your campaign.
+  partner code, so nobody can create `DIWALI30` and collect on your campaign.
 - **Follow every order their code brought in**, as a sequence rather than a status: placed → paid →
   dispatched (with the courier and waybill) → delivered → commission clears on a named date → paid.
   A parcel that came back closes the remaining steps off rather than leaving them looking pending.
@@ -315,7 +315,7 @@ Send them `/partner/register` and they do the rest.
   current run, already paid — instead of one friendly total that includes money on a parcel in
   transit.
 - **See what they have been paid**, with the orders behind each payment as they stood on the day.
-  Draft runs are never shown: a draft can still change, and a number that goes down after a rep has
+  Draft runs are never shown: a draft can still change, and a number that goes down after a partner has
   seen it costs more than the early sight was worth.
 - **Keep their own payment details** — UPI or bank, and their PAN — and change their password.
 
@@ -327,12 +327,12 @@ and no money can accrue. A coupon code is an instruction to pay a named person a
 order carrying it — if filling in a form produced one, the first bot to find the URL would be on the
 payroll.
 
-**Sales team → Waiting for a decision** is where you approve or turn one down. Turning one down asks
+**Partners → Waiting for a decision** is where you approve or turn one down. Turning one down asks
 for a reason, and the reason is shown to them.
 
 ### Suspending somebody
 
-**Sales team → the rep → Suspend.** They can no longer sign in, their codes stop attributing new
+**Partners → the partner → Suspend.** They can no longer sign in, their codes stop attributing new
 orders, and — the part nobody would think to do by hand — **their codes are switched off in
 Shopify**, so the discount stops working on the storefront instead of quietly taking money off
 orders that now credit nobody. Anything already earned is untouched, because it was earned.
@@ -343,7 +343,7 @@ in the shop yourself.
 ### Codes that are not in Shopify
 
 **Coupons** counts these separately as *Not in Shopify*, and sorts them to the top. It is the worst
-state a code can be in: the rep can see it in their portal and believes it works, while a customer
+state a code can be in: the partner can see it in their portal and believes it works, while a customer
 typing it at the checkout is refused.
 
 Two ways to clear one, both on that row:
@@ -355,11 +355,11 @@ Two ways to clear one, both on that row:
 
 ## Who can do what
 
-| | Administrator | HR | Rep (partner portal) |
+| | Administrator | HR | Partner (their own portal) |
 |---|:-:|:-:|:-:|
 | See the Sales CRM, orders, earnings | ✓ | ✓ | own only |
-| Add reps, issue coupons, correct a delivery | ✓ | | |
-| Approve, turn down or suspend a rep | ✓ | | |
+| Add partners, issue coupons, correct a delivery | ✓ | | |
+| Approve, turn down or suspend a partner | ✓ | | |
 | Create their own coupon code | ✓ | | ✓ once approved |
 | Hold the Shopify/Shiprocket credentials and rates | ✓ | | |
 | Prepare a payout run | ✓ | ✓ | |
@@ -369,10 +369,10 @@ Two ways to clear one, both on that row:
 Medical representatives and field sales staff cannot reach any of it — the affiliate operation is a
 different business from the field one, and `SALES` as a staff role has nothing to do with it.
 
-**A rep is not an employee, and the two never meet.** Affiliates are not in the staff register: they
+**A partner is not an employee, and the two never meet.** Affiliates are not in the staff register: they
 have no employee id, they never appear in the HR screens, and payroll cannot see them. Their sign-in
 is a separate cookie with its own audience, so a partner token is refused by every staff route and a
-staff token is refused by every partner route — a rep cannot reach `/admin` or `/employee` however
+staff token is refused by every partner route — a partner cannot reach `/admin` or `/employee` however
 the role checks downstream are written, because there is no role check to get wrong.
 
 Their standing is re-read from the database on **every** request rather than trusted from the token,
@@ -383,7 +383,7 @@ so a suspension takes effect on their next tap rather than whenever their sessio
 - How it all fits together: `docs/CODEBASE-MAP.md` §1, §6.15, §7.9, §8.8
 - The commission arithmetic, with worked examples: `src/lib/sales/commission.ts` and its test
 - Everything the sync does: `src/lib/sales/sync.ts`
-- Who may sign in, and what a rep may call a coupon: `src/lib/sales/partners.ts` and its test
+- Who may sign in, and what a partner may call a coupon: `src/lib/sales/partners.ts` and its test
 - An order told as a sequence: `src/lib/sales/tracking.ts` and its test
 - Creating a discount in Shopify: `src/lib/sales/provision.ts`
 - Why the affiliate session is a separate cookie: `src/lib/auth/partner.ts`

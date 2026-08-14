@@ -82,7 +82,7 @@ Built for phones first — reps use it standing in a clinic corridor — and equ
 
 ## Roles
 
-| | Admin | HR | MR | Sales |
+| | Admin | HR | MR | Field sales |
 |---|:---:|:---:|:---:|:---:|
 | Doctor directory and discovery | ✓ | | | |
 | Route planning and assignment | ✓ | | | |

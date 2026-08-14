@@ -34,7 +34,13 @@ const draftFrom = (rep: SalesRepRecord): Draft => ({
 });
 
 /**
- * Adding a rep, or correcting one.
+ * Adding a sales partner by hand, or correcting one.
+ *
+ * A **partner** is an outsider who sells with a coupon code — not one of the
+ * company's own field sales executives, who are employees and are added from
+ * the Doctor CRM's Employees screen. Nothing on this form creates a login: most
+ * partners now sign themselves up at `/partner/register` and are approved, and
+ * this is the older route for somebody the office is entering on their behalf.
  *
  * The code is the load-bearing field and the form says so: it shows, live, the
  * coupon codes that will be created from it. Somebody typing RAUSHAN needs to
@@ -88,10 +94,10 @@ export function RepForm({ rep, onClose, onSaved }: {
         })
       });
       const json = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(json.error ?? "Could not save this rep");
+      if (!response.ok) throw new Error(json.error ?? "Could not save this partner");
       onSaved(rep ? `${draft.name} has been updated.` : `${draft.name} has been added with ${coupons.length} coupon code${coupons.length === 1 ? "" : "s"}.`);
     } catch (problem) {
-      setError(problem instanceof Error ? problem.message : "Could not save this rep");
+      setError(problem instanceof Error ? problem.message : "Could not save this partner");
     } finally {
       setBusy(false);
     }
@@ -100,12 +106,12 @@ export function RepForm({ rep, onClose, onSaved }: {
   const valid = draft.name.trim().length >= 2 && (rep ? true : isRepCode(code));
 
   return <Modal
-    title={rep ? `Edit ${rep.name}` : "Add a sales rep"}
-    description={rep ? "The rep code and its coupons cannot be changed" : "Their coupon codes are built from the code you give them"}
+    title={rep ? `Edit ${rep.name}` : "Add a sales partner"}
+    description={rep ? "Their partner code and its coupons cannot be changed" : "An outside seller on commission — not an employee"}
     onClose={onClose}
     footer={<div className="flex gap-2">
       <Button tone="secondary" className="flex-1" onClick={onClose}>Cancel</Button>
-      <Button className="flex-1" busy={busy} disabled={!valid} onClick={save}>{rep ? "Save changes" : "Add rep"}</Button>
+      <Button className="flex-1" busy={busy} disabled={!valid} onClick={save}>{rep ? "Save changes" : "Add partner"}</Button>
     </div>}>
 
     <div className="space-y-4">
@@ -114,18 +120,18 @@ export function RepForm({ rep, onClose, onSaved }: {
       </Field>
 
       {rep ? (
-        <Field label="Rep code" hint="Fixed once issued — it is half of every coupon they hold.">
+        <Field label="Partner code" hint="Fixed once issued — it is half of every coupon they hold.">
           <input className="input" value={rep.code} disabled />
         </Field>
       ) : (
-        <Field label="Rep code" hint="Letters and digits, no spaces. This becomes the first part of every coupon.">
+        <Field label="Partner code" hint="Letters and digits, no spaces. This becomes the first part of every coupon.">
           <input className="input" value={draft.code} placeholder="RAUSHAN"
             onChange={event => set("code")(event.target.value.toUpperCase())} />
         </Field>
       )}
 
       {!rep && code.length > 0 && !isRepCode(code) && (
-        <Notice tone="warning">A rep code starts with a letter and has no spaces — RAUSHAN, PRIYA_K.</Notice>
+        <Notice tone="warning">A partner code starts with a letter and has no spaces — RAUSHAN, PRIYA_K.</Notice>
       )}
 
       {/*

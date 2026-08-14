@@ -67,13 +67,31 @@ const SalesRepSchema = new Schema({
    */
   coupons: { type: [CouponSchema], default: [] },
 
-  /**
-   * A link to a staff login, for the rare rep who is also an employee. Not the
-   * affiliate's own credentials — those are the two fields below.
-   */
-  user: { type: Schema.Types.ObjectId, ref: "User" },
-
   // ------------------------------------------------------------- the account
+  /*
+   * There is deliberately **no link to a `User` here.**
+   *
+   * There used to be one — an optional reference kept against the day reps got
+   * their own screens. That day came, and the answer turned out to be the
+   * opposite: an affiliate is not a member of staff and must never be reachable
+   * as one. The field was never read by anything, and leaving it would have
+   * suggested a relationship the whole design refuses.
+   *
+   * The two are different populations with different words for them, and the
+   * distinction is worth stating once because the vocabulary invites the
+   * mistake. A **sales executive** is an employee of this company with the
+   * `SALES` role: they carry an employee id, appear in the HR register, are paid
+   * a salary through payroll, work the doctor round from `/employee`, and have
+   * nothing to do with coupons. A **sales partner** is an outsider who sells
+   * online with a discount code and takes a share of what arrives: no employee
+   * id, no attendance, no payslip, their own portal at `/partner`, and paid by a
+   * commission run rather than a payroll month.
+   *
+   * Somebody could of course be both, in the way an employee could also be a
+   * customer. They would then have two records, because they are two
+   * relationships with the company — and merging them would put an outsider in
+   * the collection payroll iterates over.
+   */
   /**
    * The affiliate's own password, and with it their own portal.
    *

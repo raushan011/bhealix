@@ -69,7 +69,7 @@ export default function SalesOverviewPage() {
   return <div className="space-y-5">
     <PageTitle
       title="Sales CRM"
-      subtitle="Affiliate coupons, delivered orders and what each rep has earned"
+      subtitle="Partner coupons, delivered orders and what each partner has earned"
       actions={<>
         <LinkButton tone="secondary" href="/admin/sales/payouts"><BadgePercent size={16} />Payouts</LinkButton>
         {/*
@@ -131,8 +131,8 @@ export default function SalesOverviewPage() {
 
     <div>
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-base font-semibold">Top reps</h2>
-        <Link href="/admin/sales/reps" className="text-sm text-[var(--brand)] hover:underline">All {data.activeReps} reps</Link>
+        <h2 className="text-base font-semibold">Top partners</h2>
+        <Link href="/admin/sales/reps" className="text-sm text-[var(--brand)] hover:underline">All {data.activeReps} partners</Link>
       </div>
 
       {data.top.length ? (
@@ -144,10 +144,10 @@ export default function SalesOverviewPage() {
           icon={setUp ? TrendingUp : Plug}
           title={setUp ? "No attributed orders yet" : "Nothing to show until Shopify is connected"}
           description={setUp
-            ? "Orders are attributed by the coupon code on them. Add a rep with their codes, then sync."
-            : "Add the Shopify and Shiprocket credentials, add your reps and their coupon codes, then run a sync."}
+            ? "Orders are attributed by the coupon code on them. Add a partner with their codes, then sync."
+            : "Add the Shopify and Shiprocket credentials, add your partners and their coupon codes, then run a sync."}
           action={<LinkButton href={setUp ? "/admin/sales/reps" : "/admin/sales/settings"}>
-            <Users size={16} />{setUp ? "Add a rep" : "Open settings"}
+            <Users size={16} />{setUp ? "Add a partner" : "Open settings"}
           </LinkButton>} />
       )}
     </div>
