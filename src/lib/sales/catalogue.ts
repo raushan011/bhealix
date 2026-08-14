@@ -1,6 +1,7 @@
 import { SalesCoupon, SalesOrder, SalesRep } from "@/models/Sales";
 import { normaliseCode } from "./coupons";
 import { fetchDiscounts, isLive } from "./discounts";
+import { couponSetupOf, type CouponSetupState } from "./partners";
 import { loadCredentials, shopifyConfig } from "./settings";
 
 /**
@@ -27,6 +28,18 @@ export type CatalogueEntry = {
   rep?: { _id: string; name: string; code: string; active: boolean };
   /** Which commission rule it pays under, from the rep's own entry. */
   suffix?: string;
+  /**
+   * Whether the code exists in Shopify, for the codes a rep minted themselves.
+   *
+   * Read off the rep's own coupon entry rather than off this catalogue, for the
+   * same reason ownership is: there is one record of what a coupon is, and this
+   * screen joins to it. Absent — and so `Live` — for every code entered by hand,
+   * which is correct: it was entered because Shopify already had it.
+   */
+  setup?: CouponSetupState;
+  setupError?: string;
+  /** Whether the rep asked for it or the company issued it. */
+  issuedBy?: string;
   /** Attributed orders and revenue. Only counts orders this CRM has, so an unclaimed code shows zero. */
   orders: number;
   revenue: number;
@@ -96,7 +109,11 @@ export async function refreshFromShopify(): Promise<number> {
   return discounts.length;
 }
 
-type RepDoc = { _id: unknown; name?: string; code?: string; active?: boolean; coupons?: { code?: string; suffix?: string }[] };
+type RepCouponDoc = { code?: string; suffix?: string; setup?: string; setupError?: string; issuedBy?: string };
+type RepDoc = { _id: unknown; name?: string; code?: string; active?: boolean; coupons?: RepCouponDoc[] };
+
+/** What the join carries across from a rep's own coupon entry onto a catalogue row. */
+type Held = { rep: CatalogueEntry["rep"]; suffix?: string; setup: CouponSetupState; setupError?: string; issuedBy?: string };
 
 /** The whole catalogue, joined and counted. */
 export async function loadCatalogue(): Promise<CatalogueEntry[]> {
@@ -109,14 +126,17 @@ export async function loadCatalogue(): Promise<CatalogueEntry[]> {
     ])
   ]);
 
-  const owner = new Map<string, { rep: CatalogueEntry["rep"]; suffix?: string }>();
+  const owner = new Map<string, Held>();
   for (const rep of reps) {
     for (const coupon of rep.coupons ?? []) {
       const code = normaliseCode(coupon.code ?? "");
       if (!code) continue;
       owner.set(code, {
         rep: { _id: String(rep._id), name: rep.name ?? "", code: rep.code ?? "", active: rep.active !== false },
-        suffix: coupon.suffix
+        suffix: coupon.suffix,
+        setup: couponSetupOf(coupon),
+        setupError: coupon.setupError,
+        issuedBy: coupon.issuedBy
       });
     }
   }
@@ -134,16 +154,25 @@ export async function loadCatalogue(): Promise<CatalogueEntry[]> {
     ...orphans.map(code => build({ code, status: "Unknown", discoveredFrom: "Order" }, owner, stats))
   ];
 
-  // Unclaimed and live first — those are the ones costing money right now.
+  /*
+   * Two kinds of urgency, and the newer one goes first.
+   *
+   * A rep's own code that never made it into Shopify is worse than an unclaimed
+   * live code: the unclaimed one at least works, and only the accounting is
+   * wrong. A code sitting at `Awaiting setup` is one a rep has been told is
+   * theirs and which fails the moment a customer types it — nobody finds out
+   * until they complain.
+   */
   return rows.sort((a, b) => {
-    const urgency = (row: CatalogueEntry) => (row.rep ? 2 : row.ignored ? 3 : row.live ? 0 : 1);
+    const urgency = (row: CatalogueEntry) =>
+      row.setup && row.setup !== "Live" ? 0 : row.rep ? 3 : row.ignored ? 4 : row.live ? 1 : 2;
     return urgency(a) - urgency(b) || b.orders - a.orders || a.code.localeCompare(b.code);
   });
 }
 
 function build(
   entry: Record<string, unknown>,
-  owner: Map<string, { rep: CatalogueEntry["rep"]; suffix?: string }>,
+  owner: Map<string, Held>,
   stats: Map<string, { orders: number; revenue: number }>
 ): CatalogueEntry {
   const code = normaliseCode(String(entry.code ?? ""));
@@ -163,6 +192,9 @@ function build(
     lastSeenAt: entry.lastSeenAt ? new Date(entry.lastSeenAt as Date).toISOString() : undefined,
     rep: held?.rep,
     suffix: held?.suffix,
+    setup: held?.setup,
+    setupError: held?.setupError,
+    issuedBy: held?.issuedBy,
     orders: used?.orders ?? 0,
     revenue: Math.round(used?.revenue ?? 0)
   };

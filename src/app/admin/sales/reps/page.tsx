@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { UserPlus, Users } from "lucide-react";
-import { Badge, Button, Card, EmptyState, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
+import { UserCheck, UserPlus, Users, UserX } from "lucide-react";
+import { Badge, Button, Card, EmptyState, Field, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
 import { RepForm } from "@/components/sales/rep-form";
+import { formatDate } from "@/lib/time";
+import { repStatusOf, repStatusTone } from "@/lib/sales/partners";
 import { formatRupees, type RepSummary, type SalesRepRecord } from "@/lib/sales/types";
 
 /**
@@ -32,7 +34,20 @@ export default function SalesRepsPage() {
   if (loading) return <Spinner label="Loading the sales team…" />;
 
   const byId = new Map(summaries.map(summary => [summary.rep._id, summary]));
-  const ordered = [...reps].sort((a, b) => {
+
+  /*
+   * Applications waiting on a decision come out of the list and go above it.
+   *
+   * They belong to a different task. The list below is read on payout day and is
+   * sorted by what is owed; an unexamined stranger has no orders, no revenue and
+   * would sit silently at the bottom of it — which is exactly how somebody waits
+   * three weeks for an answer.
+   */
+  const waiting = reps.filter(rep => repStatusOf(rep) === "Pending")
+    .sort((a, b) => String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? "")));
+  const settled = reps.filter(rep => repStatusOf(rep) !== "Pending");
+
+  const ordered = [...settled].sort((a, b) => {
     const left = byId.get(String(a._id)), right = byId.get(String(b._id));
     return (right?.payable ?? 0) - (left?.payable ?? 0) || (right?.revenue ?? 0) - (left?.revenue ?? 0);
   });
@@ -53,6 +68,23 @@ export default function SalesRepsPage() {
 
     {notice && <Notice tone="success">{notice}</Notice>}
 
+    {waiting.length > 0 && (
+      <section>
+        <h2 className="mb-2 text-base font-semibold">
+          Waiting for a decision
+          <span className="ml-2 rounded-full bg-[var(--warn-bg)] px-2 py-0.5 text-[11px] font-bold text-[var(--warn-ink)]">{waiting.length}</span>
+        </h2>
+        <p className="mb-2 text-xs text-[var(--muted)]">
+          These people applied through the partner sign-up. They can sign in and see they are waiting; they cannot create
+          a coupon code or earn anything until they are approved.
+        </p>
+        <Card className="divide-y divide-[var(--line)]">
+          {waiting.map(rep => <PendingRep key={String(rep._id)} rep={rep}
+            onDone={message => { setNotice(message); load(); }} />)}
+        </Card>
+      </section>
+    )}
+
     {reps.length > 0 && (
       <Card className="grid grid-cols-2 gap-5 p-5 lg:grid-cols-4">
         <Stat label="Reps" value={reps.filter(rep => rep.active).length} />
@@ -72,7 +104,14 @@ export default function SalesRepsPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-sm font-semibold">{rep.name}</p>
                 <Badge>{rep.code}</Badge>
-                {!rep.active && <Badge tone="warn">Inactive</Badge>}
+                {/* The account and the attribution switch are different things,
+                    so they get different badges rather than one that conflates
+                    "we suspended them" with "their codes are off". */}
+                {repStatusOf(rep) !== "Active" && (
+                  <Badge tone={repStatusTone(repStatusOf(rep))}>{repStatusOf(rep)}</Badge>
+                )}
+                {rep.active === false && repStatusOf(rep) === "Active" && <Badge tone="warn">Inactive</Badge>}
+                {rep.selfRegistered && <Badge tone="info">Signed up</Badge>}
               </div>
               <p className="mt-0.5 text-xs text-[var(--muted)]">
                 {(rep.coupons ?? []).filter(coupon => coupon.active).map(coupon => coupon.code).join(" · ") || "No coupon codes"}
@@ -96,5 +135,80 @@ export default function SalesRepsPage() {
     )}
 
     {adding && <RepForm onClose={() => setAdding(false)} onSaved={message => { setAdding(false); setNotice(message); load(); }} />}
+  </div>;
+}
+
+/**
+ * One application, with the two answers to it.
+ *
+ * Approving is what turns a stranger into somebody who can mint a coupon code
+ * and be paid a share of the orders it brings in, so the row shows everything
+ * that decision needs — the name, how to reach them, the code they chose and
+ * therefore what their coupons will look like — rather than making somebody open
+ * a second screen to find out.
+ *
+ * Turning an application down asks for a reason, because the reason is shown to
+ * the person. Approving does not: nobody needs to justify a yes, and a required
+ * field there would only be filled in with a full stop.
+ */
+function PendingRep({ rep, onDone }: { rep: SalesRepRecord; onDone: (message: string) => void }) {
+  const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
+  const [rejecting, setRejecting] = useState(false);
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+
+  async function decide(action: "approve" | "reject") {
+    setBusy(action); setError("");
+    try {
+      const response = await fetch(`/api/sales/reps/${rep._id}/approval`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action, note: note || undefined })
+      });
+      const json = await response.json() as { error?: string; data?: { message?: string } };
+      if (!response.ok) throw new Error(json.error ?? "Could not save that decision");
+      onDone(json.data?.message ?? "Done.");
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : "Could not save that decision");
+      setBusy(null);
+    }
+  }
+
+  return <div className="px-5 py-4">
+    <div className="flex flex-wrap items-start gap-4">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-semibold">{rep.name}</p>
+          <Badge tone="warn">Pending</Badge>
+        </div>
+        <p className="mt-0.5 wrap-break-word text-xs text-[var(--muted)]">
+          {[rep.email, rep.phone].filter(Boolean).join(" · ") || "no contact details"}
+        </p>
+        <p className="mt-0.5 text-xs text-[var(--muted)]">
+          Applied {rep.createdAt ? formatDate(rep.createdAt) : "recently"} · their coupons will start with <strong className="text-[var(--ink-2)]">{rep.code}</strong>
+        </p>
+      </div>
+
+      <div className="flex shrink-0 gap-2">
+        <Button tone="secondary" busy={busy === "reject"} onClick={() => setRejecting(current => !current)}>
+          <UserX size={15} />Turn down
+        </Button>
+        <Button busy={busy === "approve"} onClick={() => decide("approve")}>
+          <UserCheck size={15} />Approve
+        </Button>
+      </div>
+    </div>
+
+    {rejecting && (
+      <div className="mt-3 space-y-2">
+        <Field label="Why" hint="This is shown to them when they next sign in, so write it to be read.">
+          <textarea className="textarea" rows={2} value={note} onChange={event => setNote(event.target.value)}
+            placeholder="We are not taking on new partners in this area at the moment." />
+        </Field>
+        <Button tone="danger" busy={busy === "reject"} onClick={() => decide("reject")}>Turn down this application</Button>
+      </div>
+    )}
+
+    {error && <p className="mt-2 text-xs text-[var(--danger-ink)]">{error}</p>}
   </div>;
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
@@ -72,6 +73,17 @@ function LoginForm() {
 
       <p className="mt-6 text-center text-xs text-[var(--muted)]">
         Forgot your password? Ask your administrator to reset it.
+      </p>
+
+      {/*
+        * The affiliate portal is a different application behind a different
+        * cookie, so a sales partner typing their coupon code into this form
+        * would simply be refused. Sending them next door beats leaving them to
+        * work out that this was never their door.
+        */}
+      <p className="mt-3 text-center text-xs text-[var(--muted)]">
+        Selling with a coupon code?{" "}
+        <Link href="/partner/login" className="font-semibold text-[var(--brand)] hover:underline">Sales partner sign in</Link>
       </p>
     </div>
   </main>;

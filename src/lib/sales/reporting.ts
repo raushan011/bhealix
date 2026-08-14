@@ -97,6 +97,37 @@ export async function repSummary(repId: string): Promise<RepSummary | null> {
   return summaries.find(summary => summary.rep._id === repId) ?? null;
 }
 
+/**
+ * The same figures for one rep, without gathering everybody else's first.
+ *
+ * `repSummary` above builds the whole leaderboard and picks a row out of it,
+ * which is the right trade on an admin screen that was going to show the
+ * leaderboard anyway. It is the wrong one for the affiliate portal, where this
+ * is the home screen: every rep opening the app would aggregate every other
+ * rep's orders to be told their own total, and the cost would grow with the size
+ * of the sales team rather than with anything the reader can see.
+ */
+export async function ownSummary(repId: string, window: Window = {}): Promise<Omit<RepSummary, "rep">> {
+  const [row] = await SalesOrder.aggregate<Grouped>([
+    { $match: { rep: new Types.ObjectId(repId), ...dateMatch(window) } },
+    { $group: { _id: null, ...GROUP } }
+  ]);
+
+  const earned = emptyEarnings();
+  if (row) for (const status of Object.keys(earned) as CommissionStatus[]) earned[status] = row[status] ?? 0;
+
+  return {
+    orders: row?.orders ?? 0,
+    delivered: row?.delivered ?? 0,
+    inTransit: row?.inTransit ?? 0,
+    returned: row?.returned ?? 0,
+    revenue: Math.round(row?.revenue ?? 0),
+    earned,
+    payable: earned.Payable,
+    paid: earned.Paid
+  };
+}
+
 export type SalesOverview = {
   window: { from?: string; to?: string };
   orders: number;

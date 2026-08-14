@@ -24,6 +24,20 @@ export async function getSession(): Promise<Session | null> {
   if (!token || !process.env.AUTH_SECRET) return null;
   try {
     const { payload } = await jwtVerify(token, secret());
+
+    /*
+     * An affiliate's token is never a staff session, whatever cookie it arrives
+     * in.
+     *
+     * The two are already separated by cookie name, so this only matters if
+     * somebody copies one value into the other's slot — but the whole reason
+     * affiliates were kept out of `User` is that they are outsiders, and a
+     * guarantee that rests on a cookie name is a guarantee that rests on
+     * nothing. Both halves are checked, and the partner verifier requires this
+     * audience just as firmly as this one refuses it.
+     */
+    if (payload.aud === "partner") return null;
+
     // Tokens issued before `name` existed carry no name. Leave it empty so the
     // caller can look it up — String(undefined) would render as "undefined".
     return {

@@ -5,6 +5,7 @@ import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
 import { fail, ok, pageParams, OBJECT_ID } from "@/lib/api";
 import { COMMISSION_STATUSES, DELIVERY_STATES } from "@/lib/sales/constants";
+import { normaliseCode } from "@/lib/sales/coupons";
 
 /**
  * Every attributed order, filtered the way the screens ask about them.
@@ -35,6 +36,17 @@ export async function GET(request: Request) {
 
     const rep = params.get("rep");
     if (rep && OBJECT_ID.test(rep)) filter.rep = new Types.ObjectId(rep);
+
+    /*
+     * One exact coupon code, as opposed to the fuzzy `q` above.
+     *
+     * "Which orders did PRIYA30 bring in" is a different question from "search
+     * for priya", and the difference matters when a rep holds two codes and is
+     * asking about one of them. An exact match on the indexed `couponCode` also
+     * costs nothing, where the regex is a collection scan.
+     */
+    const coupon = normaliseCode(params.get("coupon") ?? "");
+    if (coupon) filter.couponCode = coupon;
 
     const delivery = params.get("delivery");
     if (delivery && (DELIVERY_STATES as readonly string[]).includes(delivery)) filter["delivery.state"] = delivery;

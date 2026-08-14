@@ -5,6 +5,7 @@ import {
   VOID_STATES,
   type CommissionBase,
   type CommissionStatus,
+  type CustomerDiscountType,
   type DeliveryState
 } from "./constants";
 
@@ -39,6 +40,20 @@ export type CommissionRule = {
   /** SKUs or product titles, consulted only when the base is `Named products`. */
   products: string[];
   active: boolean;
+
+  /**
+   * What the customer gets off when they type a code paying under this rule.
+   *
+   * Nothing in this file reads it — a commission is worked out from what was
+   * actually charged, not from what the discount was meant to be. It lives on
+   * the rule because it is the other half of the same commercial decision, and
+   * because it is what `lib/sales/provision.ts` needs to create the code in
+   * Shopify when a rep mints one. Zero means "not decided yet", and a code
+   * under such a rule is reserved rather than created.
+   */
+  customerDiscountType?: CustomerDiscountType;
+  customerDiscountValue?: number;
+  oncePerCustomer?: boolean;
 };
 
 /**
@@ -46,9 +61,15 @@ export type CommissionRule = {
  * starts with. Both are editable in settings; neither is referred to by name
  * anywhere in the code, so a third can be added without touching any of it.
  */
+/**
+ * The customer discount is left at zero on both, because nobody but this
+ * company knows what its own coupons should take off. A rule at zero still pays
+ * commission exactly as before — it simply cannot have codes created in Shopify
+ * for it until somebody fills the figure in.
+ */
 export const DEFAULT_RULES: CommissionRule[] = [
-  { suffix: "30", label: "Pigmentation kit", rate: 30, base: "Discounted lines", products: [], active: true },
-  { suffix: "10", label: "Single product", rate: 10, base: "Discounted lines", products: [], active: true }
+  { suffix: "30", label: "Pigmentation kit", rate: 30, base: "Discounted lines", products: [], active: true, customerDiscountType: "Percentage", customerDiscountValue: 0, oncePerCustomer: true },
+  { suffix: "10", label: "Single product", rate: 10, base: "Discounted lines", products: [], active: true, customerDiscountType: "Percentage", customerDiscountValue: 0, oncePerCustomer: true }
 ];
 
 /**

@@ -21,8 +21,21 @@ import { normaliseDomain } from "./shopify";
  * match the one we issued.
  */
 
-/** Offline access, so the sync can run at one in the morning with nobody signed in. */
-export const DEFAULT_SCOPES = ["read_orders", "read_products"] as const;
+/**
+ * Offline access, so the sync can run at one in the morning with nobody signed in.
+ *
+ * `read_discounts` backs the coupon catalogue — the screen that shows a code
+ * existing in one place and not the other. `write_discounts` is what lets a rep
+ * mint their own code and have it work at the checkout a second later; without
+ * it the code is still reserved to them, but somebody has to create it in
+ * Shopify by hand before a customer can type it.
+ *
+ * Adding a scope to this list does not grant it. Shopify only re-asks when the
+ * merchant is sent through the approval screen again, so an existing connection
+ * keeps whatever it was granted until somebody presses Reconnect — which is why
+ * every caller checks what was actually granted rather than what was requested.
+ */
+export const DEFAULT_SCOPES = ["read_orders", "read_products", "read_discounts", "write_discounts"] as const;
 
 export const CALLBACK_PATH = "/api/sales/shopify/callback";
 export const OAUTH_STATE_COOKIE = "bhealix_shopify_oauth";

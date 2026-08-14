@@ -23,6 +23,15 @@ export const Product = models.Product ?? model("Product", ProductSchema);
 
 const AuditSchema = new Schema({
   actor: { type: Schema.Types.ObjectId, ref: "User" },
+  /**
+   * When the person who did it was an affiliate rather than an employee.
+   *
+   * Its own field rather than an id in `actor`, because `actor` is declared as a
+   * `User` and populating it with a `SalesRep` id would resolve to nothing — a
+   * trail that silently reads "somebody" for every self-service action. Exactly
+   * one of the two is set on any given line.
+   */
+  actorRep: { type: Schema.Types.ObjectId, ref: "SalesRep" },
   action: { type: String, required: true, index: true },
   entityType: String,
   entityId: Schema.Types.ObjectId,

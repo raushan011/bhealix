@@ -52,6 +52,26 @@ export const AUDIT_ACTIONS = {
   "sales.rep.updated": "Updated a sales rep",
   "sales.rep.deactivated": "Deactivated a sales rep",
   "sales.rep.deleted": "Deleted a sales rep",
+
+  /**
+   * Self-service. A stranger can now create their own record and mint their own
+   * coupon, which is the first time anything in this system has let somebody
+   * outside the company direct money at themselves. Every step of it leaves a
+   * line — the application, the decision taken on it, and each code issued —
+   * because "who approved this person, and when" is the question that follows
+   * the first disputed payout.
+   */
+  "sales.rep.registered": "Applied to join as an affiliate",
+  "sales.rep.approved": "Approved an affiliate",
+  "sales.rep.rejected": "Turned down an affiliate application",
+  "sales.rep.suspended": "Suspended an affiliate",
+  "sales.rep.reinstated": "Reinstated an affiliate",
+  "sales.rep.profile.updated": "An affiliate updated their own details",
+  "sales.rep.password.changed": "An affiliate changed their own password",
+  "sales.coupon.generated": "An affiliate created their own coupon code",
+  "sales.coupon.provisioned": "Created a coupon's discount in Shopify",
+  "sales.coupon.setup.failed": "Could not create a coupon's discount in Shopify",
+  "sales.coupon.withdrawn": "Withdrew a coupon code",
   "sales.delivery.overridden": "Corrected an order's delivery state by hand",
   "sales.synced": "Pulled orders and delivery status",
   "sales.settings.updated": "Changed the affiliate settings",
@@ -104,6 +124,29 @@ export async function record(event: {
 }) {
   try {
     await AuditEvent.create(event);
+  } catch (error) {
+    console.error("Could not write audit event", event.action, error);
+  }
+}
+
+/**
+ * The same line, written by an affiliate acting on their own account.
+ *
+ * A separate function rather than an optional field on `record`, so a caller
+ * physically cannot pass a `SalesRep` id where a `User` id belongs — which
+ * would resolve to nothing on every screen that reads the trail, and look like
+ * an action nobody took.
+ */
+export async function recordByRep(event: {
+  rep: string;
+  action: AuditAction;
+  entityType: string;
+  entityId: unknown;
+  metadata?: Record<string, unknown>;
+}) {
+  const { rep, ...rest } = event;
+  try {
+    await AuditEvent.create({ ...rest, actorRep: rep });
   } catch (error) {
     console.error("Could not write audit event", event.action, error);
   }

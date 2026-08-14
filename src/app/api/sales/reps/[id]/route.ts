@@ -40,7 +40,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     if (!OBJECT_ID.test(id)) return badRequest("Not a valid rep id");
     await connectDb();
 
-    const rep = await SalesRep.findById(id).lean();
+    // `+passwordHash` only to answer "can this person sign in"; it is stripped
+    // below and never reaches a browser.
+    const rep = await SalesRep.findById(id).select("+passwordHash").lean() as { passwordHash?: string } | null;
     if (!rep) return badRequest("No such rep", 404);
 
     const [summary, orders] = await Promise.all([
@@ -48,7 +50,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       SalesOrder.find({ rep: new Types.ObjectId(id) }).sort({ placedAt: -1 }).limit(200).lean()
     ]);
 
-    return ok({ rep, summary, orders });
+    const { passwordHash, ...safe } = rep;
+    return ok({ rep: { ...safe, hasLogin: Boolean(passwordHash) }, summary, orders });
   } catch (error) {
     return fail(error);
   }

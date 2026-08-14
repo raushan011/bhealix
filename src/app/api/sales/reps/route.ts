@@ -44,11 +44,24 @@ export async function GET(request: Request) {
     const params = new URL(request.url).searchParams;
     const activeOnly = params.get("active") === "1";
     const [reps, summaries] = await Promise.all([
-      SalesRep.find(activeOnly ? { active: true } : {}).sort({ name: 1 }).lean(),
+      // `+passwordHash` only so it can be turned into a yes-or-no below. It is
+      // stripped before anything is returned — see the map.
+      SalesRep.find(activeOnly ? { active: true } : {}).select("+passwordHash").sort({ name: 1 }).lean(),
       repSummaries({}, { activeOnly })
     ]);
 
-    return ok({ reps, summaries });
+    /*
+     * The hash never leaves the server. The screen needs to know whether a rep
+     * can sign in — most of the people typed in before the portal existed
+     * cannot — and a boolean answers that without sending the credential itself
+     * to a browser.
+     */
+    const safe = (reps as { passwordHash?: string }[]).map(({ passwordHash, ...rep }) => ({
+      ...rep,
+      hasLogin: Boolean(passwordHash)
+    }));
+
+    return ok({ reps: safe, summaries });
   } catch (error) {
     return fail(error);
   }
@@ -90,6 +103,14 @@ export async function POST(request: Request) {
       code,
       email: input.email || undefined,
       coupons,
+      /*
+       * Typed in by an administrator, which *is* the approval — there is no
+       * other way for this record to exist. Written explicitly rather than left
+       * to `repStatusOf`'s default, so a rep added here and one who registered
+       * and was approved end up with the same unambiguous record.
+       */
+      status: "Active",
+      selfRegistered: false,
       createdBy: auth.session.userId
     });
 

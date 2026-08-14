@@ -1,10 +1,11 @@
 import { Schema, model, models } from "mongoose";
 import {
-  COMMISSION_BASES, COMMISSION_STATUSES, DEFAULT_BACKFILL_DAYS, DEFAULT_HOLD_DAYS,
+  COMMISSION_BASES, COMMISSION_STATUSES, CUSTOMER_DISCOUNT_TYPES, DEFAULT_BACKFILL_DAYS, DEFAULT_HOLD_DAYS,
   DELIVERY_STATES, ORDER_SOURCES, PAYOUT_MODES, PAYOUT_STATUSES
 } from "@/lib/sales/constants";
 import { DEFAULT_RULES } from "@/lib/sales/commission";
 import { LEAD_SOURCES, LEAD_STATUSES } from "@/lib/sales/leads";
+import { COUPON_SETUP_STATES, REP_STATUSES } from "@/lib/sales/partners";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -27,7 +28,28 @@ const CouponSchema = new Schema({
   /** The digits at the end — which commission rule this code carries. */
   suffix: { type: String, required: true, trim: true },
   active: { type: Boolean, default: true },
-  note: String
+  note: String,
+
+  /**
+   * Whether the code exists where a customer can actually type it.
+   *
+   * Holding a code here does not create it in Shopify, and for years that was
+   * fine because a code only ever got here *after* somebody made it over there.
+   * A rep minting their own reverses the order — the CRM now has codes Shopify
+   * has never heard of — and a rep whose code is refused at the checkout while
+   * their own portal shows it in green will conclude they are being cheated.
+   *
+   * Absent on every coupon written before self-service existed, and read as
+   * `Live` by `couponSetupOf` for exactly that reason.
+   */
+  setup: { type: String, enum: COUPON_SETUP_STATES },
+  /** Shopify's own id for the discount, so it can be found and withdrawn later. */
+  shopifyDiscountId: String,
+  /** Why Shopify refused, kept verbatim for whoever has to fix it. */
+  setupError: String,
+  /** Who asked for it. A rep's own codes are the ones worth watching. */
+  issuedBy: { type: String, enum: ["Admin", "Rep"], default: "Admin" },
+  issuedAt: Date
 }, { _id: false });
 
 const SalesRepSchema = new Schema({
@@ -46,11 +68,41 @@ const SalesRepSchema = new Schema({
   coupons: { type: [CouponSchema], default: [] },
 
   /**
-   * Optional link to a login. Nothing uses it yet — the panel is the
-   * administrator's — but attributing a payout to an account is the one thing
-   * that would otherwise need backfilling the day reps get their own screens.
+   * A link to a staff login, for the rare rep who is also an employee. Not the
+   * affiliate's own credentials — those are the two fields below.
    */
   user: { type: Schema.Types.ObjectId, ref: "User" },
+
+  // ------------------------------------------------------------- the account
+  /**
+   * The affiliate's own password, and with it their own portal.
+   *
+   * Deliberately **not** a `User`. That collection is the staff register: it
+   * requires an employee id, HR lists every row in it, and payroll runs over
+   * it month by month. An affiliate given a `User` would appear in the
+   * employee list, in the attendance screen and in the payroll month — a dozen
+   * empty fields and, worse, a person the company does not employ sitting in
+   * the place where salaries are calculated.
+   *
+   * So the credential lives on the record that already describes them. `select:
+   * false`, like `User.passwordHash`, so the twenty screens that read a rep
+   * cannot serialise a hash into their own HTML.
+   */
+  passwordHash: { type: String, select: false },
+
+  /**
+   * Where they stand with the company. See `lib/sales/partners.ts` for why this
+   * is a separate question from `active`, and why an absent value means Active
+   * rather than Pending.
+   */
+  status: { type: String, enum: REP_STATUSES, index: true },
+  approvedBy: { type: Schema.Types.ObjectId, ref: "User" },
+  approvedAt: Date,
+  /** Why they were turned away or suspended — shown to them, so it is written to be read. */
+  reviewNote: String,
+  /** They registered themselves rather than being typed in. Worth knowing when reviewing one. */
+  selfRegistered: { type: Boolean, default: false },
+  lastLoginAt: Date,
 
   /** Where the money goes. Copied onto a payout line when a run is generated. */
   payMethod: { type: String, enum: PAYOUT_MODES, default: "UPI" },
@@ -74,6 +126,20 @@ const SalesRepSchema = new Schema({
  * and there is no way to work out afterwards whose it was.
  */
 SalesRepSchema.index({ "coupons.code": 1 }, { unique: true, sparse: true });
+
+/**
+ * An email address identifies exactly one affiliate, because it is what they
+ * sign in with.
+ *
+ * Sparse, so the reps who have never been given one — most of the people typed
+ * in before the portal existed — do not all collide on nothing. Every write path
+ * stores an absent address as `undefined` rather than `""` for the same reason:
+ * a handful of empty strings would collide with each other.
+ */
+SalesRepSchema.index({ email: 1 }, { unique: true, sparse: true });
+
+/** The approvals queue: who is waiting, oldest first. */
+SalesRepSchema.index({ status: 1, createdAt: 1 });
 
 export const SalesRep = models.SalesRep ?? model("SalesRep", SalesRepSchema);
 
@@ -518,7 +584,26 @@ const RuleSchema = new Schema({
   rate: { type: Number, required: true, min: 0, max: 100 },
   base: { type: String, enum: COMMISSION_BASES, default: "Discounted lines" },
   products: { type: [String], default: [] },
-  active: { type: Boolean, default: true }
+  active: { type: Boolean, default: true },
+
+  /**
+   * What the **customer** gets off, which is not what the rep earns.
+   *
+   * `rate` above is the commission — the share of the sale that goes to the
+   * person who brought it in. This is the discount the coupon actually applies
+   * at the checkout, and the two are routinely different: a code can take ₹200
+   * off for the buyer while paying the rep 30% of the line.
+   *
+   * It exists here because a rep minting their own code means the CRM now
+   * creates discounts in Shopify rather than only reading them, and it cannot
+   * invent what the discount should be. Left at zero, nothing is created: the
+   * code is reserved and flagged `Awaiting setup` rather than a guess being
+   * pushed at the shop.
+   */
+  customerDiscountType: { type: String, enum: CUSTOMER_DISCOUNT_TYPES, default: "Percentage" },
+  customerDiscountValue: { type: Number, min: 0, default: 0 },
+  /** Whether one customer may use a code more than once. Off is the usual answer for a referral code. */
+  oncePerCustomer: { type: Boolean, default: true }
 }, { _id: false });
 
 /**

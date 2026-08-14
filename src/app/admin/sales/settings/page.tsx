@@ -5,7 +5,7 @@ import { CheckCircle2, Link2 as LinkIcon, Plug, RefreshCw, XCircle } from "lucid
 import { Badge, Button, Card, Field, Notice, PageTitle, Spinner } from "@/components/ui/kit";
 import { PasswordInput } from "@/components/ui/password-input";
 import { AutomationPanel } from "@/components/sales/automation-panel";
-import { COMMISSION_BASES } from "@/lib/sales/constants";
+import { COMMISSION_BASES, CUSTOMER_DISCOUNT_TYPES } from "@/lib/sales/constants";
 import { weekdayName } from "@/lib/sales/payouts";
 import type { CommissionRule } from "@/lib/sales/commission";
 import type { SalesSettingsRecord } from "@/lib/sales/types";
@@ -330,6 +330,18 @@ export default function SalesSettingsPage() {
         One rule per coupon suffix. A code ending <strong>30</strong> is paid at the 30 rule&rsquo;s rate, on the money the
         customer actually paid for the lines that coupon discounted.
       </p>
+      {/*
+        * The distinction this whole card now turns on. Two percentages sit
+        * three fields apart and mean opposite things — one is money out to the
+        * rep, the other is money off for the buyer — so it is said in words
+        * before anybody types in either box.
+        */}
+      <p className="text-sm text-[var(--muted)]">
+        <strong className="text-[var(--ink-2)]">Rate</strong> is what the rep earns.{" "}
+        <strong className="text-[var(--ink-2)]">Customer gets</strong> is what the coupon takes off at the checkout.
+        They are different figures. The second is what a code is created with in Shopify when a rep makes their own —
+        leave it at zero and their codes are reserved for them but have to be set up by hand.
+      </p>
 
       <div className="space-y-3">
         {rules.map((rule, index) => (
@@ -341,13 +353,34 @@ export default function SalesSettingsPage() {
               <Field label="Called">
                 <input className="input" value={rule.label} onChange={event => setRule(index, { label: event.target.value })} />
               </Field>
-              <Field label="Rate %">
+              <Field label="Rate %" hint="What the rep earns">
                 <input className="input" type="number" value={rule.rate}
                   onChange={event => setRule(index, { rate: Number(event.target.value) })} />
               </Field>
               <Field label="Applied to">
                 <select className="select" value={rule.base} onChange={event => setRule(index, { base: event.target.value as CommissionRule["base"] })}>
                   {COMMISSION_BASES.map(base => <option key={base} value={base}>{base}</option>)}
+                </select>
+              </Field>
+            </div>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <Field label="Customer gets">
+                <select className="select" value={rule.customerDiscountType ?? "Percentage"}
+                  onChange={event => setRule(index, { customerDiscountType: event.target.value as CommissionRule["customerDiscountType"] })}>
+                  {CUSTOMER_DISCOUNT_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+                </select>
+              </Field>
+              <Field label={rule.customerDiscountType === "Fixed amount" ? "Rupees off" : "Per cent off"}
+                hint="Zero means codes are reserved but not created">
+                <input className="input" type="number" min={0} value={rule.customerDiscountValue ?? 0}
+                  onChange={event => setRule(index, { customerDiscountValue: Number(event.target.value) })} />
+              </Field>
+              <Field label="Per customer">
+                <select className="select" value={rule.oncePerCustomer === false ? "many" : "once"}
+                  onChange={event => setRule(index, { oncePerCustomer: event.target.value === "once" })}>
+                  <option value="once">Once only</option>
+                  <option value="many">As often as they like</option>
                 </select>
               </Field>
             </div>
@@ -371,7 +404,7 @@ export default function SalesSettingsPage() {
       </div>
 
       <button
-        onClick={() => setRules(current => [...current, { suffix: "", label: "", rate: 10, base: "Discounted lines", products: [], active: true }])}
+        onClick={() => setRules(current => [...current, { suffix: "", label: "", rate: 10, base: "Discounted lines", products: [], active: true, customerDiscountType: "Percentage", customerDiscountValue: 0, oncePerCustomer: true }])}
         className="text-sm font-medium text-[var(--brand)] hover:underline">Add a rule</button>
 
       {/*

@@ -108,6 +108,8 @@ Built for phones first — reps use it standing in a clinic corridor — and equ
 
 Admin and HR use the desktop panel at `/admin`; MR and Sales use the mobile panel at `/employee`. Middleware keeps each role in its own panel, and every API route re-checks permission on the server — the UI never decides access on its own.
 
+**Sales affiliates are not in this table, and not in this staff register.** The affiliate business — strangers who sell online with a coupon code and take a share of what arrives — is a separate CRM with a separate panel of its own at `/partner`, where a rep signs up, creates their own coupon code once approved, follows every order it brings in, and sees what they are owed. They have no employee id, never appear in the HR screens and cannot be paid by payroll; their sign-in is a different cookie with its own audience, so no affiliate can reach `/admin` or `/employee` and no employee can reach `/partner`. See `docs/SALES-CRM-SETUP.md`.
+
 Bills and payslips live outside both panels, at `/invoices/…/print` and `/payslips/…/print`, so one link serves a desk and a phone. They are guarded for a valid session, and the page itself decides who may open that particular document — a rep gets their own and nobody else's.
 
 ## Setup

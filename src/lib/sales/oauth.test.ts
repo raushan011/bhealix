@@ -47,8 +47,14 @@ describe("authorizeUrl", () => {
     expect(url.startsWith("https://vapvrf-0z.myshopify.com/admin/oauth/authorize?")).toBe(true);
   });
 
-  it("asks for the scopes the sync needs and nothing else", () => {
-    expect(new URL(url).searchParams.get("scope")).toBe("read_orders,read_products");
+  /**
+   * Reading orders and products is the sync; reading discounts is the coupon
+   * catalogue; writing them is what lets a rep mint their own code and have it
+   * work at the checkout. Nothing beyond that is asked for — a scope requested
+   * and unused is a permission the merchant granted for no reason.
+   */
+  it("asks for the scopes the sync and the coupon portal need, and nothing else", () => {
+    expect(new URL(url).searchParams.get("scope")).toBe("read_orders,read_products,read_discounts,write_discounts");
   });
 
   it("asks for an offline token, so the nightly sync survives the tab closing", () => {

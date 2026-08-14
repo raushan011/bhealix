@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { EyeOff, RefreshCw, Tag, UserPlus } from "lucide-react";
+import Link from "next/link";
+import { Check, EyeOff, RefreshCw, Tag, UserPlus } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Field, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import { formatDate } from "@/lib/time";
 import { PAYOUT_MODES } from "@/lib/sales/constants";
 import { parseCoupon } from "@/lib/sales/coupons";
+import { couponSetupTone } from "@/lib/sales/partners";
 import { formatRupees } from "@/lib/sales/types";
 import type { CatalogueEntry } from "@/lib/sales/catalogue";
 import type { CommissionRule } from "@/lib/sales/commission";
@@ -30,6 +32,7 @@ export default function SalesCouponsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [claiming, setClaiming] = useState<CatalogueEntry | null>(null);
+  const [busyCode, setBusyCode] = useState("");
   const [notice, setNotice] = useState<{ tone: "success" | "warning" | "error"; text: string } | null>(null);
 
   const load = useCallback(async (refresh = false) => {
@@ -50,11 +53,37 @@ export default function SalesCouponsPage() {
     load();
   }
 
+  /**
+   * Clearing a rep's code that never reached the shop: ask Shopify again, or
+   * record that the discount is already there.
+   */
+  async function fixSetup(code: string, action: "retry-setup" | "mark-live") {
+    setBusyCode(code);
+    try {
+      const response = await fetch("/api/sales/coupons", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action, code })
+      });
+      const json = await response.json() as { error?: string; data?: { setup?: string; message?: string } };
+      if (!response.ok) setNotice({ tone: "error", text: json.error ?? "Could not set that code up." });
+      else if (json.data?.setup === "Live") setNotice({ tone: "success", text: json.data.message ?? `${code} is live.` });
+      else setNotice({ tone: "warning", text: json.data?.message ?? `${code} could not be created in Shopify.` });
+      load();
+    } finally { setBusyCode(""); }
+  }
+
   if (loading) return <Spinner label="Loading coupon codes…" />;
   if (!data) return <Notice tone="error">Could not load the coupon codes.</Notice>;
 
   const unclaimed = data.coupons.filter(entry => !entry.rep && !entry.ignored && entry.live);
   const claimed = data.coupons.filter(entry => entry.rep);
+  /*
+   * Codes a rep holds that Shopify has never been told about. Listed first and
+   * counted separately because they are the failure this screen exists to
+   * catch, turned inside out: not a code in the shop that nobody here claims,
+   * but a code claimed here that the shop will refuse.
+   */
+  const unset = data.coupons.filter(entry => entry.setup && entry.setup !== "Live");
 
   return <div className="space-y-5">
     <PageTitle title="Coupons" subtitle="Every discount code, and who is paid for it"
@@ -66,13 +95,24 @@ export default function SalesCouponsPage() {
 
     {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
 
-    <Card className="grid grid-cols-2 gap-5 p-5 lg:grid-cols-4">
+    <Card className="grid grid-cols-2 gap-5 p-5 lg:grid-cols-5">
       <Stat label="Codes known" value={data.coupons.length} />
       <Stat label="Assigned to a rep" value={claimed.length} />
       <Stat label="Live and unclaimed" value={unclaimed.length}
         tone={unclaimed.length ? "text-[var(--warn-ink)]" : undefined} />
+      <Stat label="Not in Shopify" value={unset.length}
+        tone={unset.length ? "text-[var(--danger-ink)]" : undefined} />
       <Stat label="Attributed orders" value={data.coupons.reduce((total, entry) => total + entry.orders, 0)} />
     </Card>
+
+    {unset.length > 0 && (
+      <Notice tone="error">
+        {unset.length} code{unset.length === 1 ? "" : "s"} {unset.length === 1 ? "belongs" : "belong"} to a rep but
+        {unset.length === 1 ? " does" : " do"} not exist in Shopify, so {unset.length === 1 ? "it is" : "they are"} refused
+        at the checkout. The rep can see {unset.length === 1 ? "it" : "them"} in their portal and believes
+        {unset.length === 1 ? " it works" : " they work"}. Fix {unset.length === 1 ? "it" : "them"} at the top of the list.
+      </Notice>
+    )}
 
     {unclaimed.length > 0 && (
       <Notice tone="warning">
@@ -97,6 +137,10 @@ export default function SalesCouponsPage() {
                       ? <Badge tone="warn">Unassigned</Badge>
                       : <Badge>Unassigned</Badge>}
                 {!entry.live && entry.status !== "Unknown" && <Badge>{entry.status.toLowerCase()}</Badge>}
+                {entry.setup && entry.setup !== "Live" && (
+                  <Badge tone={couponSetupTone(entry.setup)}>{entry.setup}</Badge>
+                )}
+                {entry.issuedBy === "Rep" && <Badge tone="info">Rep&rsquo;s own</Badge>}
               </div>
 
               <p className="mt-0.5 text-xs text-[var(--muted)]">
@@ -105,13 +149,41 @@ export default function SalesCouponsPage() {
                 {entry.usageCount != null ? ` · used ${entry.usageCount}× in Shopify` : ""}
                 {entry.lastSeenAt ? ` · last seen ${formatDate(entry.lastSeenAt)}` : ""}
               </p>
+
+              {/* Shopify's own words, kept verbatim — they are the only clue to
+                  what has to change before a retry will work. */}
+              {entry.setupError && (
+                <p className="mt-1.5 wrap-break-word rounded-[8px] bg-[var(--danger-bg)] px-3 py-2 text-xs text-[var(--danger-ink)]">
+                  {entry.setupError}
+                </p>
+              )}
+
+              {data.mayManage && entry.setup && entry.setup !== "Live" && (
+                <div className="mt-2 flex flex-wrap gap-3">
+                  <button disabled={busyCode === entry.code} onClick={() => fixSetup(entry.code, "retry-setup")}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand)] hover:underline disabled:opacity-50">
+                    <RefreshCw size={12} />{busyCode === entry.code ? "Trying…" : "Create it in Shopify"}
+                  </button>
+                  <button disabled={busyCode === entry.code} onClick={() => fixSetup(entry.code, "mark-live")}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted)] hover:underline disabled:opacity-50">
+                    <Check size={12} />It already exists there
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="shrink-0 text-right">
               <p className="text-sm font-semibold">{formatRupees(entry.revenue)}</p>
-              <p className="text-xs text-[var(--muted)]">
-                {entry.orders} attributed order{entry.orders === 1 ? "" : "s"}
-              </p>
+              {/* Straight through to this code's own orders — the question the
+                  count invites, one click away rather than a search to compose. */}
+              {entry.orders > 0 ? (
+                <Link href={`/admin/sales/orders?coupon=${encodeURIComponent(entry.code)}`}
+                  className="text-xs font-medium text-[var(--brand)] hover:underline">
+                  {entry.orders} attributed order{entry.orders === 1 ? "" : "s"}
+                </Link>
+              ) : (
+                <p className="text-xs text-[var(--muted)]">No attributed orders</p>
+              )}
 
               {data.mayManage && !entry.rep && (
                 <div className="mt-1 flex justify-end gap-3">

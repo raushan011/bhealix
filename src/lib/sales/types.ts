@@ -1,6 +1,7 @@
 import type { CommissionRule } from "./commission";
 import type { CommissionStatus, DeliveryState, OrderSource, PayoutMode, PayoutStatus } from "./constants";
 import type { LeadSource, LeadStatus } from "./leads";
+import type { CouponSetupState, RepStatus } from "./partners";
 
 /**
  * The shapes the browser reads back.
@@ -12,7 +13,17 @@ import type { LeadSource, LeadStatus } from "./leads";
 
 export type Id = string;
 
-export type RepCoupon = { code: string; suffix: string; active: boolean; note?: string };
+export type RepCoupon = {
+  code: string;
+  suffix: string;
+  active: boolean;
+  note?: string;
+  /** Whether Shopify has it. Absent on every code issued before self-service — read as `Live`. */
+  setup?: CouponSetupState;
+  setupError?: string;
+  issuedBy?: "Admin" | "Rep";
+  issuedAt?: string;
+};
 
 export type SalesRepRecord = {
   _id: Id;
@@ -32,6 +43,15 @@ export type SalesRepRecord = {
   joinedAt?: string;
   notes?: string;
   createdAt?: string;
+
+  /** The account, as opposed to the attribution switch — see `lib/sales/partners.ts`. */
+  status?: RepStatus;
+  reviewNote?: string;
+  selfRegistered?: boolean;
+  approvedAt?: string;
+  lastLoginAt?: string;
+  /** Whether they have a portal password. Never the hash itself. */
+  hasLogin?: boolean;
 };
 
 /** A business found by the lead search and kept, as the screens read it back. */
@@ -133,6 +153,59 @@ export type RepSummary = {
   /** Owed and not yet on a run — the figure that matters on payout day. */
   payable: number;
   paid: number;
+};
+
+// ------------------------------------------------------------ the rep's own portal
+
+/**
+ * What an affiliate is shown about themselves.
+ *
+ * A narrower record than `SalesRepRecord` on purpose, and the omissions are the
+ * design: no `notes` (an administrator's private remarks about them), no
+ * `createdBy`, no `approvedBy`. A portal is not a smaller admin panel.
+ */
+export type PartnerProfile = {
+  _id: Id;
+  name: string;
+  code: string;
+  email?: string;
+  phone?: string;
+  status: RepStatus;
+  active: boolean;
+  reviewNote?: string;
+  coupons: RepCoupon[];
+};
+
+/** One published commission rule, as a rep is offered it. */
+export type PartnerRule = {
+  suffix: string;
+  label: string;
+  /** Their commission, as a percentage. */
+  rate: number;
+  /** What the customer gets off — a different figure, and never confused with the one above. */
+  customerDiscount: string;
+  /** Whether a code under it can be created in the shop immediately. */
+  readyInShop: boolean;
+  /** They already hold a live code under this rule. */
+  held: boolean;
+};
+
+/** Everything the portal's home screen reads, in one response. */
+export type PartnerOverview = {
+  profile: PartnerProfile;
+  /** Why they cannot act, when they cannot. Null is the ordinary case. */
+  refusal: string | null;
+  summary: Omit<RepSummary, "rep">;
+  rules: PartnerRule[];
+  holdDays: number;
+  maxCoupons: number;
+};
+
+/** An order as the rep's list draws it, with the sentence it opens with. */
+export type PartnerOrderRecord = Omit<SalesOrderRecord, "rep" | "discountCodes" | "fullyRefunded"> & {
+  headline: string;
+  discountCodes?: string[];
+  fullyRefunded?: boolean;
 };
 
 export type PayoutLineRecord = {

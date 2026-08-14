@@ -23,6 +23,9 @@ function OrdersScreen() {
   const [filters, setFilters] = useState({
     q: "",
     rep: "",
+    // Deep-linked from the coupons screen, so "which orders did this code bring
+    // in" is one click from the code rather than a search somebody composes.
+    coupon: params.get("coupon") ?? "",
     delivery: "",
     status: "",
     attention: params.get("attention") === "1"
@@ -38,6 +41,7 @@ function OrdersScreen() {
     const search = new URLSearchParams({ page: String(page), limit: "50" });
     if (filters.q) search.set("q", filters.q);
     if (filters.rep) search.set("rep", filters.rep);
+    if (filters.coupon) search.set("coupon", filters.coupon);
     if (filters.delivery) search.set("delivery", filters.delivery);
     if (filters.status) search.set("status", filters.status);
     if (filters.attention) search.set("attention", "1");
@@ -85,7 +89,14 @@ function OrdersScreen() {
       </Notice>
     )}
 
-    <Card className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
+    {filters.coupon && (
+      <Notice tone="info">
+        Showing only orders that came in on <strong>{filters.coupon}</strong>.{" "}
+        <button className="underline" onClick={() => set("coupon")("")}>Show every code</button>
+      </Notice>
+    )}
+
+    <Card className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-5">
       <Field label="Search">
         <input className="input" value={filters.q} placeholder="Order, coupon or customer"
           onChange={event => set("q")(event.target.value)} />
@@ -94,6 +105,19 @@ function OrdersScreen() {
         <select className="select" value={filters.rep} onChange={event => set("rep")(event.target.value)}>
           <option value="">Everybody</option>
           {reps.map(rep => <option key={String(rep._id)} value={String(rep._id)}>{rep.name} ({rep.code})</option>)}
+        </select>
+      </Field>
+      {/*
+        * Every code held by anybody, so the commonest question on this screen —
+        * "what did PRIYA30 bring in" — is a dropdown rather than a search whose
+        * spelling has to be right.
+        */}
+      <Field label="Coupon">
+        <select className="select" value={filters.coupon} onChange={event => set("coupon")(event.target.value)}>
+          <option value="">Any code</option>
+          {reps.flatMap(rep => (rep.coupons ?? []).map(coupon => (
+            <option key={coupon.code} value={coupon.code}>{coupon.code} — {rep.name}</option>
+          )))}
         </select>
       </Field>
       <Field label="Delivery">

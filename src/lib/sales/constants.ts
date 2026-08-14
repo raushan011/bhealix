@@ -85,6 +85,17 @@ export type PayoutMode = (typeof PAYOUT_MODES)[number];
 export const COMMISSION_BASES = ["Discounted lines", "Whole order", "Named products"] as const;
 export type CommissionBase = (typeof COMMISSION_BASES)[number];
 
+/**
+ * What a coupon takes off for the **customer** — a different figure from the
+ * commission, and the only one Shopify needs in order to create the discount.
+ *
+ * Kept alongside the commission base rather than in the Shopify module because
+ * it is a commercial decision typed into the settings screen, not a detail of
+ * anybody's API.
+ */
+export const CUSTOMER_DISCOUNT_TYPES = ["Percentage", "Fixed amount"] as const;
+export type CustomerDiscountType = (typeof CUSTOMER_DISCOUNT_TYPES)[number];
+
 /** The default hold before a delivered order's commission may be paid, in days. */
 export const DEFAULT_HOLD_DAYS = 7;
 

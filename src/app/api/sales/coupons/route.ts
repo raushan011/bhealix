@@ -8,6 +8,7 @@ import { record } from "@/lib/audit";
 import { loadCatalogue, refreshFromShopify } from "@/lib/sales/catalogue";
 import { isRepCode, normaliseCode, REP_CODE_SHAPE } from "@/lib/sales/coupons";
 import { PAYOUT_MODES } from "@/lib/sales/constants";
+import { provisionCoupon } from "@/lib/sales/provision";
 import { loadSettings, rulesOf } from "@/lib/sales/settings";
 
 /**
@@ -41,7 +42,20 @@ const mark = z.object({
   code: z.string().trim().min(2).max(40)
 });
 
-const schema = z.discriminatedUnion("action", [assign, createRep, mark]);
+/**
+ * The two ways to clear a code a rep minted that never reached the shop.
+ *
+ * `retry` asks Shopify again — the usual fix once the missing scope has been
+ * granted or the rule's customer discount has been filled in. `mark-live` says
+ * "the discount exists over there, I made it myself", which is the answer when
+ * Shopify refused because the code was already taken.
+ */
+const setup = z.object({
+  action: z.enum(["retry-setup", "mark-live"]),
+  code: z.string().trim().min(2).max(40)
+});
+
+const schema = z.discriminatedUnion("action", [assign, createRep, mark, setup]);
 
 export async function GET(request: Request) {
   try {
@@ -136,6 +150,64 @@ export async function POST(request: Request) {
       // A code assigned now attributes the orders it already brought in, but
       // only once a sync re-reads them — worth saying so on screen.
       return ok({ rep: { _id: rep._id, name: rep.name, code: rep.code }, resyncNeeded: true });
+    }
+
+    if (input.action === "retry-setup" || input.action === "mark-live") {
+      const rep = await SalesRep.findOne({ "coupons.code": code });
+      if (!rep) return badRequest("No rep holds that code.", 404);
+
+      const coupon = (rep.coupons ?? []).find((held: { code: string }) => held.code === code);
+      if (!coupon) return badRequest("No rep holds that code.", 404);
+
+      if (input.action === "mark-live") {
+        // Taking the administrator's word for it. There is no way to verify
+        // from here that the discount over there is the *right* one, so the
+        // action is deliberately explicit rather than something a retry could
+        // do quietly on their behalf.
+        await SalesRep.updateOne(
+          { _id: rep._id, "coupons.code": code },
+          { $set: { "coupons.$.setup": "Live" }, $unset: { "coupons.$.setupError": "" } }
+        );
+        await record({
+          actor: auth.session.userId, action: "sales.coupon.provisioned",
+          entityType: "SalesRep", entityId: String(rep._id), metadata: { code, by: "marked live by hand" }
+        });
+        return ok({ code, setup: "Live" });
+      }
+
+      const settings = await loadSettings();
+      const rule = rulesOf(settings).find(candidate => candidate.suffix === coupon.suffix);
+      if (!rule) return badRequest(`No commission rule ends in ${coupon.suffix}, so there is nothing to create this code from.`);
+
+      const outcome = await provisionCoupon({ code, rule, repName: rep.name });
+
+      await SalesRep.updateOne(
+        { _id: rep._id, "coupons.code": code },
+        {
+          $set: {
+            "coupons.$.setup": outcome.state,
+            ...(outcome.state === "Live"
+              ? { "coupons.$.shopifyDiscountId": outcome.shopifyDiscountId }
+              : { "coupons.$.setupError": outcome.reason })
+          },
+          ...(outcome.state === "Live" ? { $unset: { "coupons.$.setupError": "" } } : {})
+        }
+      );
+
+      await record({
+        actor: auth.session.userId,
+        action: outcome.state === "Live" ? "sales.coupon.provisioned" : "sales.coupon.setup.failed",
+        entityType: "SalesRep", entityId: String(rep._id),
+        metadata: { code, state: outcome.state, ...(outcome.state === "Live" ? {} : { reason: outcome.reason }) }
+      });
+
+      return ok({
+        code,
+        setup: outcome.state,
+        message: outcome.state === "Live"
+          ? `${code} now exists in Shopify and works at the checkout.`
+          : outcome.reason
+      });
     }
 
     // Only "not a rep's" and its undo are left.

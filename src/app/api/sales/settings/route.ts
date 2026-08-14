@@ -5,7 +5,7 @@ import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
 import { fail, ok } from "@/lib/api";
 import { record } from "@/lib/audit";
-import { COMMISSION_BASES } from "@/lib/sales/constants";
+import { COMMISSION_BASES, CUSTOMER_DISCOUNT_TYPES } from "@/lib/sales/constants";
 import { redirectUri } from "@/lib/sales/oauth";
 import { clearShiprocketToken, loadCredentials, storeSecret } from "@/lib/sales/settings";
 import { normaliseDomain } from "@/lib/sales/shopify";
@@ -19,8 +19,24 @@ const ruleSchema = z.object({
   rate: z.number().min(0).max(100),
   base: z.enum(COMMISSION_BASES).default("Discounted lines"),
   products: z.array(z.string().trim().max(120)).max(50).default([]),
-  active: z.boolean().default(true)
-});
+  active: z.boolean().default(true),
+
+  /**
+   * What the customer gets off — the other half of the same commercial decision,
+   * and the figure Shopify needs in order to create a code for this rule.
+   *
+   * Optional and defaulted to zero so an existing settings document, and every
+   * request from a browser that has not been reloaded since this shipped, saves
+   * exactly as before. Zero means "not decided", and codes under such a rule are
+   * reserved rather than created.
+   */
+  customerDiscountType: z.enum(CUSTOMER_DISCOUNT_TYPES).default("Percentage"),
+  customerDiscountValue: z.number().min(0).max(100000).default(0),
+  oncePerCustomer: z.boolean().default(true)
+}).refine(
+  rule => rule.customerDiscountType !== "Percentage" || rule.customerDiscountValue <= 100,
+  { message: "A percentage discount cannot be more than 100%", path: ["customerDiscountValue"] }
+);
 
 const schema = z.object({
   shopifyDomain: z.string().trim().max(120).optional(),
