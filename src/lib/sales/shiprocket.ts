@@ -342,6 +342,70 @@ export async function schedulePickup(token: string, shipmentId: string): Promise
   };
 }
 
+/** One scan: where the parcel was, and what happened to it there. */
+export type TrackingScan = { at?: string; activity: string; location?: string };
+
+export type Tracking = {
+  awb: string;
+  courier?: string;
+  /** Shiprocket's own wording for where it is now. */
+  status?: string;
+  statusCode?: number;
+  deliveredAt?: Date;
+  /** The courier's public page, for handing to a customer who rings up. */
+  trackUrl?: string;
+  scans: TrackingScan[];
+  /** Set when the courier has nothing yet — an airway bill assigned an hour ago. */
+  note?: string;
+};
+
+/**
+ * Where the parcel actually is, scan by scan.
+ *
+ * Distinct from the delivery sync next door, which reads a status for every
+ * order at once and is the thing that decides commission. This is one parcel,
+ * asked about because somebody is on the telephone about it, and it answers with
+ * the courier's own movement history rather than a single word.
+ *
+ * A freshly assigned airway bill has no scans at all — the courier has not
+ * collected it yet — and that is reported as such rather than as an error, since
+ * it is the ordinary state for an order booked ten minutes ago.
+ */
+export async function trackByAwb(token: string, awb: string): Promise<Tracking> {
+  const { data } = await httpJson<{ tracking_data?: {
+    track_status?: number;
+    shipment_status?: number;
+    error?: string;
+    shipment_track?: { current_status?: string; courier_name?: string; delivered_date?: string; edd?: string }[];
+    shipment_track_activities?: { date?: string; activity?: string; location?: string }[];
+    track_url?: string;
+  } }>({
+    service: "Shiprocket", url: `${BASE}/courier/track/awb/${encodeURIComponent(awb)}`, headers: auth(token)
+  });
+
+  const tracking = data.tracking_data ?? {};
+  const shipment = tracking.shipment_track?.[0];
+  const scans = (tracking.shipment_track_activities ?? [])
+    .map(scan => ({
+      at: scan.date ?? undefined,
+      activity: String(scan.activity ?? "").trim(),
+      location: scan.location ?? undefined
+    }))
+    .filter(scan => scan.activity);
+
+  return {
+    awb,
+    courier: shipment?.courier_name ?? undefined,
+    status: shipment?.current_status ?? undefined,
+    statusCode: tracking.shipment_status ?? undefined,
+    deliveredAt: parseDate(shipment?.delivered_date),
+    trackUrl: tracking.track_url || `https://shiprocket.co/tracking/${encodeURIComponent(awb)}`,
+    scans,
+    note: scans.length ? undefined : tracking.error
+      || "The courier has not scanned this parcel yet. That is normal until it has been collected."
+  };
+}
+
 /**
  * Where the printable invoice or shipping label lives.
  *

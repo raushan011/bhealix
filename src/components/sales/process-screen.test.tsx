@@ -86,15 +86,32 @@ const text = (container: HTMLElement) => container.textContent ?? "";
 const checkboxes = (container: HTMLElement) => [...container.querySelectorAll<HTMLInputElement>("input[type=checkbox]")];
 
 describe("the processing screen", () => {
-  it("opens on what still has to go out, oldest first", async () => {
-    // The default view is the working list, not the archive: an order already
-    // booked is nobody's job this morning.
+  it("opens on every order, oldest first", async () => {
+    /*
+     * No processing filter by default. The screen is read by somebody packing
+     * boxes *and* by somebody chasing a parcel that went last week, and a
+     * default that hid half the orders left the second one looking at an empty
+     * list with no clue that a filter was doing it. Oldest first, because the
+     * oldest unbooked order is the one about to be telephoned about.
+     */
     stubFetch();
     const { unmount } = await mount();
 
     const list = requests.find(url => url.startsWith("/api/sales/orders")) ?? "";
-    expect(list).toContain("processed=no");
+    expect(list).not.toContain("processed=");
     expect(list).toContain("sort=oldest");
+    unmount();
+  });
+
+  it("offers tracking on a parcel that has gone, and nothing to track on one that has not", async () => {
+    stubFetch();
+    const { container, unmount } = await mount();
+
+    const rows = [...container.querySelectorAll("div")];
+    const booked = rows.find(row => row.textContent?.startsWith("#1044"));
+    const waiting = rows.find(row => row.textContent?.startsWith("#1043"));
+    expect(booked?.textContent).toContain("Track");
+    expect(waiting?.textContent).not.toContain("Track");
     unmount();
   });
 

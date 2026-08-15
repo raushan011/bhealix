@@ -75,3 +75,18 @@ export function formatDate(value: string | Date): string {
   const date = typeof value === "string" ? new Date(value) : value;
   return date.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
+
+/**
+ * A moment rather than a day — for a feed of events, where two entries on the
+ * same afternoon have to be told apart.
+ *
+ * The space-for-T is not a nicety: couriers report `2026-08-11 14:20:00`, which
+ * only some engines parse. The year is left off because these are read as
+ * "recently", and an unparseable value is handed back untouched rather than
+ * shown as `Invalid Date`.
+ */
+export function formatDateTime(value: string | Date): string {
+  const date = typeof value === "string" ? new Date(value.trim().replace(" ", "T")) : value;
+  if (Number.isNaN(date.getTime())) return typeof value === "string" ? value : "";
+  return date.toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+}

@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Check, Download, Truck, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertTriangle, Check, Download, Loader2, RefreshCw, Truck, X } from "lucide-react";
 import { Badge, Button, Field, Notice } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import { COURIER_RULES, PROCESS_BATCH, type CourierRule } from "@/lib/sales/constants";
 import {
-  addressOf, blockedReason, missingFields, orderCount, paymentModeOf,
+  addressOf, blockedReason, missingFields, orderCount, paymentModeOf, stripBlank,
   type Address, type CourierOption
 } from "@/lib/sales/fulfilment";
 import { formatRupees, type FulfilmentOptions, type ProcessResult, type SalesOrderRecord } from "@/lib/sales/types";
@@ -54,13 +54,29 @@ export function ProcessDialog({ orders, options, onClose, onDone }: {
     breadth: String(options.defaults.parcel.breadth),
     height: String(options.defaults.parcel.height)
   });
-  const [rule, setRule] = useState<CourierRule | "named">("recommended");
-  const [courier, setCourier] = useState<{ id: number; name: string } | null>(null);
+  /*
+   * Choosing the courier by name is the default, and the rules are the
+   * alternative rather than the other way round.
+   *
+   * Freight is money, and the difference between the cheapest and the quickest
+   * on the same parcel is routinely half the margin on the order. Somebody
+   * spending it should see the prices and decide, so the list is fetched as the
+   * dialog opens rather than waiting behind a button. The rules stay for the
+   * mornings when forty parcels matter more than four rupees each.
+   */
+  const [rule, setRule] = useState<CourierRule | "named">("named");
+  const [courier, setCourier] = useState<{ id: number; name: string } | null>(
+    options.defaults.courierId && options.defaults.courierName
+      ? { id: options.defaults.courierId, name: options.defaults.courierName }
+      : null
+  );
   const [couriers, setCouriers] = useState<CourierOption[] | null>(null);
   const [quoting, setQuoting] = useState(false);
   const [quoteError, setQuoteError] = useState("");
   const [pickupWanted, setPickupWanted] = useState(false);
   const [address, setAddress] = useState<Address>(single ? addressOf(single) : {});
+  const [addressNote, setAddressNote] = useState("");
+  const [fetchingAddress, setFetchingAddress] = useState(false);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [results, setResults] = useState<ProcessResult[] | null>(null);
   const [error, setError] = useState("");
@@ -77,20 +93,70 @@ export function ProcessDialog({ orders, options, onClose, onDone }: {
   }).filter((problem): problem is { order: SalesOrderRecord; reason: string } => problem !== null);
 
   const ready = orders.length - problems.length;
+  /** The order a quote is measured against: the one on screen, or the first that can go. */
+  const quoteFor = single ?? orders.find(order => !problems.some(problem => problem.order._id === order._id));
 
-  /** Quoting is per pin code, so it is only offered for one order at a time. */
-  const quote = useCallback(async () => {
+  /**
+   * Every address on this screen is fetched from the shop when this system has
+   * not got one.
+   *
+   * Orders placed before parcels were booked from here kept only the city, the
+   * state and the pin code — those were the three fields the commission
+   * arithmetic read. Shopify has had the street all along, so it is asked, once,
+   * and the answer is written back.
+   */
+  const fillAddress = useCallback(async () => {
     if (!single) return;
+    setFetchingAddress(true); setAddressNote("");
+    try {
+      const response = await fetch("/api/sales/fulfilment/address", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ orderId: single._id })
+      });
+      const json = await response.json() as { data?: { address: Address; fetched: boolean; warning?: string }; error?: string };
+      if (!response.ok) throw new Error(json.error ?? "Could not read the address back from the shop.");
+      // Anything already typed into the form wins — this fills gaps, it does not
+      // overwrite somebody's correction.
+      if (json.data?.address) setAddress(current => ({ ...json.data!.address, ...stripBlank(current) }));
+      if (json.data?.warning) setAddressNote(json.data.warning);
+      else if (json.data?.fetched) setAddressNote("Filled in from the shop.");
+    } catch (problem) {
+      setAddressNote(problem instanceof Error ? problem.message : "Could not reach the shop.");
+    } finally {
+      setFetchingAddress(false);
+    }
+  }, [single]);
+
+  // Asked for on opening, and only when something is actually missing — an
+  // order with a complete address costs no call at all.
+  useEffect(() => {
+    if (single && missingFields(addressOf(single)).length) fillAddress();
+  }, [single, fillAddress]);
+
+  /*
+   * The address as it stands, without the quote depending on it.
+   *
+   * A pin code is typed a character at a time; if the quote were rebuilt on each
+   * keystroke it would be six calls to Shiprocket to reach one answer, five of
+   * them for pin codes that do not exist. The rates are re-asked for when the
+   * parcel or the warehouse changes, and by the Refresh rates button otherwise.
+   */
+  const typed = useRef(address);
+  useEffect(() => { typed.current = address; }, [address]);
+
+  /** Quoting is per pin code, so a batch is priced against its first order. */
+  const quote = useCallback(async () => {
+    if (!quoteFor) return;
     setQuoting(true); setQuoteError(""); setCouriers(null);
     try {
       const response = await fetch("/api/sales/fulfilment/couriers", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          orderId: single._id,
+          orderId: quoteFor._id,
           pickupLocation: pickup,
           weight: Number(parcel.weight) || options.defaults.parcel.weight,
-          pinCode: address.pinCode
+          pinCode: single ? typed.current.pinCode : undefined
         })
       });
       const json = await response.json() as { data?: { couriers: CourierOption[] }; error?: string };
@@ -101,12 +167,19 @@ export function ProcessDialog({ orders, options, onClose, onDone }: {
     } finally {
       setQuoting(false);
     }
-  }, [single, pickup, parcel.weight, address.pinCode, options.defaults.parcel.weight]);
+  }, [quoteFor, single, pickup, parcel.weight, options.defaults.parcel.weight]);
 
-  // The courier list is priced for a weight and a pin code; changing either
-  // makes the prices on screen wrong, so they are withdrawn rather than left to
-  // be chosen from.
-  useEffect(() => { setCouriers(null); setCourier(null); }, [parcel.weight, pickup]);
+  /*
+   * Priced on opening, and re-priced whenever the parcel or the warehouse
+   * changes — a rate quoted for half a kilo is not a rate for two, and leaving
+   * the old figures on screen would have somebody choose on a price that is no
+   * longer true.
+   */
+  useEffect(() => {
+    setCourier(null);
+    if (rule === "named") quote();
+    else setCouriers(null);
+  }, [rule, quote]);
 
   async function run() {
     setError(""); setResults(null);
@@ -212,21 +285,30 @@ export function ProcessDialog({ orders, options, onClose, onDone }: {
           ? "The named courier is never substituted — an order it cannot reach is reported instead."
           : "Decided per order, out of whatever can actually reach that pin code."}>
         <select className="select" value={rule} onChange={event => setRule(event.target.value as CourierRule | "named")}>
+          <option value="named">Pick one from the list, by price</option>
           {COURIER_RULES.map(value => <option key={value} value={value}>{RULE_LABEL[value]}</option>)}
-          <option value="named">Pick one from the list…</option>
         </select>
       </Field>
 
-      {rule === "named" && (single ? <CourierPicker
-        couriers={couriers} chosen={courier} quoting={quoting} error={quoteError}
-        onQuote={quote} onChoose={setCourier} /> : (
-        <Notice tone="warning">
-          Rates are quoted per pin code, so a list can only be shown for one order at a time. Either process this batch
-          on a rule, or open a single order to choose its courier by name.
-        </Notice>
-      ))}
+      {rule === "named" && <>
+        {/*
+          * A batch is priced against its first order, because a rate is a rate
+          * for one pin code. Said plainly rather than hidden, since the courier
+          * chosen here still applies to all of them — and any it cannot reach
+          * are reported rather than quietly sent by somebody else.
+          */}
+        {!single && quoteFor && (
+          <p className="text-xs text-[var(--muted)]">
+            Rates shown are for {quoteFor.name} to {quoteFor.customer?.city || "its pin code"}. The courier you choose is
+            used for every order in this batch; the price on each depends on where it is going.
+          </p>
+        )}
+        <CourierPicker couriers={couriers} chosen={courier} quoting={quoting} error={quoteError}
+          onQuote={quote} onChoose={setCourier} />
+      </>}
 
-      {single && <AddressFields order={single} address={address} onChange={setAddress} />}
+      {single && <AddressFields order={single} address={address} onChange={setAddress}
+        note={addressNote} busy={fetchingAddress} onFetch={fillAddress} />}
 
       {problems.length > 0 && (
         <Notice tone="warning">
@@ -260,9 +342,13 @@ export function ProcessDialog({ orders, options, onClose, onDone }: {
 /**
  * The couriers that can carry this parcel, with what each costs.
  *
- * Fetched on a press rather than on opening the dialog: it is a live call to
- * Shiprocket against one pin code and one weight, and the weight is a field
- * directly above it that people change.
+ * Asked for as the dialog opens, because this is the screen where freight is
+ * spent and the spread between the cheapest and the quickest on one parcel is
+ * routinely half the margin on the order. Sorted by price, with the delivery
+ * promise beside it, so the trade being made is visible rather than inferred.
+ *
+ * Re-asked by the button rather than on a timer: the rates are for one weight
+ * and one pin code, and both are fields on this same form.
  */
 function CourierPicker({ couriers, chosen, quoting, error, onQuote, onChoose }: {
   couriers: CourierOption[] | null;
@@ -272,6 +358,12 @@ function CourierPicker({ couriers, chosen, quoting, error, onQuote, onChoose }: 
   onQuote: () => void;
   onChoose: (courier: { id: number; name: string }) => void;
 }) {
+  if (quoting && !couriers) {
+    return <p className="flex items-center gap-2 text-sm text-[var(--muted)]">
+      <Loader2 size={14} className="animate-spin" />Asking Shiprocket which couriers serve this address…
+    </p>;
+  }
+
   if (!couriers) {
     return <div className="space-y-2">
       <Button tone="secondary" busy={quoting} onClick={onQuote}>Show couriers and rates</Button>
@@ -279,27 +371,56 @@ function CourierPicker({ couriers, chosen, quoting, error, onQuote, onChoose }: 
     </div>;
   }
 
-  if (!couriers.length) return <Notice tone="error">No courier on this account serves that pin code at this weight.</Notice>;
+  if (!couriers.length) {
+    return <div className="space-y-2">
+      <Notice tone="error">{error || "No courier on this account serves that pin code at this weight."}</Notice>
+      <Button tone="secondary" busy={quoting} onClick={onQuote}><RefreshCw size={14} />Try again</Button>
+    </div>;
+  }
 
-  return <div className="max-h-64 space-y-1 overflow-y-auto rounded-[10px] border border-[var(--line)] p-1">
-    {couriers.map(courier => (
-      <button key={courier.id} type="button" onClick={() => onChoose({ id: courier.id, name: courier.name })}
-        className={`flex w-full items-center gap-3 rounded-[8px] px-3 py-2 text-left text-sm transition-colors ${
-          chosen?.id === courier.id ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "hover:bg-[var(--surface-2)]"
-        }`}>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium">{courier.name}</span>
-          <span className="block text-xs text-[var(--muted)]">
-            {courier.surface ? "Surface" : "Air"}
-            {courier.days ? ` · ${courier.days} day${courier.days === 1 ? "" : "s"}` : ""}
-            {courier.etd ? ` · by ${courier.etd}` : ""}
-            {courier.rating ? ` · rated ${courier.rating.toFixed(1)}` : ""}
+  // Cheapest first. The list is read top-down by somebody deciding what to
+  // spend, so the decision is between the first row and whatever above it is
+  // worth paying more for.
+  const byPrice = [...couriers].sort((left, right) => left.rate - right.rate);
+  const cheapest = byPrice[0]?.rate ?? 0;
+
+  return <div className="space-y-2">
+    <div className="max-h-72 space-y-1 overflow-y-auto rounded-[10px] border border-[var(--line)] p-1">
+      {byPrice.map(courier => (
+        <button key={courier.id} type="button" onClick={() => onChoose({ id: courier.id, name: courier.name })}
+          className={`flex w-full items-center gap-3 rounded-[8px] px-3 py-2 text-left text-sm transition-colors ${
+            chosen?.id === courier.id ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "hover:bg-[var(--surface-2)]"
+          }`}>
+          <input type="radio" readOnly checked={chosen?.id === courier.id} className="shrink-0" tabIndex={-1}
+            aria-label={`${courier.name}, ${formatRupees(courier.rate)}`} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-medium">{courier.name}</span>
+            <span className="block text-xs text-[var(--muted)]">
+              {courier.surface ? "Surface" : "Air"}
+              {courier.days ? ` · ${courier.days} day${courier.days === 1 ? "" : "s"}` : ""}
+              {courier.etd ? ` · by ${courier.etd}` : ""}
+              {courier.rating ? ` · rated ${courier.rating.toFixed(1)}` : ""}
+            </span>
           </span>
-        </span>
-        {courier.recommended && <Badge tone="info">Shiprocket&rsquo;s pick</Badge>}
-        <span className="shrink-0 font-semibold tabular-nums">{formatRupees(courier.rate)}</span>
+          {courier.recommended && <Badge tone="info">Shiprocket&rsquo;s pick</Badge>}
+          <span className="shrink-0 text-right">
+            <span className="block font-semibold tabular-nums">{formatRupees(courier.rate)}</span>
+            {/* What choosing this one costs over the cheapest — the figure the
+                decision is actually about, and one nobody should do in their head. */}
+            <span className="block text-xs text-[var(--muted)]">
+              {courier.rate > cheapest ? `+${formatRupees(courier.rate - cheapest)}` : "cheapest"}
+            </span>
+          </span>
+        </button>
+      ))}
+    </div>
+
+    <div className="flex items-center justify-between text-xs text-[var(--muted)]">
+      <span>{couriers.length} couriers serve this address. Freight shown is what Shiprocket charges, all in.</span>
+      <button type="button" onClick={onQuote} className="inline-flex items-center gap-1 font-medium text-[var(--brand)] hover:underline">
+        <RefreshCw size={12} className={quoting ? "animate-spin" : ""} />Refresh rates
       </button>
-    ))}
+    </div>
   </div>;
 }
 
@@ -312,10 +433,14 @@ function CourierPicker({ couriers, chosen, quoting, error, onQuote, onChoose }: 
  * the order, not merely sent to the courier: the next person to open it should
  * see the address it actually shipped to.
  */
-function AddressFields({ order, address, onChange }: {
+function AddressFields({ order, address, onChange, note, busy, onFetch }: {
   order: SalesOrderRecord;
   address: Address;
   onChange: (address: Address) => void;
+  /** What the last fetch from the shop had to say, if anything. */
+  note?: string;
+  busy?: boolean;
+  onFetch: () => void;
 }) {
   const set = (field: keyof Address) => (event: React.ChangeEvent<HTMLInputElement>) =>
     onChange({ ...address, [field]: event.target.value });
@@ -324,12 +449,26 @@ function AddressFields({ order, address, onChange }: {
   const mark = (field: string) => missing.has(field) ? "input border-[var(--danger-line)]" : "input";
 
   return <div className="space-y-3 rounded-[10px] border border-[var(--line)] p-3">
-    <p className="text-[13px] font-semibold">
-      Delivering to
-      <Badge tone={paymentModeOf(order) === "COD" ? "warn" : "neutral"}>
-        {paymentModeOf(order) === "COD" ? `COD ${formatRupees(order.totals.paid)}` : "Prepaid"}
-      </Badge>
-    </p>
+    <div className="flex flex-wrap items-center gap-2">
+      <p className="flex flex-1 items-center gap-2 text-[13px] font-semibold">
+        Delivering to
+        <Badge tone={paymentModeOf(order) === "COD" ? "warn" : "neutral"}>
+          {paymentModeOf(order) === "COD" ? `COD ${formatRupees(order.totals.paid)}` : "Prepaid"}
+        </Badge>
+      </p>
+      {/*
+        * Orders placed before this system booked parcels kept only the city, the
+        * state and the pin code. Shopify has had the street all along, so it is
+        * fetched when the dialog opens — and this is how to ask again.
+        */}
+      <button type="button" onClick={onFetch} disabled={busy}
+        className="inline-flex items-center gap-1 text-xs font-medium text-[var(--brand)] hover:underline disabled:opacity-50">
+        {busy ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+        Fetch from the shop
+      </button>
+    </div>
+
+    {note && <p className="text-xs text-[var(--muted)]">{note}</p>}
 
     <div className="grid gap-3 sm:grid-cols-2">
       <Field label="Name"><input className={mark("customer name")} value={address.name ?? ""} onChange={set("name")} /></Field>

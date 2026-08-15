@@ -5,6 +5,7 @@ import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
 import { record } from "@/lib/audit";
+import { addressResolver } from "@/lib/sales/address";
 import { processOrder, type OrderDoc } from "@/lib/sales/booking";
 import { COURIER_RULES, PROCESS_BATCH } from "@/lib/sales/constants";
 import { normaliseParcel } from "@/lib/sales/fulfilment";
@@ -107,6 +108,11 @@ export async function POST(request: Request) {
       throw error;
     }
 
+    // Fills in an address for the orders that arrived before this system kept
+    // one. Null when Shopify is not connected, in which case an incomplete
+    // order simply reports what it is missing.
+    const resolve = addressResolver(settings);
+
     const results: ProcessResult[] = [];
     for (const id of input.orderIds) {
       const order = await SalesOrder.findById(id) as OrderDoc | null;
@@ -121,6 +127,9 @@ export async function POST(request: Request) {
         parcel,
         courier: { id: input.courierId, rule: input.courierRule },
         schedulePickup: input.schedulePickup,
+        // Bound once for the whole batch: forty orders must not re-read the
+        // settings document forty times to learn the same shop address.
+        resolveAddress: resolve,
         // A typed-in address belongs to one order. Sending a batch through with
         // one would put every parcel on the same doorstep.
         address: input.orderIds.length === 1 ? input.address : null,

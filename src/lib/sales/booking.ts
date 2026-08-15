@@ -54,6 +54,11 @@ export type BookingInput = {
   schedulePickup: boolean;
   /** Typed in by the operator, for the fields the checkout never collected. */
   address?: Address | null;
+  /**
+   * Fills a missing address from the shop, for the orders that arrived before
+   * this system kept one (§ address.ts). Absent when Shopify is not connected.
+   */
+  resolveAddress?: ((order: OrderDoc) => Promise<Address | null>) | null;
   actor: string;
 };
 
@@ -64,7 +69,32 @@ export async function processOrder(token: string, order: OrderDoc, input: Bookin
   const blocked = blockedReason(order);
   if (blocked) return result({ error: blocked });
 
-  const address = addressOf(order, input.address);
+  let address = addressOf(order, input.address);
+
+  /*
+   * Every order placed before this system booked its own parcels has a city, a
+   * state and a pin code and no street: those were the only three fields the
+   * commission arithmetic ever needed, so they were the only three the sync
+   * kept. Shopify has had the rest all along, so it is fetched — one call, at
+   * the moment it is actually wanted, and written back so it is never fetched
+   * for that order again.
+   *
+   * Before the refusal below rather than after it, or a batch of last month's
+   * orders would report forty missing addresses that Shopify could have
+   * supplied in forty seconds.
+   */
+  if (missingFields(address).length && input.resolveAddress) {
+    try {
+      // The resolver writes what it found onto the order and saves it, so the
+      // address is simply read again rather than merged a second time here.
+      if (await input.resolveAddress(order)) address = addressOf(order, input.address);
+    } catch {
+      // The shop being unreachable is not this order's fault, and the address
+      // may already be complete enough. Fall through to the check below, which
+      // says plainly what is still missing.
+    }
+  }
+
   const missing = missingFields(address);
   if (missing.length) return result({ error: `Cannot book without the ${missing.join(", ")}.` });
 

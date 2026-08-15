@@ -172,6 +172,34 @@ function nextPageInfo(headers: Headers): string | undefined {
 }
 
 /**
+ * One order, by the shop's own id.
+ *
+ * The sync reaches back over a window and is the right tool for keeping money
+ * up to date. This is for the other question — "what is this one order's
+ * delivery address" — asked at the moment somebody is trying to book a parcel
+ * for an order placed months ago, which no reasonable window would pull again.
+ *
+ * Returns null rather than throwing when the shop has never heard of it: an
+ * order imported from the checkout export has no Shopify id to ask about, and
+ * that is an ordinary state rather than a fault.
+ */
+export async function fetchOrder(config: ShopifyConfig, orderId: string): Promise<ShopifyOrder | null> {
+  assertShopDomain(config.domain);
+  const id = String(orderId ?? "").trim();
+  if (!id) return null;
+
+  try {
+    const { data } = await httpJson<{ order?: ShopifyOrder }>({
+      service: "Shopify", url: url(config, `orders/${encodeURIComponent(id)}.json`, {}), headers: authHeaders(config)
+    });
+    return data.order ?? null;
+  } catch (error) {
+    if (error instanceof IntegrationError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+/**
  * Every order touched since `updatedSince`, oldest first.
  *
  * Keyed on `updated_at` rather than `created_at` on purpose: a month-old order

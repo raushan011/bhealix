@@ -130,7 +130,7 @@ Seed admin: `admin@bhealix.com` / `Bhealix@123` — **change before production**
 | Billing | `Invoice`, `Customer`, `PaymentProof`, `BillingSettings`, `Counter` | `lib/billing/{constants,gst,numbering,types,customers,attachments,follow-ups}` | `lib/billing/{invoices,compose}.ts` | `/api/invoices`, `/api/customers`, `/api/billing` |
 | HR | `LeaveRequest`, `Attendance`, `Holiday` | `lib/hr/{leave,attendance}` | `lib/hr/records.ts` | `/api/hr/{leave,attendance,holidays,overview}` |
 | Payroll | `SalaryStructure`, `PayrollRun`, `Payslip`, `PayrollSettings` | `lib/hr/payroll.ts` | `lib/hr/payroll-run.ts` | `/api/hr/{payroll,payslips,salary}` |
-| Affiliate sales | `SalesRep`, `SalesOrder`, `SalesPayout`, `SalesPayoutLine`, `SalesLead`, `SalesSettings` | `lib/sales/{constants,coupons,commission,delivery,payouts,leads,fulfilment,types}` | `lib/sales/{settings,shopify,shiprocket,sync,booking,payout-run,reporting,secrets,http,reps}` | `/api/sales/*` |
+| Affiliate sales | `SalesRep`, `SalesOrder`, `SalesPayout`, `SalesPayoutLine`, `SalesLead`, `SalesSettings` | `lib/sales/{constants,coupons,commission,delivery,payouts,leads,fulfilment,types}` | `lib/sales/{settings,shopify,shiprocket,sync,booking,address,payout-run,reporting,secrets,http,reps}` | `/api/sales/*` |
 | Audit | `AuditEvent` | — | `lib/audit.ts` | — (written inline) |
 
 **The pure/server split is a rule, not an accident.** Files listed under "pure logic" contain no
@@ -208,7 +208,7 @@ src/
 │   ├── sales/       constants, coupons, commission, delivery, payouts, leads,
 │   │                fulfilment, types                                            (pure)
 │   │                secrets, http, shopify, shiprocket, settings, sync, booking,
-│   │                payout-run, reporting, reps                                (server)
+│   │                address, payout-run, reporting, reps                     (server)
 │   └── workspace.ts Which CRM a path belongs to
 ├── models/                          One file per bounded context — see §6
 └── (tests co-located as *.test.ts next to what they test)
@@ -971,7 +971,9 @@ warehouse are counted under the same name.
 | `/api/sales/orders/[id]` | GET | `viewSales` | |
 | | PATCH | `manageSales` | `{override?: DeliveryState \| null, overrideReason?, notes?}` — the manual delivery correction. Recalculates and audits `sales.delivery.overridden` |
 | `/api/sales/fulfilment/options` | GET | `processOrders` | The account's pickup addresses and the last parcel's measurements. A missing or refused Shiprocket credential is a **200 with a `refusal` sentence**, not an error — the list and its filters still work without one |
-| `/api/sales/fulfilment/couriers` | POST | `processOrders` | `{orderId, pickupLocation, weight, pinCode?}` → the couriers that reach that pin code, with rates. Per order, because the answer is per pin code; a batch sends a rule instead |
+| `/api/sales/fulfilment/couriers` | POST | `processOrders` | `{orderId, pickupLocation, weight, pinCode?}` → the couriers that reach that pin code, with rates. Per order, because the answer is per pin code; a batch is priced against its first order and the courier chosen applies to all of them |
+| `/api/sales/fulfilment/address` | POST | `processOrders` | `{orderId}` → the delivery address, read back from Shopify when this system never kept one, and **written to the order**. Always a 200 with whatever it could find; "Shopify did not answer" is not a reason to refuse a screen whose next control is a form for typing it in |
+| `/api/sales/orders/[id]/track` | GET | `processOrders` | The courier's own scan history for one parcel, plus the public tracking URL. Puts what comes back through the same `deliveryStateFrom` and `recalculateCommission` the nightly sync uses, so the desk cannot see "Delivered" here while the system says "Awaiting". **Not** the manual override, which stays with `manageSales` |
 | `/api/sales/orders/process` | POST | `processOrders` | `{orderIds[≤5], pickupLocation, parcel{}, courierId? \| courierRule, schedulePickup, address?}`. Books each order and returns a `ProcessResult` **per order**, never a total. `maxDuration = 60`. Not a transaction and deliberately so — an order booked at the courier stays booked here. Audits `sales.orders.processed` |
 | `/api/sales/orders/documents` | GET | `processOrders` | `?ids=&doc=invoice\|label` (≤30). One merged PDF, streamed through rather than redirected — the Shiprocket URL is signed and expires. An invoice keys on the **order**, a label on the **shipment**; orders not ready are named and counted in `x-orders-skipped` |
 | `/api/sales/sync` | POST | `manageSales` | `{target: "all" \| "orders" \| "shipments" \| "recalculate", sinceDays?}`. Runs inline and returns a `SyncReport`. An integration failure is a **502 carrying the other side's own words** |
@@ -987,7 +989,7 @@ warehouse are counted under the same name.
 | | PATCH | `runSalesPayout` (adjust) / `approveSalesPayout` (the rest) | `{action:"adjust", line, adjustments[], note?}` (draft only) \| `{action:"approve"}` \| `{action:"reopen"}` \| `{action:"pay", paymentDate, paymentMode, reference?}`. Reopen only from Approved; **Paid is terminal** |
 | | DELETE | `approveSalesPayout` | drafts only; releases and re-prices the commissions |
 
-### 7.9a Processing an order — `lib/sales/{fulfilment,booking}.ts`
+### 7.9a Processing an order — `lib/sales/{fulfilment,booking,address}.ts`
 
 Booking the parcel, which was until now done by hand in Shiprocket's own panel: find the order, type
 it in again, check which couriers reach that pin code, assign an airway bill, print the invoice.
@@ -1019,6 +1021,20 @@ Four things about it are decisions rather than plumbing:
 A named courier is never substituted; an order it cannot serve is reported. A rule (`recommended`,
 `cheapest`, `fastest`) is applied per order against that order's own serviceability list, which is
 what makes one press work for forty parcels bound for forty pin codes.
+
+**The courier is chosen by a person, by default.** The rates are fetched as the dialog opens and
+listed cheapest first with what each dearer option costs over it, because freight is money and the
+spread on one parcel is routinely half the margin on the order. The rules are the alternative, for
+the mornings when forty parcels matter more than four rupees each. Rates are re-asked for when the
+parcel or the warehouse changes, and by a button otherwise — never on a keystroke, or typing a pin
+code would be six calls to Shiprocket to reach one answer.
+
+**Addresses are fetched, not demanded.** `lib/sales/address.ts` reads an order back from Shopify when
+this system has no street for it, and writes what it finds onto the order. Every order placed before
+parcels were booked from here is in that state: the sync kept the city, the state and the pin code,
+because those were the only three fields the commission arithmetic read. It is bound once per batch,
+called by the booking route *before* the missing-fields refusal, and never overwrites a field
+somebody typed by hand.
 
 ---
 
@@ -1535,7 +1551,7 @@ Co-located `*.test.ts` next to the module they cover; `npm test` runs vitest onc
 | `lib/sales/oauth.test.ts` | the shop-domain guard against a forged `shop` parameter, the authorize URL, and HMAC verification against a tampered or wrongly-signed callback |
 | `lib/sales/leads.test.ts` | Places → lead mapping (including the place with no coordinates, which is kept), the two renames in `toLeadFields`, the search schema's insistence on a type, and that no fourth Google page is ever asked for |
 | `lib/sales/fulfilment.test.ts` | COD against prepaid, the ten digits of a phone however it was stored, the fields whose absence a courier refuses, that a booked parcel is never booked twice, the adhoc body (filed under the shop's own order name, priced at what was actually paid), and the courier rules — including that a named courier is never substituted |
-| `lib/sales/shiprocket.test.ts` | the booking calls against a stubbed `fetch`: what is sent where, and that a **200 which says no** — `awb_assign_status: 0` — is a failure carrying Shiprocket's own words rather than a silent success |
+| `lib/sales/shiprocket.test.ts` | the booking calls against a stubbed `fetch`: what is sent where, that a **200 which says no** — `awb_assign_status: 0` — is a failure carrying Shiprocket's own words rather than a silent success, and that a parcel with no scans yet reads as "not collected" rather than as an error |
 | `components/ui/modal.test.tsx`, `components/sales/process-{screen,orders}.test.tsx` | the three rendered-component tests: the picking list opens on what still has to go out and says on each row why one cannot, and the booking dialog chunks a long selection without losing an order between chunks, leaves out what it already knows cannot be booked, and never carries one order's address into a batch |
 
 **New arithmetic belongs in a pure module with a test.** Database code is exercised through the

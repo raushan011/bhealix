@@ -225,10 +225,15 @@ Worth doing once, deliberately, before you trust the numbers:
 was until now done by hand in Shiprocket's own panel: find the order, type it in again, check which
 couriers reach that pin code, assign an airway bill, print the invoice.
 
-It opens on **what has not gone out yet, oldest first** — the oldest unbooked order is the one the
-customer is about to telephone about. Narrow it with any combination of the filters: cash on delivery
-against prepaid, a courier, a partner, a date range, or *last attempt failed* to pick up whatever
-would not book this morning.
+It opens on **every order, oldest first** — the oldest unbooked order is the one the customer is about
+to telephone about. Narrow it with any combination of the filters: **Processing** for what has not
+gone out yet (or what is in Shiprocket without an airway bill, or what failed last time), cash on
+delivery against prepaid, a courier, a partner, a date range.
+
+One thing this screen cannot show you: an order that carried **no partner's coupon**. The affiliate
+CRM only ever stores orders a coupon attributed, because its whole job is working out who is owed
+what — an order nobody introduced has no place in it. If the shop's other orders need shipping from
+here too, that is a change to what the sync keeps, and worth asking for deliberately.
 
 ### One order
 
@@ -238,16 +243,35 @@ Press **Process** on the row. The dialog asks four things:
   Shiprocket under *Settings → Pickup Addresses* first; nothing can be booked without it.
 - **The parcel** — weight in kilograms, and length, breadth and height in centimetres. Whatever you
   used last time is filled in, so this is typed once rather than every morning.
-- **The courier** — *Shiprocket's pick*, *cheapest* or *quickest*, decided per order out of whatever
-  can actually reach that pin code. Or **Pick one from the list**, which shows every courier that
-  serves the address with its price and its promised days, so you can choose on the money.
+- **The courier** — every courier that serves the address, **listed with its price the moment the
+  dialog opens**, cheapest first, with what each dearer one costs over the cheapest and how many days
+  it promises. Nothing is chosen for you: freight is money, and the gap between the cheapest and the
+  quickest on one parcel is often half the margin on the order. Change the weight or the warehouse and
+  the rates are asked for again, because a rate for half a kilo is not a rate for two.
+
+  If you would rather not choose forty times on a busy morning, the same dropdown offers *Shiprocket's
+  pick*, *cheapest* or *quickest* — decided per order out of whatever reaches that particular pin code.
 - **Ask the courier to collect** — leave this off if the warehouse already has a standing daily
   pickup. Shiprocket treats a second request for the same day as an error rather than ignoring it.
 
-Below that is the **delivery address**, editable. This is the field that matters: orders that came in
-through the checkout export often have a city and a phone and no street at all, and no parcel can be
-booked without one. What you type is saved onto the order, so it is typed once and survives the next
-sync.
+Below that is the **delivery address**, editable.
+
+**It fills itself in.** Orders placed before this screen existed kept only the city, the state and the
+pin code — those were the only three fields the commission calculation ever needed — so the street is
+read back from Shopify when the dialog opens and saved onto the order, once. **Fetch from the shop**
+asks again if you want it. Orders that came in through the checkout export have nothing in Shopify to
+read, so those are typed in; what you type is saved and survives the next sync.
+
+### Where is it?
+
+**Track**, on any order that has an airway bill. It asks the courier directly rather than showing the
+last sync's word, so it is the answer to give somebody on the telephone: every scan the parcel has
+had, where and when, newest first — and a link to the courier's own tracking page that a customer can
+be sent.
+
+Opening it also brings this system's own delivery state up to date, so an order the courier has
+already delivered stops reading as *Awaiting* here until the nightly sync catches up. A parcel booked
+ten minutes ago has no scans yet; that is said plainly rather than reported as a failure.
 
 ### Forty at once
 

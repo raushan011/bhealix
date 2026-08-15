@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toDateInput, toMinutes, toClock, toDisplayTime, weekdayOf } from "./time";
+import { formatDateTime, toDateInput, toMinutes, toClock, toDisplayTime, weekdayOf } from "./time";
 
 describe("toDateInput", () => {
   it("keeps the local calendar day for a plan saved at local midnight", () => {
@@ -24,5 +24,19 @@ describe("time helpers", () => {
 
   it("wraps past midnight rather than showing a 26th hour", () => {
     expect(toClock(25 * 60 + 15)).toBe("01:15");
+  });
+});
+
+describe("formatDateTime", () => {
+  it("reads a courier's own timestamp, which is not an ISO one", () => {
+    // Shiprocket writes `2026-08-11 14:20:00`, with a space and no zone. Some
+    // engines refuse it outright, and a scan feed showing "Invalid Date" is
+    // worse than no feed at all.
+    expect(formatDateTime("2026-08-11 14:20:00")).toMatch(/11 Aug/);
+    expect(formatDateTime("2026-08-11 14:20:00")).toMatch(/2:20/);
+  });
+
+  it("hands back anything it cannot read, rather than inventing a date", () => {
+    expect(formatDateTime("shortly")).toBe("shortly");
   });
 });

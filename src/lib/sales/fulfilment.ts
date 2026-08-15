@@ -132,7 +132,7 @@ export function addressOf(order: BookableOrder, overrides?: Address | null): Add
 }
 
 /** An override that was left empty must not blank out what the order already knew. */
-function stripBlank(input?: Address | null): Address {
+export function stripBlank(input?: Address | null): Address {
   if (!input) return {};
   const kept: Address = {};
   for (const [key, value] of Object.entries(input)) {

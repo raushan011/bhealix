@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Download, PackageSearch, Tag, Truck } from "lucide-react";
+import { AlertTriangle, Download, MapPin, PackageSearch, Tag, Truck } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Field, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
 import { ProcessDialog, downloadDocuments } from "@/components/sales/process-orders";
+import { TrackDialog } from "@/components/sales/track-order";
 import { SyncButton } from "@/components/sales/sync-button";
 import { formatDate } from "@/lib/time";
 import { deliveryTone } from "@/lib/sales/delivery";
@@ -35,8 +36,18 @@ type Response = {
   couriers: string[];
 };
 
+/**
+ * Every order, oldest first.
+ *
+ * It opened on "not processed" to begin with, which is the shipping desk's own
+ * working list — but it is not the only thing this screen is for. Somebody who
+ * has just booked forty parcels wants to see the forty, and somebody chasing a
+ * customer wants the order that went out last week; both would find an empty
+ * list and no clue that a filter was hiding it. So it opens on everything, and
+ * *Processing* narrows it to whatever the job of the moment is.
+ */
 const BLANK = {
-  q: "", processed: "no", delivery: "", payment: "", courier: "", rep: "", from: "", to: "", sort: "oldest"
+  q: "", processed: "", delivery: "", payment: "", courier: "", rep: "", from: "", to: "", sort: "oldest"
 };
 
 export function ProcessScreen() {
@@ -55,6 +66,7 @@ export function ProcessScreen() {
    */
   const [selected, setSelected] = useState<Record<string, SalesOrderRecord>>({});
   const [processing, setProcessing] = useState<SalesOrderRecord[] | null>(null);
+  const [tracking, setTracking] = useState<SalesOrderRecord | null>(null);
 
   const load = useCallback(async () => {
     const search = new URLSearchParams({ page: String(page), limit: "50", sort: filters.sort });
@@ -223,6 +235,7 @@ export function ProcessScreen() {
             <OrderRow key={order._id} order={order} chosen={Boolean(selected[order._id])}
               onToggle={() => toggle(order)}
               onProcess={() => setProcessing([order])}
+              onTrack={() => setTracking(order)}
               onDownload={kind => download(kind, [order])}
               mayProcess={Boolean(options && !options.refusal)} />
           ))}
@@ -243,16 +256,20 @@ export function ProcessScreen() {
     {processing && options && <ProcessDialog orders={processing} options={options}
       onClose={() => setProcessing(null)}
       onDone={() => { setSelected({}); load(); }} />}
+
+    {/* Tracking re-reads the courier, so the row behind it can have moved on. */}
+    {tracking && <TrackDialog order={tracking} onClose={() => setTracking(null)} onRefreshed={load} />}
   </div>;
 }
 
-/** One order, as somebody about to pack it needs to see it. */
-function OrderRow({ order, chosen, mayProcess, onToggle, onProcess, onDownload }: {
+/** One order, as somebody about to pack it — or asked about it — needs to see it. */
+function OrderRow({ order, chosen, mayProcess, onToggle, onProcess, onTrack, onDownload }: {
   order: SalesOrderRecord;
   chosen: boolean;
   mayProcess: boolean;
   onToggle: () => void;
   onProcess: () => void;
+  onTrack: () => void;
   onDownload: (kind: "invoice" | "label") => void;
 }) {
   const state = processStateOf(order);
@@ -289,6 +306,7 @@ function OrderRow({ order, chosen, mayProcess, onToggle, onProcess, onDownload }
         <p className="mt-1 text-xs font-medium text-[var(--ok-ink)]">
           {order.shipment?.courier || "Courier"} · AWB {order.shipment?.awb}
           {order.shipment?.pickupScheduledAt ? ` · pickup ${formatDate(order.shipment.pickupScheduledAt)}` : ""}
+          {order.shipment?.status ? ` · ${order.shipment.status}` : ""}
         </p>
       )}
 
@@ -307,6 +325,13 @@ function OrderRow({ order, chosen, mayProcess, onToggle, onProcess, onDownload }
     </div>
 
     <div className="flex shrink-0 flex-wrap items-center gap-3 text-xs font-medium">
+      {/* The question a parcel with an airway bill actually gets asked: where is
+          it. Reads the courier live rather than showing the last sync's word. */}
+      {booked && (
+        <button className="inline-flex items-center gap-1 text-[var(--brand)] hover:underline" onClick={onTrack}>
+          <MapPin size={13} />Track
+        </button>
+      )}
       {order.shipment?.shiprocketOrderId && (
         <button className="text-[var(--brand)] hover:underline" onClick={() => onDownload("invoice")}>Invoice</button>
       )}

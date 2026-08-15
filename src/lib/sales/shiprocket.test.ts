@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { IntegrationError } from "./http";
 import {
-  assignAwb, createOrder, documentUrl, matchKeysFor, pickupLocations, schedulePickup, serviceability, toCourierOptions
+  assignAwb, createOrder, documentUrl, matchKeysFor, pickupLocations, schedulePickup, serviceability, toCourierOptions,
+  trackByAwb
 } from "./shiprocket";
 import type { AdhocOrderPayload } from "./fulfilment";
 
@@ -192,6 +193,40 @@ describe("documentUrl", () => {
     const calls = stubFetch({});
     await expect(documentUrl("token", "invoice", ["", "0"])).rejects.toThrow(/have been booked/);
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe("trackByAwb", () => {
+  it("reads the courier's movement history and the page a customer can be given", async () => {
+    const calls = stubFetch({ tracking_data: {
+      shipment_status: 17,
+      shipment_track: [{ current_status: "In Transit", courier_name: "Ecom Express" }],
+      shipment_track_activities: [
+        { date: "2026-08-12 09:10:00", activity: "Out for delivery", location: "Patna" },
+        { date: "2026-08-11 22:40:00", activity: "Reached destination hub", location: "Patna" }
+      ],
+      track_url: "https://shiprocket.co/tracking/1234567890"
+    } });
+
+    const tracking = await trackByAwb("token", "1234567890");
+    expect(calls[0].url).toContain("/courier/track/awb/1234567890");
+    expect(tracking.status).toBe("In Transit");
+    expect(tracking.courier).toBe("Ecom Express");
+    expect(tracking.scans).toHaveLength(2);
+    expect(tracking.scans[0].activity).toBe("Out for delivery");
+    expect(tracking.trackUrl).toContain("shiprocket.co/tracking");
+  });
+
+  it("says a parcel has not been collected yet, rather than failing", async () => {
+    // The ordinary state of an airway bill assigned ten minutes ago. Treating it
+    // as an error would have somebody re-book a parcel that is perfectly fine.
+    stubFetch({ tracking_data: { track_status: 0 } });
+    const tracking = await trackByAwb("token", "1234567890");
+
+    expect(tracking.scans).toEqual([]);
+    expect(tracking.note).toMatch(/has not scanned this parcel yet/);
+    // Still worth a link: Shiprocket's own page works before the first scan.
+    expect(tracking.trackUrl).toContain("1234567890");
   });
 });
 
