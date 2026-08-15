@@ -1,7 +1,7 @@
 import { Schema, model, models } from "mongoose";
 import {
-  COMMISSION_BASES, COMMISSION_STATUSES, CUSTOMER_DISCOUNT_TYPES, DEFAULT_BACKFILL_DAYS, DEFAULT_HOLD_DAYS,
-  DELIVERY_STATES, ORDER_SOURCES, PAYOUT_MODES, PAYOUT_STATUSES
+  COMMISSION_BASES, COMMISSION_STATUSES, COURIER_RULES, CUSTOMER_DISCOUNT_TYPES, DEFAULT_BACKFILL_DAYS,
+  DEFAULT_HOLD_DAYS, DELIVERY_STATES, ORDER_SOURCES, PAYOUT_MODES, PAYOUT_STATUSES
 } from "@/lib/sales/constants";
 import { DEFAULT_RULES } from "@/lib/sales/commission";
 import { LEAD_SOURCES, LEAD_STATUSES } from "@/lib/sales/leads";
@@ -193,13 +193,26 @@ const SalesOrderSchema = new Schema({
   placedAt: { type: Date, required: true, index: true },
   currency: { type: String, default: "INR" },
 
+  /**
+   * Where the parcel is going.
+   *
+   * The street lines exist because orders are booked with the courier from here
+   * rather than in Shiprocket's own panel, and a booking without an address is
+   * refused. They are filled in by the Shopify sync where the checkout collected
+   * them, and typed in by whoever is processing the order where it did not — an
+   * order imported from the Fastrr checkout export routinely arrives with a city
+   * and a phone and no street at all, and nothing can invent one.
+   */
   customer: {
     name: String,
     email: String,
     phone: String,
+    address1: String,
+    address2: String,
     city: String,
     state: String,
-    pinCode: String
+    pinCode: String,
+    country: String
   },
 
   /** The coupon that attributed it, and the partner behind that coupon. */
@@ -243,7 +256,15 @@ const SalesOrderSchema = new Schema({
   cancelledAt: Date,
   fullyRefunded: { type: Boolean, default: false },
 
-  /** What Shiprocket says, kept raw beside what we made of it. */
+  /**
+   * What Shiprocket says, kept raw beside what we made of it — and, since the
+   * parcel is now booked from here, what we asked it for.
+   *
+   * The two halves are worth telling apart. Everything down to `checkedAt` is
+   * read back by the delivery sync and may change on any pass; everything below
+   * it is what somebody at this desk decided when they processed the order, and
+   * is only ever written once.
+   */
   shipment: {
     shiprocketOrderId: String,
     shipmentId: String,
@@ -253,7 +274,37 @@ const SalesOrderSchema = new Schema({
     status: String,
     statusCode: Number,
     deliveredAt: Date,
-    checkedAt: Date
+    checkedAt: Date,
+
+    /** Which of the company's addresses the parcel leaves from, by Shiprocket's nickname for it. */
+    pickupLocation: String,
+    /** Shiprocket's id for the courier chosen, so the same one can be asked for again. */
+    courierId: Number,
+    /** What the parcel was declared as. Kept because it is what the freight was priced on. */
+    parcel: {
+      weight: Number,
+      length: Number,
+      breadth: Number,
+      height: Number
+    },
+    /** What the courier was told to collect at the door — nothing, on a prepaid order. */
+    codAmount: Number,
+    /** Set only when a pickup was actually asked for; most warehouses have a standing one. */
+    pickupScheduledAt: Date,
+    pickupToken: String,
+
+    /** When this order was booked from this screen, and by whom. */
+    processedAt: Date,
+    processedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    /**
+     * Why the last attempt failed, in Shiprocket's own words.
+     *
+     * Kept on the order rather than only returned to the browser because a batch
+     * of forty is read afterwards, not watched: the six that would not book have
+     * to still say why when somebody comes back to them after lunch. Cleared the
+     * moment one succeeds.
+     */
+    lastError: String
   },
 
   delivery: {
@@ -308,6 +359,21 @@ const SalesOrderSchema = new Schema({
 SalesOrderSchema.index({ rep: 1, placedAt: -1 });
 SalesOrderSchema.index({ "commission.status": 1, "commission.maturesAt": 1 });
 SalesOrderSchema.index({ "delivery.state": 1, placedAt: -1 });
+/**
+ * The processing screen's own question: what has not been sent to the courier
+ * yet, oldest first — because the oldest unbooked order is the one somebody is
+ * about to telephone about.
+ */
+SalesOrderSchema.index({ "shipment.awb": 1, placedAt: -1 });
+/**
+ * The courier filter, and the list of couriers behind it.
+ *
+ * The list is a `distinct` over the whole collection on every read of the order
+ * list — deliberately unfiltered, so narrowing the screen cannot empty the
+ * dropdown that widens it again. Without this index that is a collection scan
+ * per page load; with it, it is a scan of the index alone.
+ */
+SalesOrderSchema.index({ "shipment.courier": 1 }, { sparse: true });
 
 export const SalesOrder = models.SalesOrder ?? model("SalesOrder", SalesOrderSchema);
 
@@ -684,6 +750,28 @@ const SalesSettingsSchema = new Schema({
   shiprocketTokenExpiresAt: Date,
   lastShipmentSyncAt: Date,
   lastShipmentSyncError: String,
+
+  /**
+   * What the last parcel was booked as, so the next one is not typed again.
+   *
+   * Kept here rather than asked for every time because a company ships one or
+   * two things: the carton is the same carton, and it leaves from the same
+   * warehouse. Written on every successful booking rather than edited on a
+   * settings screen — the honest default for "what size is a parcel" is
+   * whatever the last one was, and a screen asking the question would be a
+   * screen somebody has to remember to update.
+   */
+  fulfilment: {
+    pickupLocation: String,
+    weight: Number,
+    length: Number,
+    breadth: Number,
+    height: Number,
+    /** How the courier was chosen last time — a rule, or a named one. */
+    courierRule: { type: String, enum: COURIER_RULES },
+    courierId: Number,
+    courierName: String
+  },
 
   rules: { type: [RuleSchema], default: () => DEFAULT_RULES },
   /** Days a delivered order is held before its commission may be paid. */

@@ -96,6 +96,55 @@ export type CommissionBase = (typeof COMMISSION_BASES)[number];
 export const CUSTOMER_DISCOUNT_TYPES = ["Percentage", "Fixed amount"] as const;
 export type CustomerDiscountType = (typeof CUSTOMER_DISCOUNT_TYPES)[number];
 
+/**
+ * How a courier is chosen when an order is booked.
+ *
+ * A named courier is the fourth option and lives beside these as an id rather
+ * than in this list, because it is a different kind of answer: these three are
+ * decided per order out of whatever Shiprocket says can reach that pin code,
+ * which is what makes a batch of forty parcels bound for forty towns
+ * processable in one press. Naming a courier and meaning it is the exception —
+ * and it fails honestly on the orders that courier cannot serve rather than
+ * quietly substituting another.
+ */
+export const COURIER_RULES = ["recommended", "cheapest", "fastest"] as const;
+export type CourierRule = (typeof COURIER_RULES)[number];
+
+/**
+ * Where an order stands with the courier, as the processing screen sorts them.
+ *
+ * Deliberately separate from `DELIVERY_STATES`, which is what happened to the
+ * parcel. This is what has been *done about* it, and the two are only loosely
+ * related: an order can be booked and have an AWB for a week before the courier
+ * reports anything at all.
+ *
+ * `Booked` is the one worth understanding. It means Shiprocket has the order but
+ * no airway bill has been assigned, which is exactly the state an order sits in
+ * when it arrives from the shop's own channel — and the state that has to be
+ * finished by hand today.
+ */
+export const PROCESS_STATES = ["Not processed", "Booked", "Ready to ship", "Pickup scheduled"] as const;
+export type ProcessState = (typeof PROCESS_STATES)[number];
+
+/** What a parcel is assumed to be when nobody has said otherwise — half a kilo, a small carton. */
+export const DEFAULT_PARCEL = { weight: 0.5, length: 20, breadth: 15, height: 8 } as const;
+
+/**
+ * How many orders one press may push at Shiprocket.
+ *
+ * Deliberately small, because of the arithmetic behind each one. An order that
+ * Shiprocket has never seen costs up to three lookups to be sure it is not
+ * already there, then a booking, a serviceability check and an airway bill —
+ * six calls to somebody else's API, none of them fast. Five orders is thirty
+ * calls, which fits comfortably inside a serverless function's minute; twenty
+ * would not, and the failure mode is a gateway timeout with half the parcels
+ * booked at the courier and no record here of which half.
+ *
+ * The browser sends a long selection in chunks of this size and reports as each
+ * one lands, so two hundred orders is a progress bar rather than a gamble.
+ */
+export const PROCESS_BATCH = 5;
+
 /** The default hold before a delivered order's commission may be paid, in days. */
 export const DEFAULT_HOLD_DAYS = 7;
 

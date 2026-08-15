@@ -121,6 +121,20 @@ export const can = {
    * state by hand is the manual override on whether an order pays out at all.
    */
   manageSales: (role: Role) => role === "ADMIN",
+  /**
+   * Booking an order with the courier, choosing who carries it, and printing its
+   * invoice and label.
+   *
+   * Deliberately **not** `manageSales`. Everything that permission guards decides
+   * where money goes — a coupon code attributes commission to a person, a
+   * delivery override decides whether an order pays at all — and none of that is
+   * true of a parcel. Processing an order books freight and prints paper; it
+   * changes no rate, no attribution and no payout. The person who packs the
+   * boxes should not need the authority to redirect somebody's commission in
+   * order to do it, and the desk that answers "where is my parcel" on the
+   * telephone is the desk that should be able to send it.
+   */
+  processOrders: (role: Role) => role === "ADMIN" || role === "HR",
   /** Preparing a week's payout: gathering what has matured and setting it out per rep. */
   runSalesPayout: (role: Role) => role === "ADMIN" || role === "HR",
   /**

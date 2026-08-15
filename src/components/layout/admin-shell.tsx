@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BadgePercent, BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, HeartHandshake, LayoutDashboard, LogOut, Menu, Package, Receipt, Repeat, Search, Settings, ShoppingBag, Stethoscope, Tag, Users, Wallet, Warehouse, X } from "lucide-react";
+import { BadgePercent, BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, HeartHandshake, LayoutDashboard, LogOut, Menu, Package, Receipt, Repeat, Search, Settings, ShoppingBag, Stethoscope, Tag, Truck, Users, Wallet, Warehouse, X } from "lucide-react";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { Brand, BrandMark } from "@/components/ui/brand";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -48,17 +48,24 @@ const NAV = [
   { href: "/admin/sales/reps", label: "Partners", icon: Users, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
   { href: "/admin/sales/coupons", label: "Coupons", icon: Tag, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
   { href: "/admin/sales/orders", label: "Orders", icon: ShoppingBag, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
+  // Reading what came in and sending it are different jobs done by different
+  // people at different times of day, so they are two screens rather than a mode
+  // of one. Orders answers "what did this coupon bring in"; this one is the
+  // morning's picking list.
+  { href: "/admin/sales/orders/process", label: "Process orders", icon: Truck, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
   { href: "/admin/sales/payouts", label: "Payouts", icon: BadgePercent, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
   { href: "/admin/sales/settings", label: "Settings", icon: Settings, roles: ["ADMIN"], group: "Affiliate", workspace: "sales" }
 ] as const;
 
 /**
- * Exact matching for the three that sit above others in the same path —
- * /admin/hr is the People dashboard, not an ancestor of Attendance, and
- * /admin/sales is the affiliate overview rather than all of it. Either would
- * otherwise light up on every screen beneath them at once.
+ * Exact matching for the four that sit above others in the same path —
+ * /admin/hr is the People dashboard, not an ancestor of Attendance,
+ * /admin/sales is the affiliate overview rather than all of it, and
+ * /admin/sales/orders is the order list rather than the processing screen
+ * beneath it. Any of them would otherwise light up alongside the screen
+ * actually being looked at.
  */
-const EXACT = new Set(["/admin", "/admin/hr", "/admin/sales"]);
+const EXACT = new Set(["/admin", "/admin/hr", "/admin/sales", "/admin/sales/orders"]);
 const isActive = (pathname: string, href: string) =>
   EXACT.has(href) ? pathname === href : pathname.startsWith(href);
 const initials = (name: string) => name.trim().split(/\s+/).map(part => part[0]).slice(0, 2).join("").toUpperCase() || "?";

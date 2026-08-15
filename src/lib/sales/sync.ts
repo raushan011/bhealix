@@ -7,7 +7,7 @@ import { deliveryStateFrom } from "./delivery";
 import { IntegrationError } from "./http";
 import { addIsoDays } from "./payouts";
 import { backfillDaysOf, holdDaysOf, loadCredentials, rulesOf, shiprocketToken, shopifyConfig } from "./settings";
-import { codesOn, fetchOrders, mapOrder, type ShopifyOrder } from "./shopify";
+import { codesOn, fetchOrders, mapOrder, mergeCustomer, type MappedOrder, type ShopifyOrder } from "./shopify";
 import type { CommissionRule } from "./commission";
 import { fetchShipments, matchKey, matchKeysFor } from "./shiprocket";
 import { emptyReport, type SyncReport } from "./types";
@@ -94,7 +94,10 @@ export async function saveShopifyOrder(
     source: "Shopify",
     shopifyOrderId: mapped.shopifyOrderId,
     name: mapped.name, orderNumber: mapped.orderNumber, placedAt: mapped.placedAt, currency: mapped.currency,
-    customer: mapped.customer, couponCode: match.code, rep: match.repId, ruleSuffix: suffix,
+    // Merged rather than replaced, so an address typed in to get the parcel
+    // booked survives the next pass — see `mergeCustomer`.
+    customer: mergeCustomer(existing?.customer, mapped.customer),
+    couponCode: match.code, rep: match.repId, ruleSuffix: suffix,
     discountCodes: mapped.discountCodes, items: mapped.items, totals: mapped.totals,
     financialStatus: mapped.financialStatus, paymentMethod: mapped.paymentMethod,
     // `null`, not `undefined`: assigning undefined leaves a stored value in
@@ -111,7 +114,11 @@ export async function saveShopifyOrder(
 }
 
 /** The mongoose document, kept loose because the model itself is untyped. */
-type OrderDocument = Parameters<typeof recalculateCommission>[0] & { save: () => Promise<unknown> };
+type OrderDocument = Parameters<typeof recalculateCommission>[0] & {
+  /** Read back on a re-sync so a typed-in address is not overwritten with nothing. */
+  customer?: MappedOrder["customer"];
+  save: () => Promise<unknown>;
+};
 
 // ---------------------------------------------------------------- orders pass
 
@@ -268,18 +275,31 @@ export async function syncShipments(options: { from?: string; to?: string } = {}
     const reported = deliveryStateFrom(update.status, update.statusCode);
     const changed = order.delivery.reported !== reported;
 
-    order.shipment = {
-      shiprocketOrderId: update.shiprocketOrderId,
-      shipmentId: update.shipmentId,
-      awb: update.awb,
-      courier: update.courier,
-      status: update.status,
-      statusCode: update.statusCode,
-      // Once a delivery date is known it is never unlearned — a later status
-      // that omits it must not restart the seven-day clock.
-      deliveredAt: update.deliveredAt ?? order.shipment?.deliveredAt,
-      checkedAt: new Date()
-    };
+    /*
+     * Only the half of `shipment` this pass is the authority on.
+     *
+     * It used to assign the whole object, which was harmless while the courier's
+     * feed was the only thing that ever wrote there. Orders are now booked from
+     * the CRM (§ fulfilment), and that writes the other half — which warehouse,
+     * which courier was chosen, the carton, who pressed the button. Replacing
+     * the object wholesale would erase all of it on the next pass.
+     *
+     * Worse, `update.awb` is absent for an order Shiprocket has accepted but not
+     * yet acknowledged an airway bill for, so a blind overwrite could blank an
+     * AWB this system had just assigned — the order would read as unprocessed,
+     * somebody would book it again, and one customer would get two parcels. Each
+     * field is therefore only written when the courier actually said something.
+     */
+    order.set("shipment.shiprocketOrderId", update.shiprocketOrderId || order.shipment?.shiprocketOrderId);
+    order.set("shipment.shipmentId", update.shipmentId || order.shipment?.shipmentId);
+    order.set("shipment.awb", update.awb || order.shipment?.awb);
+    order.set("shipment.courier", update.courier || order.shipment?.courier);
+    order.set("shipment.status", update.status);
+    order.set("shipment.statusCode", update.statusCode);
+    // Once a delivery date is known it is never unlearned — a later status
+    // that omits it must not restart the seven-day clock.
+    order.set("shipment.deliveredAt", update.deliveredAt ?? order.shipment?.deliveredAt);
+    order.set("shipment.checkedAt", new Date());
     order.delivery.reported = reported;
     if (changed) order.delivery.at = new Date();
 

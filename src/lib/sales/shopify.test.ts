@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertShopDomain, codesOn, mapOrder, normaliseDomain, type ShopifyOrder } from "./shopify";
+import { assertShopDomain, codesOn, mapOrder, mergeCustomer, normaliseDomain, type ShopifyOrder } from "./shopify";
 
 describe("normaliseDomain", () => {
   it("takes the address as it stands", () => {
@@ -138,6 +138,20 @@ describe("mapOrder", () => {
     expect(mapped.totals.paid).toBe(1499);
   });
 
+  it("keeps the whole shipping address, which is what the courier booking needs", () => {
+    const mapped = mapOrder(order({
+      shipping_address: {
+        name: "Priya Sharma", address1: "12 MG Road", address2: "Near the station",
+        city: "Patna", province: "Bihar", zip: "800001", country: "India"
+      }
+    }), "RAUSHAN30");
+
+    expect(mapped.customer).toMatchObject({
+      address1: "12 MG Road", address2: "Near the station", city: "Patna", state: "Bihar",
+      pinCode: "800001", country: "India"
+    });
+  });
+
   it("carries the facts a screen needs", () => {
     const mapped = mapOrder(order({
       cancelled_at: "2026-08-02T09:00:00+05:30",
@@ -152,5 +166,27 @@ describe("mapOrder", () => {
     expect(mapped.customer.city).toBe("Patna");
     expect(mapped.cancelledAt).toBeInstanceOf(Date);
     expect(mapped.fullyRefunded).toBe(true);
+  });
+});
+
+describe("mergeCustomer", () => {
+  it("takes what the shop now says", () => {
+    const merged = mergeCustomer({ name: "P Sharma", city: "Patna" }, { name: "Priya Sharma", city: "Patna", pinCode: "800001" });
+    expect(merged).toEqual({ name: "Priya Sharma", city: "Patna", pinCode: "800001" });
+  });
+
+  it("does not blank an address that was typed in to get the parcel booked", () => {
+    // The case this exists for: the checkout never collected a street, somebody
+    // typed one in to book the courier, and the next sync must not wipe it — or
+    // the order that shipped on Tuesday cannot be booked on Thursday.
+    const merged = mergeCustomer(
+      { name: "Priya Sharma", address1: "12 MG Road", city: "Patna" },
+      { name: "Priya Sharma", address1: undefined, city: "Patna" }
+    );
+    expect(merged.address1).toBe("12 MG Road");
+  });
+
+  it("has nothing to keep when the order is new", () => {
+    expect(mergeCustomer(undefined, { name: "Priya" })).toEqual({ name: "Priya" });
   });
 });

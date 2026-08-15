@@ -114,7 +114,10 @@ export type ShopifyOrder = {
   customer?: { first_name?: string; last_name?: string; email?: string; phone?: string } | null;
   email?: string | null;
   phone?: string | null;
-  shipping_address?: { name?: string; city?: string; province?: string; zip?: string; phone?: string } | null;
+  shipping_address?: {
+    name?: string; address1?: string; address2?: string; city?: string; province?: string; zip?: string;
+    country?: string; phone?: string;
+  } | null;
   discount_codes?: { code?: string }[];
   discount_applications?: ShopifyDiscountApplication[];
   line_items?: ShopifyLineItem[];
@@ -223,7 +226,10 @@ export type MappedOrder = {
   orderNumber?: number;
   placedAt: Date;
   currency: string;
-  customer: { name?: string; email?: string; phone?: string; city?: string; state?: string; pinCode?: string };
+  customer: {
+    name?: string; email?: string; phone?: string;
+    address1?: string; address2?: string; city?: string; state?: string; pinCode?: string; country?: string;
+  };
   discountCodes: string[];
   items: MappedLine[];
   totals: { gross: number; discount: number; refunded: number; paid: number };
@@ -299,13 +305,23 @@ export function mapOrder(order: ShopifyOrder, couponCode?: string | null): Mappe
     orderNumber: order.order_number,
     placedAt: order.created_at ? new Date(order.created_at) : new Date(),
     currency: order.currency ?? "INR",
+    /*
+     * The shipping address in full, and not only the three fields the commission
+     * arithmetic ever looks at. The street lines are read by nothing here — they
+     * are what the courier booking needs (§ fulfilment), and Shopify has already
+     * sent them on every order. Storing them is the difference between an order
+     * that books in one press and one somebody has to re-type from the shop.
+     */
     customer: {
       name: [order.customer?.first_name, order.customer?.last_name].filter(Boolean).join(" ") || address?.name || undefined,
       email: order.customer?.email ?? order.email ?? undefined,
       phone: order.customer?.phone ?? order.phone ?? address?.phone ?? undefined,
+      address1: address?.address1 ?? undefined,
+      address2: address?.address2 ?? undefined,
       city: address?.city ?? undefined,
       state: address?.province ?? undefined,
-      pinCode: address?.zip ?? undefined
+      pinCode: address?.zip ?? undefined,
+      country: address?.country ?? undefined
     },
     discountCodes: codesOn(order),
     items,
@@ -315,6 +331,27 @@ export function mapOrder(order: ShopifyOrder, couponCode?: string | null): Mappe
     cancelledAt: order.cancelled_at ? new Date(order.cancelled_at) : undefined,
     fullyRefunded: order.financial_status === "refunded"
   };
+}
+
+/**
+ * The customer as the shop now reports them, without losing what somebody typed.
+ *
+ * A sync overwrites the order it re-reads, which is right for money and wrong
+ * for an address. The street a shipping clerk typed in to get a parcel booked
+ * was typed in *because* the checkout never collected one — so a plain overwrite
+ * blanks it on the next pass, and the order that shipped on Tuesday cannot be
+ * booked on Thursday.
+ *
+ * So a field the shop sends wins, and a field it does not send leaves what is
+ * already there alone. There is no case where Shopify deliberately empties an
+ * address: it either has one or it never did.
+ */
+export function mergeCustomer(existing: MappedOrder["customer"] | undefined | null, incoming: MappedOrder["customer"]): MappedOrder["customer"] {
+  const merged = { ...(existing ?? {}) } as Record<string, string | undefined>;
+  for (const [field, value] of Object.entries(incoming)) {
+    if (String(value ?? "").trim()) merged[field] = value;
+  }
+  return merged as MappedOrder["customer"];
 }
 
 /**

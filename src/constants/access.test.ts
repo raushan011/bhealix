@@ -74,10 +74,19 @@ describe("access", () => {
     expect(can.viewSales("HR")).toBe(true);
   });
 
+  it("lets the desk send a parcel without letting it redirect a commission", () => {
+    // Booking freight and printing a label change no rate and no attribution,
+    // so the shipping desk does not need the authority that issues coupons.
+    expect(can.processOrders("HR")).toBe(true);
+    expect(can.processOrders("ADMIN")).toBe(true);
+    expect(can.manageSales("HR")).toBe(false);
+  });
+
   it("keeps the affiliate operation away from the field panel entirely", () => {
     for (const role of ["MR", "SALES"] as const) {
       expect(can.viewSales(role)).toBe(false);
       expect(can.manageSales(role)).toBe(false);
+      expect(can.processOrders(role)).toBe(false);
       expect(can.runSalesPayout(role)).toBe(false);
       expect(can.approveSalesPayout(role)).toBe(false);
     }

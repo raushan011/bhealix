@@ -1,5 +1,6 @@
 import type { CommissionRule } from "./commission";
-import type { CommissionStatus, DeliveryState, OrderSource, PayoutMode, PayoutStatus } from "./constants";
+import type { CommissionStatus, CourierRule, DeliveryState, OrderSource, PayoutMode, PayoutStatus } from "./constants";
+import type { Parcel, PickupLocation } from "./fulfilment";
 import type { LeadSource, LeadStatus } from "./leads";
 import type { CouponSetupState, RepStatus } from "./partners";
 
@@ -98,7 +99,10 @@ export type SalesOrderRecord = {
   name: string;
   placedAt: string;
   currency: string;
-  customer?: { name?: string; email?: string; phone?: string; city?: string; state?: string; pinCode?: string };
+  customer?: {
+    name?: string; email?: string; phone?: string;
+    address1?: string; address2?: string; city?: string; state?: string; pinCode?: string; country?: string;
+  };
   couponCode?: string;
   rep?: { _id: Id; name: string; code: string } | Id | null;
   /** Who the partner was, written on only when their record was deleted. */
@@ -120,6 +124,15 @@ export type SalesOrderRecord = {
     statusCode?: number;
     deliveredAt?: string;
     checkedAt?: string;
+    /** What was decided here when the order was booked — see `lib/sales/fulfilment.ts`. */
+    pickupLocation?: string;
+    courierId?: number;
+    parcel?: { weight?: number; length?: number; breadth?: number; height?: number };
+    codAmount?: number;
+    pickupScheduledAt?: string;
+    pickupToken?: string;
+    processedAt?: string;
+    lastError?: string;
   };
   delivery: {
     reported: DeliveryState;
@@ -140,6 +153,42 @@ export type SalesOrderRecord = {
     payout?: Id;
   };
   syncedAt?: string;
+};
+
+// ------------------------------------------------------------------ processing
+
+/**
+ * What the processing screen needs before it can offer anything: the company's
+ * own pickup addresses, and whatever the last parcel was booked as.
+ */
+export type FulfilmentOptions = {
+  pickupLocations: PickupLocation[];
+  defaults: {
+    pickupLocation?: string;
+    parcel: Parcel;
+    courierRule: CourierRule;
+    courierId?: number;
+    courierName?: string;
+  };
+  /** Null when Shiprocket is connected; the sentence to show when it is not. */
+  refusal: string | null;
+};
+
+/**
+ * What became of one order in a batch.
+ *
+ * Every order gets a row whether it worked or not — a batch of forty that
+ * reports "34 booked" and nothing else is a batch somebody has to go through by
+ * hand to find the other six.
+ */
+export type ProcessResult = {
+  orderId: Id;
+  name: string;
+  ok: boolean;
+  awb?: string;
+  courier?: string;
+  /** Set when the parcel could not be booked, in the words to put on the screen. */
+  error?: string;
 };
 
 /** What one rep has done, over whatever window the screen asked for. */

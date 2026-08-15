@@ -101,6 +101,12 @@ Shiprocket refuses API logins from your ordinary account, so this must be a sepa
 1. Shiprocket panel → **Settings → API → Configure**.
 2. **Create an API user** with its own email and password. Keep them.
 
+These credentials now do two jobs: they read delivery status back, and they **book parcels** when you
+process an order (see *Processing orders* below). Both need the same login, so a pickup address must
+exist on the account — Shiprocket panel → **Settings → Pickup Addresses** — before anything can be
+sent. The wallet has to have money in it, too: assigning an airway bill spends freight, and an empty
+wallet is the commonest reason a batch comes back refused.
+
 ## 4. Enter both in the CRM
 
 Sign in as the administrator → you will be asked **Doctor CRM or Sales CRM** → choose **Sales CRM** →
@@ -212,6 +218,75 @@ Worth doing once, deliberately, before you trust the numbers:
    commission is still calculated, and the warning is there so it is never silent.
 5. Confirm the **delivery state** matches what Shiprocket shows. If every order sits on `Awaiting`
    while Shiprocket clearly has them, the join is failing — see *When deliveries do not appear*.
+
+## Processing orders — sending the parcel
+
+**Sales CRM → Process orders.** This is the screen for whoever is packing boxes, and it does what
+was until now done by hand in Shiprocket's own panel: find the order, type it in again, check which
+couriers reach that pin code, assign an airway bill, print the invoice.
+
+It opens on **what has not gone out yet, oldest first** — the oldest unbooked order is the one the
+customer is about to telephone about. Narrow it with any combination of the filters: cash on delivery
+against prepaid, a courier, a partner, a date range, or *last attempt failed* to pick up whatever
+would not book this morning.
+
+### One order
+
+Press **Process** on the row. The dialog asks four things:
+
+- **Ships from** — a pickup address on your Shiprocket account. If the list is empty, add one in
+  Shiprocket under *Settings → Pickup Addresses* first; nothing can be booked without it.
+- **The parcel** — weight in kilograms, and length, breadth and height in centimetres. Whatever you
+  used last time is filled in, so this is typed once rather than every morning.
+- **The courier** — *Shiprocket's pick*, *cheapest* or *quickest*, decided per order out of whatever
+  can actually reach that pin code. Or **Pick one from the list**, which shows every courier that
+  serves the address with its price and its promised days, so you can choose on the money.
+- **Ask the courier to collect** — leave this off if the warehouse already has a standing daily
+  pickup. Shiprocket treats a second request for the same day as an error rather than ignoring it.
+
+Below that is the **delivery address**, editable. This is the field that matters: orders that came in
+through the checkout export often have a city and a phone and no street at all, and no parcel can be
+booked without one. What you type is saved onto the order, so it is typed once and survives the next
+sync.
+
+### Forty at once
+
+Tick the orders — the checkbox at the top of the list takes the whole page, and a selection carries
+across pages — then press **Process** in the bar that appears. The same dialog opens, without the
+address form, because an address belongs to one order.
+
+Two things it will not do quietly:
+
+- **It counts what cannot go before it starts.** Orders missing an address, cancelled orders, and
+  orders already booked are named in the dialog and left alone. You are told how many will actually
+  be sent before you commit to anything.
+- **It reports every order, not a total.** When the run finishes you get a line per order: the
+  courier and airway bill for each one that went, and the reason for each one that did not — an empty
+  Shiprocket wallet, a pin code the courier dropped, an address the courier refused. The reason stays
+  on the row afterwards, so a batch processed before lunch can be read after it.
+
+A named courier is never substituted. If you say Delhivery and four of the forty are somewhere
+Delhivery does not reach, those four are reported rather than quietly sent by somebody else.
+
+### Invoices and labels
+
+**Invoices** and **Labels** are on each row and on the selection bar. Thirty orders come back as one
+PDF of thirty pages, ready to print and put in the cartons — Shiprocket merges them, so it is one
+download and not thirty.
+
+An invoice exists as soon as the order is booked. A **label is the airway bill**, so it only exists
+once the order has been processed; select an unprocessed order and you are told which ones were left
+out rather than handed a short file with no explanation.
+
+### What it does not touch
+
+Booking a parcel decides nothing about money. Delivery state, commission, maturity and payouts all
+follow the courier's own reports exactly as they did before — pressing Process does not pay anybody,
+and it never marks an order delivered. That is also why HR can do it: sending a parcel is not the
+same authority as issuing a coupon.
+
+**An order that already has an airway bill has no Process button.** Booking it twice would be two
+parcels, two freights and one customer, and nothing downstream would notice.
 
 ## The life of one commission
 
@@ -411,6 +486,7 @@ Two ways to clear one, both on that row:
 | | Administrator | HR | Partner (their own portal) |
 |---|:-:|:-:|:-:|
 | See the Sales CRM, orders, earnings | ✓ | ✓ | own only |
+| Process orders: book the courier, print invoices and labels | ✓ | ✓ | |
 | Add partners, issue coupons, correct a delivery | ✓ | | |
 | Approve, turn down or suspend a partner | ✓ | | |
 | See a partner's full record and bank details | ✓ | ✓ | own only |

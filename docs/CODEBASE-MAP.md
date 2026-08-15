@@ -130,7 +130,7 @@ Seed admin: `admin@bhealix.com` / `Bhealix@123` — **change before production**
 | Billing | `Invoice`, `Customer`, `PaymentProof`, `BillingSettings`, `Counter` | `lib/billing/{constants,gst,numbering,types,customers,attachments,follow-ups}` | `lib/billing/{invoices,compose}.ts` | `/api/invoices`, `/api/customers`, `/api/billing` |
 | HR | `LeaveRequest`, `Attendance`, `Holiday` | `lib/hr/{leave,attendance}` | `lib/hr/records.ts` | `/api/hr/{leave,attendance,holidays,overview}` |
 | Payroll | `SalaryStructure`, `PayrollRun`, `Payslip`, `PayrollSettings` | `lib/hr/payroll.ts` | `lib/hr/payroll-run.ts` | `/api/hr/{payroll,payslips,salary}` |
-| Affiliate sales | `SalesRep`, `SalesOrder`, `SalesPayout`, `SalesPayoutLine`, `SalesLead`, `SalesSettings` | `lib/sales/{constants,coupons,commission,delivery,payouts,leads,types}` | `lib/sales/{settings,shopify,shiprocket,sync,payout-run,reporting,secrets,http,reps}` | `/api/sales/*` |
+| Affiliate sales | `SalesRep`, `SalesOrder`, `SalesPayout`, `SalesPayoutLine`, `SalesLead`, `SalesSettings` | `lib/sales/{constants,coupons,commission,delivery,payouts,leads,fulfilment,types}` | `lib/sales/{settings,shopify,shiprocket,sync,booking,payout-run,reporting,secrets,http,reps}` | `/api/sales/*` |
 | Audit | `AuditEvent` | — | `lib/audit.ts` | — (written inline) |
 
 **The pure/server split is a rule, not an accident.** Files listed under "pure logic" contain no
@@ -165,7 +165,8 @@ src/
 │   │       ├── page.tsx             affiliate dashboard
 │   │       ├── leads/page.tsx       Google Places business search + the saved lead list
 │   │       ├── reps/{page,[id]}
-│   │       ├── orders/page.tsx
+│   │       ├── orders/page.tsx      what the coupons brought in
+│   │       ├── orders/process/      the picking list (page guards can.processOrders)
 │   │       ├── payouts/{page,[id]}
 │   │       └── settings/{page,layout}   layout guards can.manageSales
 │   ├── choose/page.tsx              Doctor CRM or Sales CRM — the desk's landing page
@@ -204,8 +205,9 @@ src/
 │   ├── hr/          leave, attendance, payroll, payroll-run, records
 │   ├── inventory/   movements, ledger
 │   ├── samples/     movements, ledger
-│   ├── sales/       constants, coupons, commission, delivery, payouts, leads, types (pure)
-│   │                secrets, http, shopify, shiprocket, settings, sync,
+│   ├── sales/       constants, coupons, commission, delivery, payouts, leads,
+│   │                fulfilment, types                                            (pure)
+│   │                secrets, http, shopify, shiprocket, settings, sync, booking,
 │   │                payout-run, reporting, reps                                (server)
 │   └── workspace.ts Which CRM a path belongs to
 ├── models/                          One file per bounded context — see §6
@@ -434,6 +436,7 @@ Roles: `ADMIN`, `HR`, `MR`, `SALES`.
 | `viewAllStock` | ✓ | ✓ | | | read stock without moving any |
 | `viewSales` | ✓ | ✓ | | | read the affiliate operation — also the door to `/admin/sales` |
 | `manageSales` | ✓ | | | | add a rep, issue a coupon, correct a delivery, hold the credentials |
+| `processOrders` | ✓ | ✓ | | | book a parcel with the courier, print its invoice and label — spends freight, decides no commission |
 | `runSalesPayout` | ✓ | ✓ | | | prepare a week's payout and adjust its lines |
 | `approveSalesPayout` | ✓ | | | | approve, reopen, mark paid, delete a draft |
 
@@ -686,7 +689,10 @@ never removed: orders already attributed still point at it.
 `items[{productId, variantId, sku, title, quantity, gross, couponDiscount, otherDiscount, refunded}]`,
 `totals{gross, discount, refunded, paid}`, `financialStatus`, `paymentMethod`, `cancelledAt`,
 `fullyRefunded`,
-`shipment{shiprocketOrderId, shipmentId, awb, courier, status, statusCode, deliveredAt, checkedAt}`,
+`shipment{` — read back by the delivery sync: `shiprocketOrderId, shipmentId, awb, courier, status,
+statusCode, deliveredAt, checkedAt`; written when the parcel is booked from here (§7.9a):
+`pickupLocation, courierId, parcel{weight,length,breadth,height}, codAmount, pickupScheduledAt,
+pickupToken, processedAt, processedBy, lastError` `}`,
 `delivery{reported, override, overrideReason, overrideBy, overrideAt, state, at}`,
 `commission{rate, base, amount, status, maturesAt, wholeOrderFallback, reason, needsReversal, payout, computedAt}`,
 `syncedAt`, `notes`.
@@ -695,7 +701,19 @@ Every line figure is the **whole-line** rupee amount, not the unit — that is h
 discounts, and converting back and forth is how a rounding error gets into somebody's commission.
 `delivery.state` is a cache of `override ?? reported`; `commission` is a cache of the pure arithmetic
 (§4.13a). Indexes: `{rep, placedAt:-1}`, `{"commission.status", "commission.maturesAt"}`,
-`{"delivery.state", placedAt:-1}`.
+`{"delivery.state", placedAt:-1}`, `{"shipment.awb", placedAt:-1}` (the picking list: what has not
+been sent to the courier yet, oldest first).
+
+**The two halves of `shipment` must not be written over each other.** The delivery sync sets each
+read-back field on its own path rather than assigning the object, because replacing it wholesale
+would erase the booking half — and because `update.awb` is absent for an order Shiprocket has
+accepted but not yet acknowledged an airway bill for. A blind overwrite there blanks an AWB this
+system just assigned, the order reads as unprocessed, somebody books it again, and one customer
+receives two parcels.
+
+`customer` carries the full shipping address — `address1, address2, city, state, pinCode, country` —
+because a courier booking is refused without one. `mergeCustomer` (§ `lib/sales/shopify.ts`) keeps a
+field the shop stops sending, so an address typed in to get a parcel booked survives the next sync.
 
 **Only attributed orders are stored.** The sync skips an order carrying no rep's coupon and reports
 how many it skipped, so the collection is the affiliate operation rather than a copy of the shop.
@@ -949,9 +967,13 @@ warehouse are counted under the same name.
 | `/api/sales/reps/[id]` | GET | `viewSales` | rep + summary + last 200 orders |
 | | PATCH | `manageSales` | the record, and `coupons` (a code dropped from the list is switched off, never removed). The rep `code` itself is fixed once issued |
 | | DELETE | `manageSales` | deactivates where orders reference them, deletes outright otherwise (§4.10) |
-| `/api/sales/orders` | GET | `viewSales` | paginated; filters `q` (order/coupon/customer), `rep`, `delivery`, `status`, `attention=1`, `from`, `to`. `summary` covers the whole filtered set |
+| `/api/sales/orders` | GET | `viewSales` | paginated; filters `q` (order/coupon/customer), `rep`, `coupon`, `delivery`, `status`, `attention=1`, `from`, `to`, and for the picking list `processed` (`no` \| `booked` \| `yes` \| `failed`), `payment` (`COD` \| `Prepaid`), `courier`, `source`, `sort=oldest`. `summary` covers the whole filtered set; `couriers` is every courier ever used, unfiltered, so narrowing the list cannot empty the dropdown that widens it again |
 | `/api/sales/orders/[id]` | GET | `viewSales` | |
 | | PATCH | `manageSales` | `{override?: DeliveryState \| null, overrideReason?, notes?}` — the manual delivery correction. Recalculates and audits `sales.delivery.overridden` |
+| `/api/sales/fulfilment/options` | GET | `processOrders` | The account's pickup addresses and the last parcel's measurements. A missing or refused Shiprocket credential is a **200 with a `refusal` sentence**, not an error — the list and its filters still work without one |
+| `/api/sales/fulfilment/couriers` | POST | `processOrders` | `{orderId, pickupLocation, weight, pinCode?}` → the couriers that reach that pin code, with rates. Per order, because the answer is per pin code; a batch sends a rule instead |
+| `/api/sales/orders/process` | POST | `processOrders` | `{orderIds[≤5], pickupLocation, parcel{}, courierId? \| courierRule, schedulePickup, address?}`. Books each order and returns a `ProcessResult` **per order**, never a total. `maxDuration = 60`. Not a transaction and deliberately so — an order booked at the courier stays booked here. Audits `sales.orders.processed` |
+| `/api/sales/orders/documents` | GET | `processOrders` | `?ids=&doc=invoice\|label` (≤30). One merged PDF, streamed through rather than redirected — the Shiprocket URL is signed and expires. An invoice keys on the **order**, a label on the **shipment**; orders not ready are named and counted in `x-orders-skipped` |
 | `/api/sales/sync` | POST | `manageSales` | `{target: "all" \| "orders" \| "shipments" \| "recalculate", sinceDays?}`. Runs inline and returns a `SyncReport`. An integration failure is a **502 carrying the other side's own words** |
 | `/api/sales/cron` | GET | `CRON_SECRET` bearer, **or** `manageSales` | The nightly pass: sync, then re-price everything open. A failed pull still re-prices, because maturity does not depend on Shopify answering |
 | `/api/sales/settings` | GET | `viewSales` | Credentials are never sent back — only `shopifyTokenSet` / `shiprocketPasswordSet` and a masked hint |
@@ -964,6 +986,39 @@ warehouse are counted under the same name.
 | `/api/sales/payouts/[id]` | GET | `viewSales` | run + lines + capability flags |
 | | PATCH | `runSalesPayout` (adjust) / `approveSalesPayout` (the rest) | `{action:"adjust", line, adjustments[], note?}` (draft only) \| `{action:"approve"}` \| `{action:"reopen"}` \| `{action:"pay", paymentDate, paymentMode, reference?}`. Reopen only from Approved; **Paid is terminal** |
 | | DELETE | `approveSalesPayout` | drafts only; releases and re-prices the commissions |
+
+### 7.9a Processing an order — `lib/sales/{fulfilment,booking}.ts`
+
+Booking the parcel, which was until now done by hand in Shiprocket's own panel: find the order, type
+it in again, check which couriers reach that pin code, assign an airway bill, print the invoice.
+Forty times a morning, in a system that had never heard of the coupon that brought the order in.
+
+`lib/sales/fulfilment.ts` is **pure and tested** — the parcel's value, the payment mode, the ten
+digits of a phone number, the booking body, and which courier a rule picks. `lib/sales/booking.ts`
+is the four calls in order, and `/admin/sales/orders/process` is the screen.
+
+Four things about it are decisions rather than plumbing:
+
+1. **Find before create.** A shop connected to Shiprocket as a channel pushes its own orders across,
+   so the order about to be booked may already be sitting there half-finished. Every form the order
+   could be filed under (`matchKeysFor`, §8.8) is tried first. Creating a duplicate would either be
+   refused for a duplicate id or — worse — accepted: two parcels, two freights, one customer.
+2. **Booked under the shop's own order name.** `order_id` is `#1042`, not this database's id, because
+   `channel_order_id` is the key the delivery sync joins back on. Booking under anything else creates
+   a parcel this CRM can never find again, and a rep whose order was delivered would never be paid.
+3. **A failure is a result, not an exception.** Every order in a batch comes back as a row with its
+   reason, and the reason is written to `shipment.lastError` as well — a batch is read after lunch,
+   not watched. The ids are saved the moment the booking exists, *before* the airway bill is asked
+   for, so a wallet that runs out leaves the honest state (in Shiprocket, no AWB) rather than an
+   order that looks untouched here and exists over there.
+4. **Nothing here touches commission.** Booking freight decides no money: the delivery state stays
+   whatever the courier last said, and the commission follows it exactly as before (§4.4). That is
+   also why the guard is `processOrders` (ADMIN + HR) rather than `manageSales` — the desk that packs
+   the boxes should not need the authority to redirect somebody's commission.
+
+A named courier is never substituted; an order it cannot serve is reported. A rule (`recommended`,
+`cheapest`, `fastest`) is applied per order against that order's own serviceability list, which is
+what makes one press work for forty parcels bound for forty pin codes.
 
 ---
 
@@ -1438,6 +1493,7 @@ the server knows more about than the request does belongs there too, not in `fie
 | Payout periods and totals | `lib/sales/payouts.ts` (+ `payouts.test.ts`) |
 | Payout run assembly | `lib/sales/payout-run.ts`, `app/api/sales/payouts/**` |
 | Shopify or Shiprocket calls | `lib/sales/{shopify,shiprocket,http}.ts` |
+| Booking a parcel with the courier | `lib/sales/fulfilment.ts` (pure, + test), `lib/sales/booking.ts`, `app/api/sales/{orders/process,orders/documents,fulfilment/**}` |
 | What the sync does | `lib/sales/sync.ts`, `app/api/sales/{sync,cron}/route.ts` |
 | Affiliate credentials | `lib/sales/{settings,secrets}.ts`, `app/api/sales/settings/**` |
 | Connecting Shopify (OAuth) | `lib/sales/oauth.ts` (+ `oauth.test.ts`), `app/api/sales/shopify/{install,callback}` |
@@ -1478,7 +1534,9 @@ Co-located `*.test.ts` next to the module they cover; `npm test` runs vitest onc
 | `lib/sales/shopify.test.ts` | shop-address normalisation (admin URL, bare handle, storefront domain), and the discount-allocation mapping that decides whose commission an order is |
 | `lib/sales/oauth.test.ts` | the shop-domain guard against a forged `shop` parameter, the authorize URL, and HMAC verification against a tampered or wrongly-signed callback |
 | `lib/sales/leads.test.ts` | Places → lead mapping (including the place with no coordinates, which is kept), the two renames in `toLeadFields`, the search schema's insistence on a type, and that no fourth Google page is ever asked for |
-| `components/ui/modal.test.tsx` | the one rendered-component test |
+| `lib/sales/fulfilment.test.ts` | COD against prepaid, the ten digits of a phone however it was stored, the fields whose absence a courier refuses, that a booked parcel is never booked twice, the adhoc body (filed under the shop's own order name, priced at what was actually paid), and the courier rules — including that a named courier is never substituted |
+| `lib/sales/shiprocket.test.ts` | the booking calls against a stubbed `fetch`: what is sent where, and that a **200 which says no** — `awb_assign_status: 0` — is a failure carrying Shiprocket's own words rather than a silent success |
+| `components/ui/modal.test.tsx`, `components/sales/process-{screen,orders}.test.tsx` | the three rendered-component tests: the picking list opens on what still has to go out and says on each row why one cannot, and the booking dialog chunks a long selection without losing an order between chunks, leaves out what it already knows cannot be booked, and never carries one order's address into a batch |
 
 **New arithmetic belongs in a pure module with a test.** Database code is exercised through the
 routes, not unit-tested.

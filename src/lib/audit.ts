@@ -81,6 +81,13 @@ export const AUDIT_ACTIONS = {
   "sales.coupon.setup.failed": "Could not create a coupon's discount in Shopify",
   "sales.coupon.withdrawn": "Withdrew a coupon code",
   "sales.delivery.overridden": "Corrected an order's delivery state by hand",
+  /**
+   * Booking parcels with the courier. It spends money — freight is charged to
+   * the Shiprocket account the moment an airway bill is assigned — and it is the
+   * one action here that reaches out and changes something at another company,
+   * where it cannot be undone by editing a record.
+   */
+  "sales.orders.processed": "Booked orders with the courier",
   "sales.synced": "Pulled orders and delivery status",
   "sales.settings.updated": "Changed the affiliate settings",
   "sales.payout.generated": "Prepared an affiliate payout run",

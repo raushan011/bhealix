@@ -4,7 +4,7 @@ import { SalesOrder } from "@/models/Sales";
 import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
 import { fail, ok, pageParams, OBJECT_ID } from "@/lib/api";
-import { COMMISSION_STATUSES, DELIVERY_STATES } from "@/lib/sales/constants";
+import { COMMISSION_STATUSES, DELIVERY_STATES, ORDER_SOURCES } from "@/lib/sales/constants";
 import { normaliseCode } from "@/lib/sales/coupons";
 
 /**
@@ -56,6 +56,40 @@ export async function GET(request: Request) {
 
     if (params.get("attention") === "1") filter["commission.needsReversal"] = true;
 
+    /*
+     * The processing screen's own filters. Kept on this route rather than given
+     * their own, because "which orders am I looking at" is the same question
+     * whether the answer is being read or acted on — and two list endpoints
+     * answering it differently is how a screen ends up showing a different count
+     * from the one beside it.
+     */
+    const processed = params.get("processed");
+    // An airway bill is the honest test of "has this been sent to the courier":
+    // an order can exist in Shiprocket with no shipment against it, which is
+    // half-done rather than done. `Booked` asks for exactly that middle state.
+    if (processed === "yes") filter["shipment.awb"] = { $exists: true, $nin: ["", null] };
+    if (processed === "no") filter["shipment.awb"] = { $in: ["", null] };
+    if (processed === "booked") {
+      filter["shipment.awb"] = { $in: ["", null] };
+      filter["shipment.shiprocketOrderId"] = { $exists: true, $nin: ["", null] };
+    }
+    if (processed === "failed") filter["shipment.lastError"] = { $exists: true, $nin: ["", null] };
+
+    /*
+     * COD or Prepaid. The commonest split on a picking morning — cash parcels are
+     * packed and handed over differently — and the sync already reduces every
+     * gateway to the one word (§ shopify).
+     */
+    const payment = params.get("payment");
+    if (payment === "COD") filter.paymentMethod = "COD";
+    if (payment === "Prepaid") filter.paymentMethod = { $nin: ["COD", null, ""] };
+
+    const courier = params.get("courier");
+    if (courier) filter["shipment.courier"] = courier;
+
+    const source = params.get("source");
+    if (source && (ORDER_SOURCES as readonly string[]).includes(source)) filter.source = source;
+
     const from = params.get("from"), to = params.get("to");
     if (from || to) {
       filter.placedAt = {
@@ -66,15 +100,26 @@ export async function GET(request: Request) {
 
     const where = and.length ? { ...filter, $and: and } : filter;
 
-    const [items, total, summary] = await Promise.all([
-      SalesOrder.find(where).sort({ placedAt: -1 }).skip(skip).limit(limit).populate("rep", "name code").lean(),
+    /*
+     * Newest first everywhere except when somebody says otherwise, which on the
+     * processing screen they do: parcels are packed oldest first, because the
+     * oldest unbooked order is the one the customer is about to telephone about.
+     */
+    const sort: Record<string, 1 | -1> = params.get("sort") === "oldest" ? { placedAt: 1 } : { placedAt: -1 };
+
+    const [items, total, summary, couriers] = await Promise.all([
+      SalesOrder.find(where).sort(sort).skip(skip).limit(limit).populate("rep", "name code").lean(),
       SalesOrder.countDocuments(where),
       // The summary covers the whole filtered set, not the page on screen —
       // the same contract the invoice list has.
       SalesOrder.aggregate([
         { $match: where },
         { $group: { _id: null, revenue: { $sum: "$totals.paid" }, commission: { $sum: "$commission.amount" } } }
-      ])
+      ]),
+      // Every courier ever used, not only the ones in this filter — a dropdown
+      // that empties itself as you narrow the list is a dropdown you cannot use
+      // to widen it again.
+      SalesOrder.distinct("shipment.courier", { "shipment.courier": { $nin: ["", null] } })
     ]);
 
     return ok({
@@ -82,7 +127,8 @@ export async function GET(request: Request) {
       total,
       page,
       pages: Math.max(1, Math.ceil(total / limit)),
-      summary: { revenue: Math.round(summary[0]?.revenue ?? 0), commission: Math.round(summary[0]?.commission ?? 0) }
+      summary: { revenue: Math.round(summary[0]?.revenue ?? 0), commission: Math.round(summary[0]?.commission ?? 0) },
+      couriers: (couriers as string[]).sort()
     });
   } catch (error) {
     return fail(error);
