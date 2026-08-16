@@ -91,8 +91,14 @@ export default function PartnerRegisterPage() {
             value={name} onChange={event => setName(event.target.value)} />
         </Field>
 
-        <Field label="Email" hint="You will sign in with this.">
-          <input name="email" type="email" required autoComplete="email" className="input" placeholder="you@example.com" />
+        {/*
+          * Optional, and said so on the label rather than only in the hint —
+          * an asterisk-free field in a column of filled ones reads as one you
+          * missed. Sign-in takes the code below just as well, which is the
+          * sentence that makes leaving this blank feel safe rather than risky.
+          */}
+        <Field label="Email (optional)" hint="Only if you have one. You can sign in with your code below either way.">
+          <input name="email" type="email" autoComplete="email" className="input" placeholder="you@example.com" />
         </Field>
 
         <Field label="Phone" hint="How the company reaches you about a payment.">

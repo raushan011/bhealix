@@ -1,21 +1,15 @@
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
+import { buttonBase, buttonTone, type ButtonTone } from "./button-style";
 
-type ButtonTone = "primary" | "secondary" | "ghost" | "danger";
-const buttonTone: Record<ButtonTone, string> = {
-  primary: "bg-[var(--brand)] text-[var(--on-brand)] hover:bg-[var(--brand-hover)] disabled:opacity-50",
-  secondary: "bg-[var(--surface)] text-[var(--ink)] border border-[var(--line-2)] hover:bg-[var(--surface-2)] disabled:opacity-50",
-  ghost: "text-[var(--ink-2)] hover:bg-[var(--surface-2)] disabled:opacity-50",
-  danger: "bg-[var(--surface)] text-[var(--danger-ink)] border border-[var(--danger-line)] hover:bg-[var(--danger-bg)] disabled:opacity-50"
-};
-const buttonBase = "inline-flex items-center justify-center gap-2 rounded-[10px] px-4 min-h-[44px] text-sm font-semibold transition-colors disabled:cursor-not-allowed";
-
-export function Button({ tone = "primary", busy, className = "", children, ...rest }:
-  React.ButtonHTMLAttributes<HTMLButtonElement> & { tone?: ButtonTone; busy?: boolean }) {
-  return <button {...rest} disabled={rest.disabled || busy} className={`${buttonBase} ${buttonTone[tone]} ${className}`}>
-    {busy && <Loader2 size={16} className="animate-spin" />}{children}
-  </button>;
-}
+/*
+ * Re-exported rather than defined here so every existing call site keeps
+ * importing it from the kit. It lives in its own module because it needs
+ * `"use client"` to watch its handler, and seventeen server components import
+ * this file for `Badge`, `Card` and `Stat` — marking the whole kit would drag
+ * all of them across the boundary for one component's sake.
+ */
+export { Button } from "./button";
 
 export function LinkButton({ tone = "primary", href, className = "", children }:
   { tone?: ButtonTone; href: string; className?: string; children: React.ReactNode }) {

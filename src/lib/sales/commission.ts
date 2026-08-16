@@ -62,15 +62,47 @@ export type CommissionRule = {
  * anywhere in the code, so a third can be added without touching any of it.
  */
 /**
- * The customer discount is left at zero on both, because nobody but this
- * company knows what its own coupons should take off. A rule at zero still pays
- * commission exactly as before — it simply cannot have codes created in Shopify
- * for it until somebody fills the figure in.
+ * What the operation actually sells on today: ₹800 off the anti-pigmentation
+ * kit at 30%, and 10% off a single product at 10%.
+ *
+ * These are the figures a **fresh installation** starts with, and nothing else.
+ * The rules live on the settings document once it exists, so an install already
+ * running keeps whatever is stored there — editing this list does not reach back
+ * and change a live shop's commercial terms, which is the correct way round for
+ * a file that decides what people are paid.
+ *
+ * Note which half of "₹800 off the kit" lives here and which does not. The
+ * figure does; the restriction to that one product does not, because what a
+ * coupon may be spent on is enforced by Shopify at the checkout rather than by
+ * this application. `base: "Discounted lines"` is what keeps the two honest —
+ * commission is paid on the lines the coupon actually discounted, so if the
+ * shop scopes the code to the kit then the kit is what gets paid on, without
+ * this file having to hold a product list that could silently fall out of step.
  */
 export const DEFAULT_RULES: CommissionRule[] = [
-  { suffix: "30", label: "Pigmentation kit", rate: 30, base: "Discounted lines", products: [], active: true, customerDiscountType: "Percentage", customerDiscountValue: 0, oncePerCustomer: true },
-  { suffix: "10", label: "Single product", rate: 10, base: "Discounted lines", products: [], active: true, customerDiscountType: "Percentage", customerDiscountValue: 0, oncePerCustomer: true }
+  { suffix: "30", label: "Pigmentation kit", rate: 30, base: "Discounted lines", products: [], active: true, customerDiscountType: "Fixed amount", customerDiscountValue: 800, oncePerCustomer: true },
+  { suffix: "10", label: "Single product", rate: 10, base: "Discounted lines", products: [], active: true, customerDiscountType: "Percentage", customerDiscountValue: 10, oncePerCustomer: true }
 ];
+
+/** Whether a rule says enough for a discount to be created from it in the shop. */
+export const ruleIsProvisionable = (rule: Pick<CommissionRule, "customerDiscountValue">) =>
+  Number(rule.customerDiscountValue ?? 0) > 0;
+
+/**
+ * What a customer gets off, as a sentence.
+ *
+ * Kept here with the rule rather than beside the Shopify call that consumes it,
+ * because the screens need it too and that module reaches for credentials the
+ * moment it is imported — which is not something a coupon list in a browser can
+ * afford to pull in.
+ */
+export function customerDiscountSummary(rule: Pick<CommissionRule, "customerDiscountType" | "customerDiscountValue">): string {
+  const value = Number(rule.customerDiscountValue ?? 0);
+  if (!(value > 0)) return "no customer discount set";
+  return rule.customerDiscountType === "Fixed amount"
+    ? `₹${Math.round(value).toLocaleString("en-IN")} off`
+    : `${value}% off`;
+}
 
 /**
  * One line of an order, reduced to the four figures a commission depends on.

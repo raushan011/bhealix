@@ -30,7 +30,18 @@ import { callerKey, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 const schema = z.object({
   name: z.string().trim().min(2, "Enter your full name").max(80),
-  email: z.email("Enter a valid email address"),
+  /**
+   * Optional, because it is not what identifies them.
+   *
+   * Sign-in takes the email *or* the rep code, and the code is the one they
+   * will still know six months from now — it is printed on their coupons and
+   * read down the telephone. Plenty of the people this form is for reach the
+   * company on WhatsApp and have no address they check, and refusing them at
+   * the first field for the sake of a column nothing reads was the wrong trade.
+   * An empty string arrives from the form when it is left blank, and is folded
+   * to nothing rather than stored — see below on why that matters.
+   */
+  email: z.email("Enter a valid email address").optional().or(z.literal("")),
   phone: z.string().trim().min(6, "Enter a phone number we can reach you on").max(20),
   /** The front half of every coupon they will hold, so they choose it themselves. */
   code: z.string().trim().min(2).max(24),
@@ -55,7 +66,16 @@ export async function POST(request: Request) {
     const passwordFault = passwordProblem(input.password);
     if (passwordFault) return badRequest(passwordFault);
 
-    const email = input.email.toLowerCase().trim();
+    /*
+     * Blank becomes absent, never an empty string.
+     *
+     * The email index is unique and sparse, and a sparse index only skips
+     * documents where the field is *missing*. Storing "" would put every
+     * address-less applicant on the same key, so the second one to apply would
+     * be refused for clashing with the first — and refused, of all things, over
+     * a field neither of them filled in.
+     */
+    const email = input.email?.toLowerCase().trim() || undefined;
 
     /*
      * Both clashes are reported plainly, and by name.
@@ -65,10 +85,17 @@ export async function POST(request: Request) {
      * it was never a secret, and somebody whose chosen code is taken has to be
      * told that in order to choose another. Concealing it would trade nothing
      * for a form that refuses without saying why.
+     *
+     * The email clause is spread in rather than always present. `{ email:
+     * undefined }` is not a query for "nobody" — it matches every document
+     * without the field, so the first address-less partner would make the form
+     * refuse everyone after them.
      */
-    const clash = await SalesRep.findOne({ $or: [{ code }, { email }] }).select("code email").lean() as { code?: string; email?: string } | null;
+    const clash = await SalesRep.findOne({
+      $or: [{ code }, ...(email ? [{ email }] : [])]
+    }).select("code email").lean() as { code?: string; email?: string } | null;
     if (clash) {
-      return badRequest(clash.email === email
+      return badRequest(email && clash.email === email
         ? "There is already an account with that email address. Sign in instead, or use a different address."
         : `The code ${code} is already taken. Try adding an initial — ${code}S, for instance.`, 409);
     }

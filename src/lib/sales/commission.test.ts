@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { toDateInput } from "@/lib/time";
 import { attributeOrder, couponFor, isRepCode, normaliseCode, parseCoupon } from "./coupons";
 import {
-  commissionState, computeCommission, needsReversal, netOf, nextStatus, recalculateCommission,
+  DEFAULT_RULES, commissionState, computeCommission, customerDiscountSummary, needsReversal, netOf,
+  nextStatus, recalculateCommission, ruleIsProvisionable,
   type CommissionOrderLike, type CommissionRule, type OrderLine
 } from "./commission";
 
@@ -272,5 +273,76 @@ describe("recalculateCommission", () => {
     const result = recalculateCommission(order(), rules, { now: new Date("2026-08-03T10:00:00"), holdDays: 7 });
     expect(result.commission.status).toBe("Maturing");
     expect(toDateInput(result.commission.maturesAt!)).toBe("2026-08-08");
+  });
+});
+
+describe("what a coupon is worth to the customer", () => {
+  it("says a fixed amount in rupees, grouped the Indian way", () => {
+    expect(customerDiscountSummary({ customerDiscountType: "Fixed amount", customerDiscountValue: 800 }))
+      .toBe("₹800 off");
+    expect(customerDiscountSummary({ customerDiscountType: "Fixed amount", customerDiscountValue: 1500 }))
+      .toBe("₹1,500 off");
+  });
+
+  it("says a percentage as a percentage", () => {
+    expect(customerDiscountSummary({ customerDiscountType: "Percentage", customerDiscountValue: 10 }))
+      .toBe("10% off");
+  });
+
+  /**
+   * A rule nobody has filled in must say so rather than read as "₹0 off", which
+   * looks like a decision somebody took.
+   */
+  it("admits when nobody has decided yet", () => {
+    expect(customerDiscountSummary({ customerDiscountType: "Percentage", customerDiscountValue: 0 }))
+      .toBe("no customer discount set");
+    expect(customerDiscountSummary({})).toBe("no customer discount set");
+  });
+
+  it("will not create a discount in the shop from a rule at zero", () => {
+    expect(ruleIsProvisionable({ customerDiscountValue: 0 })).toBe(false);
+    expect(ruleIsProvisionable({})).toBe(false);
+    expect(ruleIsProvisionable({ customerDiscountValue: 800 })).toBe(true);
+  });
+});
+
+describe("the rules a fresh installation starts with", () => {
+  const rule = (suffix: string) => DEFAULT_RULES.find(entry => entry.suffix === suffix)!;
+
+  it("takes ₹800 off the kit and pays 30% of what was received", () => {
+    expect(customerDiscountSummary(rule("30"))).toBe("₹800 off");
+    expect(rule("30").rate).toBe(30);
+  });
+
+  it("takes 10% off a single product and pays 10%", () => {
+    expect(customerDiscountSummary(rule("10"))).toBe("10% off");
+    expect(rule("10").rate).toBe(10);
+  });
+
+  /**
+   * Both are provisionable out of the box now. A rule at zero cannot have a
+   * code created in Shopify for it, which used to leave a freshly installed
+   * shop unable to mint a single coupon until somebody found the settings page.
+   */
+  it("can have codes created in the shop without further setup", () => {
+    expect(DEFAULT_RULES.every(ruleIsProvisionable)).toBe(true);
+  });
+
+  /**
+   * "₹800 off the kit" has two halves and only one of them lives here. What a
+   * code may be spent on is Shopify's to enforce; `Discounted lines` is what
+   * makes the commission follow that decision instead of duplicating it into a
+   * product list that could fall out of step.
+   */
+  it("pays on the lines the coupon discounted rather than on a named product list", () => {
+    expect(DEFAULT_RULES.every(entry => entry.base === "Discounted lines")).toBe(true);
+    expect(DEFAULT_RULES.every(entry => entry.products.length === 0)).toBe(true);
+  });
+
+  it("prices the kit exactly as it was specified — ₹2299 less ₹800, 30% of ₹1499", () => {
+    const line: OrderLine = {
+      title: "Anti-pigmentation kit", quantity: 1, gross: 2299, couponDiscount: 800, otherDiscount: 0, refunded: 0
+    };
+    expect(computeCommission([line], rule("30")).amount).toBe(450);
   });
 });

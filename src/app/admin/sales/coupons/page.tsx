@@ -11,7 +11,7 @@ import { parseCoupon } from "@/lib/sales/coupons";
 import { couponSetupTone } from "@/lib/sales/partners";
 import { formatRupees } from "@/lib/sales/types";
 import type { CatalogueEntry } from "@/lib/sales/catalogue";
-import type { CommissionRule } from "@/lib/sales/commission";
+import { customerDiscountSummary, type CommissionRule } from "@/lib/sales/commission";
 
 type Rep = { _id: string; name: string; code: string };
 type Payload = { coupons: CatalogueEntry[]; reps: Rep[]; rules: CommissionRule[]; refreshError?: string; mayManage: boolean };
@@ -143,9 +143,37 @@ export default function SalesCouponsPage() {
                 {entry.issuedBy === "Rep" && <Badge tone="info">Partner&rsquo;s own</Badge>}
               </div>
 
+              {/*
+                * What the code is actually worth, to both sides of it.
+                *
+                * The row used to say "pays under rule 30", which names the rule
+                * without saying a single thing it does — and the two figures
+                * somebody opens this screen to check are exactly what the
+                * customer gets off and what the partner earns for it. Reading
+                * them meant opening Sales settings in another tab and matching
+                * suffixes by eye.
+                *
+                * Taken from the live rules rather than restated, so a rate
+                * changed in settings on Tuesday is the rate shown here on
+                * Tuesday.
+                */}
+              {(() => {
+                const rule = data.rules.find(entry_ => entry_.suffix === entry.suffix);
+                if (!rule) return null;
+                return <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+                  <span className="font-semibold text-[var(--ink-2)]">{rule.label}</span>
+                  <span className="rounded-full bg-[var(--brand-soft)] px-2 py-0.5 font-semibold text-[var(--brand)]">
+                    customer gets {customerDiscountSummary(rule)}
+                  </span>
+                  <span className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 font-semibold text-[var(--ink-2)]">
+                    partner earns {rule.rate}%
+                  </span>
+                </p>;
+              })()}
+
               <p className="mt-0.5 text-xs text-[var(--muted)]">
                 {entry.summary ?? entry.title ?? "Seen on an order"}
-                {entry.suffix ? ` · pays under rule ${entry.suffix}` : ""}
+                {entry.suffix ? ` · rule ${entry.suffix}` : ""}
                 {entry.usageCount != null ? ` · used ${entry.usageCount}× in Shopify` : ""}
                 {entry.lastSeenAt ? ` · last seen ${formatDate(entry.lastSeenAt)}` : ""}
               </p>
@@ -291,7 +319,13 @@ function ClaimCoupon({ entry, reps, rules, onClose, onDone }: {
       <Field label="Pays under">
         <select className="select" value={suffix} onChange={event => setSuffix(event.target.value)}>
           <option value="">Choose a rule…</option>
-          {rules.map(rule => <option key={rule.suffix} value={rule.suffix}>{rule.label} — {rule.rate}%</option>)}
+          {/* Named with both figures, so choosing a rule is not a guess about
+              what the code will do to the customer's basket. */}
+          {rules.map(rule => (
+            <option key={rule.suffix} value={rule.suffix}>
+              {rule.label} — customer {customerDiscountSummary(rule)}, partner {rule.rate}%
+            </option>
+          ))}
         </select>
       </Field>
 

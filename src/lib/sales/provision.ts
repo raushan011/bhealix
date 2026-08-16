@@ -38,18 +38,18 @@ export type ProvisionOutcome =
   | { state: Extract<CouponSetupState, "Live">; shopifyDiscountId: string }
   | { state: Extract<CouponSetupState, "Awaiting setup" | "Failed">; reason: string };
 
-/** Whether a rule says enough for a discount to be created from it. */
-export const ruleIsProvisionable = (rule: Pick<CommissionRule, "customerDiscountValue">) =>
-  Number(rule.customerDiscountValue ?? 0) > 0;
+/*
+ * Both moved to `commission.ts`, where the rule itself lives, and re-exported
+ * here so the server-side callers that already import them from this module
+ * carry on working. The move was forced by the screens: this file loads Shopify
+ * credentials on import, and a coupon list rendering in a browser cannot pull
+ * that in to work out that a code takes ₹800 off.
+ */
+export { customerDiscountSummary, ruleIsProvisionable } from "./commission";
 
-/** What a customer gets off, as a sentence — for the settings screen and the rep's portal. */
-export function customerDiscountSummary(rule: Pick<CommissionRule, "customerDiscountType" | "customerDiscountValue">): string {
-  const value = Number(rule.customerDiscountValue ?? 0);
-  if (!(value > 0)) return "no customer discount set";
-  return rule.customerDiscountType === "Fixed amount"
-    ? `₹${Math.round(value).toLocaleString("en-IN")} off`
-    : `${value}% off`;
-}
+// Re-exporting does not bind the name in this module's own scope, and the
+// provisioning path below asks the question itself.
+import { ruleIsProvisionable } from "./commission";
 
 const MUTATION = `
   mutation CreateCode($discount: DiscountCodeBasicInput!) {
