@@ -1,7 +1,7 @@
 import type { CommissionRule } from "./commission";
 import type { CommissionStatus, CourierRule, DeliveryState, OrderSource, PayoutMode, PayoutStatus } from "./constants";
 import type { Parcel, PickupLocation } from "./fulfilment";
-import type { LeadSource, LeadStatus } from "./leads";
+import type { LeadSource, LeadStatus, RemarkChannel } from "./leads";
 import type { CouponSetupState, RepStatus } from "./partners";
 
 /**
@@ -55,6 +55,31 @@ export type SalesRepRecord = {
   hasLogin?: boolean;
 };
 
+/** One dated line about one conversation — see `lib/sales/leads.ts`. */
+export type LeadRemark = {
+  _id: Id;
+  text: string;
+  channel: RemarkChannel;
+  /** Where this conversation left the lead, when it moved it at all. */
+  status?: LeadStatus;
+  at: string;
+  /** Who wrote it, snapshotted — a remark outlives the account that wrote it. */
+  byName?: string;
+};
+
+/** A remark with the lead it belongs to, as the log screen and the export read it. */
+export type LeadRemarkRow = LeadRemark & {
+  lead: {
+    _id: Id;
+    name: string;
+    type: string;
+    status: LeadStatus;
+    phone?: string;
+    area?: string;
+    city?: string;
+  };
+};
+
 /** A business found by the lead search and kept, as the screens read it back. */
 export type SalesLeadRecord = {
   _id: Id;
@@ -75,7 +100,9 @@ export type SalesLeadRecord = {
   searchQuery?: string;
   searchLocation?: string;
   source?: LeadSource;
+  /** The standing note about the lead, as opposed to `remarks`, which is the thread. */
   notes?: string;
+  remarks?: LeadRemark[];
   createdAt?: string;
   /** What the outreach queue has done to this lead — see `lib/sales/outreach.ts`. */
   lastContactedAt?: string;

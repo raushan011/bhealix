@@ -105,6 +105,18 @@ export const AUDIT_ACTIONS = {
   "sales.leads.saved": "Saved leads from a search",
   "sales.lead.updated": "Updated a lead",
   "sales.lead.deleted": "Removed a lead",
+  "sales.leads.bulk-updated": "Changed a batch of leads",
+  "sales.leads.bulk-deleted": "Removed a batch of leads",
+
+  /**
+   * What was said on a call, and any later correction to it. The remark itself
+   * lives on the lead, so the trail carries only who touched it and when —
+   * except on a delete, where the wording is copied out, because that line is
+   * the only remaining record that the conversation happened at all.
+   */
+  "sales.lead.remarked": "Added a remark to a lead",
+  "sales.lead.remark.updated": "Edited a remark on a lead",
+  "sales.lead.remark.deleted": "Deleted a remark from a lead",
 
   /**
    * Outreach. The message line carries the wording verbatim rather than the

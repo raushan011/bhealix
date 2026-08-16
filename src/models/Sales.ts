@@ -4,7 +4,7 @@ import {
   DEFAULT_HOLD_DAYS, DELIVERY_STATES, ORDER_SOURCES, PAYOUT_MODES, PAYOUT_STATUSES
 } from "@/lib/sales/constants";
 import { DEFAULT_RULES } from "@/lib/sales/commission";
-import { LEAD_SOURCES, LEAD_STATUSES } from "@/lib/sales/leads";
+import { LEAD_SOURCES, LEAD_STATUSES, REMARK_CHANNELS } from "@/lib/sales/leads";
 import { COUPON_SETUP_STATES, REP_STATUSES } from "@/lib/sales/partners";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -637,7 +637,33 @@ const SalesLeadSchema = new Schema({
   searchLocation: String,
   source: { type: String, enum: LEAD_SOURCES, default: "Google" },
 
+  /** The standing description — what to know *before* dialling. */
   notes: String,
+
+  /**
+   * What was said, one line per conversation.
+   *
+   * Embedded rather than a collection of its own: a remark is never read apart
+   * from the lead it is about, there are a handful per lead rather than
+   * thousands, and the alternative costs a join on every row of a list somebody
+   * scrolls for ten minutes. The log screen reaches across leads with `$unwind`,
+   * which is the one query that would have wanted a collection and gets by
+   * without one.
+   *
+   * `byName` is a snapshot beside the reference on purpose (§4.10): the trail
+   * has to still read "Priya — no answer" after Priya's account is gone, and a
+   * dangling `by` populates to null.
+   */
+  remarks: [new Schema({
+    text: { type: String, required: true, trim: true },
+    channel: { type: String, enum: REMARK_CHANNELS, default: "Note" },
+    /** The status this conversation moved the lead to, when it moved it. */
+    status: { type: String, enum: LEAD_STATUSES },
+    at: { type: Date, default: Date.now },
+    by: { type: Schema.Types.ObjectId, ref: "User" },
+    byName: String
+  }, { _id: true })],
+
   createdBy: { type: Schema.Types.ObjectId, ref: "User" },
   updatedBy: { type: Schema.Types.ObjectId, ref: "User" }
 }, { timestamps: true });
@@ -646,6 +672,8 @@ const SalesLeadSchema = new Schema({
 // whatever still needs ringing, newest first.
 SalesLeadSchema.index({ type: 1, name: 1 });
 SalesLeadSchema.index({ status: 1, createdAt: -1 });
+// The log screen's own question: what was said lately, across every lead.
+SalesLeadSchema.index({ "remarks.at": -1 });
 
 export const SalesLead = models.SalesLead ?? model("SalesLead", SalesLeadSchema);
 

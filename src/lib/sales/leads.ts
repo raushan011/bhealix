@@ -132,6 +132,23 @@ export const whatsappUrl = (phone: string | null | undefined) => {
   return number ? `https://wa.me/${number}` : null;
 };
 
+/**
+ * The same number as something a phone will dial.
+ *
+ * Normalised through `whatsappNumber` so a listing that published `098999 43298`
+ * dials as `+919899943298` — a desk phone or a laptop softphone will not guess
+ * the country, and a trunk zero in front of a country code reaches nobody.
+ * Falls back to whatever digits are there when the number is too odd to
+ * normalise, because a half-right `tel:` is still better than a dead link on a
+ * row where the number is the only thing anybody wants.
+ */
+export function telUrl(phone: string | null | undefined): string | null {
+  const raw = (phone ?? "").replace(/[^\d+]/g, "");
+  if (raw.replace(/\D/g, "").length < 6) return null;
+  const number = whatsappNumber(phone);
+  return number ? `tel:+${number}` : `tel:${raw}`;
+}
+
 const typeField = z.string().trim()
   .min(2, "Give the results a type, so the list can be found again")
   .max(60, "A type is a short label, like Beauty parlour");
@@ -253,3 +270,143 @@ export function leadTone(status: string): "success" | "info" | "warn" | "danger"
     default: return "neutral";
   }
 }
+
+// ------------------------------------------------------------------- remarks
+
+/**
+ * What was said, kept as a thread rather than a field.
+ *
+ * `notes` already exists and stays: it is the standing description of a lead —
+ * "asks for the owner, shop shuts on Tuesdays" — the thing you want to read
+ * *before* dialling. A remark is the opposite; it is one dated line about one
+ * conversation, and the value of it is entirely in the sequence. Overwriting a
+ * note with "no answer" throws away last week's "call back after Diwali", which
+ * is exactly the sentence that made this call worth making.
+ *
+ * So: append-only in spirit, editable in practice (a remark typed on a phone
+ * between two calls has typos in it), and each one carries who wrote it and
+ * when, because six months on "why did we stop chasing this parlour" is a
+ * question about a person as much as a date.
+ */
+export const REMARK_CHANNELS = ["Call", "WhatsApp", "Visit", "Note"] as const;
+export type RemarkChannel = (typeof REMARK_CHANNELS)[number];
+
+/**
+ * The channels that mean somebody actually reached out, as opposed to writing
+ * something down. Only these move `lastContactedAt`, and so only these take a
+ * lead out of the outreach queue — filing a note to self must never look like a
+ * message that was sent.
+ */
+const REACHED_OUT: readonly string[] = ["Call", "WhatsApp", "Visit"];
+export const isOutreach = (channel: string) => REACHED_OUT.includes(channel);
+
+/**
+ * The five things a call actually ends in, one tap each.
+ *
+ * A remark box on a phone, typed standing up between two numbers, is a remark
+ * box that stays empty — and an empty thread is worse than no thread, because
+ * the list then lies about having been worked. The presets fill both halves of
+ * what a call decides: the sentence, and where that leaves the lead. They are
+ * starting text, not a closed list; the box stays editable underneath.
+ */
+export const REMARK_PRESETS: readonly { label: string; text: string; status?: LeadStatus }[] = [
+  { label: "No answer", text: "Rang — no answer." },
+  { label: "Call back later", text: "Reached them, asked to call back later.", status: "Contacted" },
+  { label: "Wants details", text: "Interested — asked for prices and details.", status: "Interested" },
+  { label: "Not interested", text: "Not interested at the moment.", status: "Not interested" },
+  { label: "Wrong number", text: "Wrong number — the listing is out of date." }
+];
+
+const remarkText = z.string().trim()
+  .min(2, "Write what was said")
+  .max(1000, "A remark is a line or two, not a report");
+
+export const remarkSchema = z.object({
+  text: remarkText,
+  channel: z.enum(REMARK_CHANNELS).default("Note"),
+  /** Where the conversation left the lead. Left off when it changed nothing. */
+  status: z.enum(LEAD_STATUSES).optional()
+});
+
+export const remarkEditSchema = z.object({
+  text: remarkText.optional(),
+  channel: z.enum(REMARK_CHANNELS).optional()
+}).refine(input => Object.keys(input).length > 0, "Nothing to change");
+
+/** What a remark is filed under, in the colours the rest of the app uses. */
+export function remarkTone(channel: string): "brand" | "success" | "info" | "neutral" {
+  switch (channel) {
+    case "Call": return "info";
+    case "WhatsApp": return "success";
+    case "Visit": return "brand";
+    default: return "neutral";
+  }
+}
+
+// -------------------------------------------------------- asking for a subset
+
+/** A user's words as a substring match, with the regex metacharacters defanged. */
+export const like = (value: string) => new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+
+/**
+ * The saved-list filters, read once and agreed on everywhere.
+ *
+ * Three screens now ask the same question of this collection — the list, the
+ * remarks log and the spreadsheet export — and the export is the one that must
+ * not drift: a download labelled "Beauty parlour, Noida" that quietly carries a
+ * different set of rows than the screen it was pressed from is a spreadsheet
+ * somebody makes decisions on.
+ *
+ * Status is deliberately left out and applied separately by the caller. The list
+ * counts each status *before* narrowing to one, so the filter labels can say how
+ * many are in each; folding it in here would report every other state as zero.
+ */
+export function leadWhere(params: URLSearchParams): Record<string, unknown> {
+  const where: Record<string, unknown> = {};
+  const and: Record<string, unknown>[] = [];
+
+  const q = (params.get("q") ?? "").trim();
+  if (q) {
+    const match = like(q);
+    // Its own `$or` inside `$and`, so a later condition cannot quietly
+    // overwrite it (§11).
+    and.push({ $or: [{ name: match }, { phone: match }, { address: match }, { area: match }, { city: match }] });
+  }
+
+  const type = params.get("type");
+  if (type) where.type = type;
+
+  const city = params.get("city");
+  if (city) where.city = city;
+
+  return and.length ? { ...where, $and: and } : where;
+}
+
+/** The same filter, narrowed to one status — ignoring anything that is not one. */
+export function withLeadStatus(where: Record<string, unknown>, status: string | null) {
+  return status && (LEAD_STATUSES as readonly string[]).includes(status) ? { ...where, status } : where;
+}
+
+// -------------------------------------------------------------- many at once
+
+/**
+ * Working a list means doing the same thing to forty rows.
+ *
+ * Marking a whole sweep `Not interested` one dropdown at a time is forty round
+ * trips and four minutes, and the thing people do instead is not bother — which
+ * leaves the filters lying. Deleting is here for the same reason and is the more
+ * dangerous half, so it is capped and the screen asks first.
+ */
+export const LEAD_BULK_ACTIONS = ["status", "type", "delete"] as const;
+export type LeadBulkAction = (typeof LEAD_BULK_ACTIONS)[number];
+
+export const bulkLeadSchema = z.object({
+  ids: z.array(z.string().regex(/^[a-f\d]{24}$/i, "Unknown lead"))
+    .min(1, "Choose at least one lead")
+    .max(500, "Five hundred at a time is the limit"),
+  action: z.enum(LEAD_BULK_ACTIONS),
+  status: z.enum(LEAD_STATUSES).optional(),
+  type: typeField.optional()
+})
+  .refine(input => input.action !== "status" || input.status, "Choose a status to set")
+  .refine(input => input.action !== "type" || input.type, "Enter a type to file them under");

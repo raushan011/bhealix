@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Place } from "@/lib/doctors/places";
 import {
-  LEAD_QUERY_CEILING, MAX_LEAD_RESULTS, estimateLeadRequests, leadSearchPages, leadSearchSchema,
-  leadSearchZones, leadUpdateSchema, toLead, toLeadFields, whatsappNumber, whatsappUrl
+  LEAD_QUERY_CEILING, MAX_LEAD_RESULTS, bulkLeadSchema, estimateLeadRequests, isOutreach,
+  leadSearchPages, leadSearchSchema, leadSearchZones, leadUpdateSchema, leadWhere, like,
+  remarkEditSchema, remarkSchema, remarkTone, telUrl, toLead, toLeadFields, whatsappNumber,
+  whatsappUrl, withLeadStatus
 } from "./leads";
+import { REMARK_PROJECTION, remarkStages } from "./remark-log";
 
 const place = (over: Partial<Place> = {}): Place => ({
   id: "places/abc",
@@ -175,6 +178,34 @@ describe("whatsappUrl", () => {
   });
 });
 
+describe("telUrl", () => {
+  it("puts the country code on a local number, the way wa.me gets one", () => {
+    expect(telUrl("098999 43298")).toBe("tel:+919899943298");
+    expect(telUrl("+91 96503 06893")).toBe("tel:+919650306893");
+  });
+
+  it("agrees with the WhatsApp link about what the number is", () => {
+    expect(telUrl("098999 43298")).toBe(`tel:+${whatsappNumber("098999 43298")}`);
+  });
+
+  it("refuses a number nothing could dial", () => {
+    expect(telUrl("")).toBeNull();
+    expect(telUrl("call the shop")).toBeNull();
+    expect(telUrl(undefined)).toBeNull();
+  });
+
+  /**
+   * The one case the two helpers deliberately part company. A number too odd to
+   * normalise still dials from a desk phone, and a dead link on the row where
+   * the number is the only thing anybody wants is worse than a half-right one —
+   * whereas wa.me answers a malformed number with an error page.
+   */
+  it("still offers a call for a number WhatsApp will not take", () => {
+    expect(whatsappUrl("0120-456")).toBeNull();
+    expect(telUrl("0120-456")).toBe("tel:0120456");
+  });
+});
+
 describe("leadUpdateSchema", () => {
   it("takes a status on its own", () => {
     expect(leadUpdateSchema.parse({ status: "Contacted" })).toEqual({ status: "Contacted" });
@@ -187,5 +218,165 @@ describe("leadUpdateSchema", () => {
 
   it("refuses an empty change", () => {
     expect(leadUpdateSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+const params = (query: string) => new URLSearchParams(query);
+
+describe("what a filter means", () => {
+  it("asks for nothing when nothing was chosen", () => {
+    expect(leadWhere(params(""))).toEqual({});
+  });
+
+  it("matches a half-remembered name across every field it could be in", () => {
+    const where = leadWhere(params("q=glow")) as { $and: { $or: Record<string, RegExp>[] }[] };
+    expect(where.$and[0].$or.map(clause => Object.keys(clause)[0]))
+      .toEqual(["name", "phone", "address", "area", "city"]);
+  });
+
+  it("defangs a search that would otherwise be a regex", () => {
+    expect(like("a.b(c").test("axb(c")).toBe(false);
+    expect(like("a.b(c").test("a.b(c")).toBe(true);
+  });
+
+  /**
+   * `$and` rather than a bare `$or`, so a later condition cannot silently
+   * overwrite the search — which would widen an export past the screen it was
+   * taken from.
+   */
+  it("keeps the search and the other filters from overwriting each other", () => {
+    const where = leadWhere(params("q=glow&type=Salon&city=Noida"));
+    expect(where).toMatchObject({ type: "Salon", city: "Noida" });
+    expect(where.$and).toHaveLength(1);
+  });
+
+  it("leaves status out, so the counts can be taken before it narrows anything", () => {
+    expect(leadWhere(params("status=Contacted"))).toEqual({});
+  });
+
+  it("adds the status only when it is one", () => {
+    expect(withLeadStatus({ type: "Salon" }, "Contacted")).toEqual({ type: "Salon", status: "Contacted" });
+    expect(withLeadStatus({ type: "Salon" }, "Maybe")).toEqual({ type: "Salon" });
+    expect(withLeadStatus({ type: "Salon" }, null)).toEqual({ type: "Salon" });
+  });
+});
+
+describe("a remark", () => {
+  it("takes what was said and where it left the lead", () => {
+    expect(remarkSchema.parse({ text: " Rang, no answer. ", channel: "Call", status: "Contacted" }))
+      .toEqual({ text: "Rang, no answer.", channel: "Call", status: "Contacted" });
+  });
+
+  it("is a note unless it says otherwise", () => {
+    expect(remarkSchema.parse({ text: "Shut for Diwali" }).channel).toBe("Note");
+  });
+
+  it("refuses an empty one, and a channel nothing files under", () => {
+    expect(remarkSchema.safeParse({ text: " " }).success).toBe(false);
+    expect(remarkSchema.safeParse({ text: "Rang", channel: "Pigeon" }).success).toBe(false);
+  });
+
+  it("refuses an edit that changes nothing", () => {
+    expect(remarkEditSchema.safeParse({}).success).toBe(false);
+    expect(remarkEditSchema.safeParse({ text: "Rang twice" }).success).toBe(true);
+  });
+
+  /**
+   * Only a channel that reached somebody moves the contact tally, and so only
+   * one of these takes a lead out of the outreach queue. A note to self that
+   * did would leave a parlour nobody ever messages.
+   */
+  it("knows which channels actually reached somebody", () => {
+    expect(isOutreach("Call")).toBe(true);
+    expect(isOutreach("WhatsApp")).toBe(true);
+    expect(isOutreach("Visit")).toBe(true);
+    expect(isOutreach("Note")).toBe(false);
+  });
+
+  it("colours a channel the same way everywhere", () => {
+    expect(remarkTone("Call")).toBe("info");
+    expect(remarkTone("WhatsApp")).toBe("success");
+    expect(remarkTone("Note")).toBe("neutral");
+    expect(remarkTone("Smoke signal")).toBe("neutral");
+  });
+});
+
+describe("doing one thing to a batch", () => {
+  const ids = ["a".repeat(24), "b".repeat(24)];
+
+  it("takes a status for the whole selection", () => {
+    expect(bulkLeadSchema.parse({ ids, action: "status", status: "Not interested" }).ids).toHaveLength(2);
+  });
+
+  it("will not set a status it was not given", () => {
+    expect(bulkLeadSchema.safeParse({ ids, action: "status" }).success).toBe(false);
+  });
+
+  it("will not refile leads under a type it was not given", () => {
+    expect(bulkLeadSchema.safeParse({ ids, action: "type" }).success).toBe(false);
+    expect(bulkLeadSchema.safeParse({ ids, action: "type", type: "Salon" }).success).toBe(true);
+  });
+
+  it("needs no extra for a delete", () => {
+    expect(bulkLeadSchema.safeParse({ ids, action: "delete" }).success).toBe(true);
+  });
+
+  it("refuses an empty selection and anything that is not an id", () => {
+    expect(bulkLeadSchema.safeParse({ ids: [], action: "delete" }).success).toBe(false);
+    expect(bulkLeadSchema.safeParse({ ids: ["nope"], action: "delete" }).success).toBe(false);
+  });
+});
+
+describe("reading the remarks across every lead", () => {
+  it("narrows the leads before unwinding them", () => {
+    const { stages } = remarkStages(params("type=Salon&status=Interested"));
+    expect(stages[0]).toEqual({ $match: { type: "Salon", status: "Interested" } });
+    expect(stages[1]).toEqual({ $unwind: "$remarks" });
+  });
+
+  /**
+   * The search has to reach the wording of the remark, which it cannot do
+   * before the unwind — somebody searching "Diwali" wants the calls where
+   * Diwali was mentioned, not the parlours with it in their name.
+   */
+  it("asks the search again after the unwind, against the remark too", () => {
+    const { stages } = remarkStages(params("q=Diwali"));
+    expect(stages[0]).toEqual({ $match: {} });
+    const after = stages[2] as { $match: { $or: Record<string, unknown>[] } };
+    expect(after.$match.$or.map(clause => Object.keys(clause)[0]))
+      .toEqual(["name", "phone", "city", "remarks.text", "remarks.byName"]);
+  });
+
+  it("reads a date range as whole local days, both ends included", () => {
+    const { stages } = remarkStages(params("from=2026-08-10&to=2026-08-12"));
+    const range = stages.at(-1) as { $match: { "remarks.at": { $gte: Date; $lte: Date } } };
+    expect(range.$match["remarks.at"].$gte).toEqual(new Date("2026-08-10T00:00:00"));
+    expect(range.$match["remarks.at"].$lte).toEqual(new Date("2026-08-12T23:59:59.999"));
+  });
+
+  it("takes one end of the range without the other", () => {
+    const { stages } = remarkStages(params("from=2026-08-10"));
+    const range = stages.at(-1) as { $match: { "remarks.at": Record<string, Date> } };
+    expect(Object.keys(range.$match["remarks.at"])).toEqual(["$gte"]);
+  });
+
+  /**
+   * The channel is held back so the per-channel tallies can still say how many
+   * calls and how many messages there were — folded in, every channel but the
+   * selected one would report zero.
+   */
+  it("keeps the channel apart from the stages the tallies share", () => {
+    const { stages, channel } = remarkStages(params("channel=Call"));
+    expect(stages).toHaveLength(2);
+    expect(channel).toEqual([{ $match: { "remarks.channel": "Call" } }]);
+  });
+
+  it("narrows by nothing when no channel was chosen", () => {
+    expect(remarkStages(params("")).channel).toEqual([]);
+  });
+
+  it("hands back a row carrying the lead it belongs to", () => {
+    expect(REMARK_PROJECTION._id).toBe("$remarks._id");
+    expect(REMARK_PROJECTION.lead.name).toBe("$name");
   });
 });

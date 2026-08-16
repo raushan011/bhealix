@@ -4,9 +4,7 @@ import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
 import { fail, ok, pageParams } from "@/lib/api";
 import { record } from "@/lib/audit";
-import { LEAD_STATUSES, leadSaveSchema, toLeadFields } from "@/lib/sales/leads";
-
-const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+import { leadSaveSchema, leadWhere, toLeadFields, withLeadStatus } from "@/lib/sales/leads";
 
 /**
  * The saved list, filtered the way somebody working through it asks about it:
@@ -18,34 +16,14 @@ export async function GET(request: Request) {
     if ("response" in auth) return auth.response;
     await connectDb();
 
-    const { page, limit, skip, q } = pageParams(request.url);
+    const { page, limit, skip } = pageParams(request.url);
     const params = new URL(request.url).searchParams;
 
-    // Conditions needing their own `$or` go into `$and`, so none of them can
-    // quietly overwrite another (§11).
-    const and: Record<string, unknown>[] = [];
-    const filter: Record<string, unknown> = {};
-
-    if (q) {
-      const like = new RegExp(escape(q), "i");
-      and.push({ $or: [{ name: like }, { phone: like }, { address: like }, { area: like }, { city: like }] });
-    }
-
-    const type = params.get("type");
-    if (type) filter.type = type;
-
-    const city = params.get("city");
-    if (city) filter.city = city;
-
-    // The status counts below are what the filter buttons are labelled with, so
+    // The status counts below are what the filter options are labelled with, so
     // they are taken before the status filter narrows anything — otherwise
     // picking "Contacted" would report every other state as zero.
-    const unfiltered = and.length ? { ...filter, $and: and } : filter;
-
-    const status = params.get("status");
-    const withStatus = status && (LEAD_STATUSES as readonly string[]).includes(status)
-      ? { ...unfiltered, status }
-      : unfiltered;
+    const unfiltered = leadWhere(params);
+    const withStatus = withLeadStatus(unfiltered, params.get("status"));
 
     /**
      * The outreach queue's one extra question: leave out anybody already
