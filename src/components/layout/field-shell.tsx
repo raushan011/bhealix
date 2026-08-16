@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { CalendarCheck, LayoutGrid, LogOut, Receipt, Route, Stethoscope } from "lucide-react";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
+import { NavIcon } from "@/components/layout/nav-icon";
 import { BrandMark } from "@/components/ui/brand";
 import { Appearance } from "@/components/ui/appearance";
 import { ROLE_LABEL, type Role } from "@/constants/access";
@@ -74,7 +75,7 @@ export function FieldShell({ user, children }: { user: { name: string; role: Rol
           const active = isActive(pathname, href);
           return <Link key={href} href={href} aria-current={active ? "page" : undefined}
             className={`flex min-w-0 flex-col items-center justify-center gap-1 text-[11px] font-medium ${active ? "text-[var(--brand)]" : "text-[var(--muted)]"}`}>
-            <Icon size={21} className="shrink-0" /><span className="w-full truncate text-center">{label}</span>
+            <NavIcon icon={Icon} size={21} /><span className="w-full truncate text-center">{label}</span>
           </Link>;
         })}
       </div>

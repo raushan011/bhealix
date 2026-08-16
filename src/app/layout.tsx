@@ -1,7 +1,9 @@
+import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ConnectionStatus } from "@/components/pwa/connection-status";
 import { ServiceWorker } from "@/components/pwa/service-worker";
+import { NavigationProgress } from "@/components/layout/navigation-progress";
 import { THEME_SCRIPT } from "@/lib/theme";
 
 export const metadata: Metadata = {
@@ -24,16 +26,21 @@ export const viewport: Viewport = {
   initialScale: 1,
   // The shells pad with env(safe-area-inset-*), and those only resolve to real
   // values once the viewport covers the notch and home indicator.
-  viewportFit: "cover",
-  // The browser paints its own chrome with this before the page has loaded, so
-  // a dark device gets a dark bar rather than a walnut one over a dark page.
-  // Only until the app is up: these know nothing of an overruled device or of
-  // the monochrome palette, so `paintBrowserChrome` replaces them on mount with
-  // the colour the page is actually painted in.
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#73461f" },
-    { media: "(prefers-color-scheme: dark)", color: "#15110d" }
-  ]
+  viewportFit: "cover"
+  /*
+   * No `themeColor` here, deliberately. The browser's own chrome is painted by
+   * the blocking script below and kept up to date by `paintBrowserChrome`,
+   * which between them know things this export cannot — whether the device has
+   * been overruled, and whether the monochrome palette is on.
+   *
+   * The stronger reason is that a tag rendered from here belongs to React.
+   * `paintBrowserChrome` used to delete these two in order to have the last
+   * word, and deleting a node React is managing left it calling `removeChild`
+   * on a parent that had gone. It threw on the next navigation, the route never
+   * committed, and the address bar moved while the page stayed where it was —
+   * every client-side navigation in the application, for anybody whose theme
+   * had been applied. One owner for that tag, and it is not React.
+   */
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -53,6 +60,18 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
     </head>
     <body>
+      {/*
+        In the root layout rather than in each shell, so it covers the panels,
+        the login screens and the printable documents alike — every navigation
+        in the application, including the ones between panels.
+
+        The Suspense boundary is required: the bar reads the query string to
+        know it has arrived, and `useSearchParams` opts its whole subtree into
+        client rendering without one. Bounded here, the boundary contains a
+        three-pixel line, and the static pages either side of it — both login
+        screens and the registration form — stay static.
+      */}
+      <Suspense fallback={null}><NavigationProgress /></Suspense>
       <ConnectionStatus />
       <ServiceWorker />
       {children}

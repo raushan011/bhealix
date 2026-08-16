@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { BadgePercent, BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, HeartHandshake, LayoutDashboard, LogOut, Menu, Package, Receipt, Repeat, Search, Settings, ShoppingBag, Stethoscope, Tag, Truck, Users, Wallet, Warehouse, X } from "lucide-react";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
+import { NavIcon } from "@/components/layout/nav-icon";
 import { Brand, BrandMark } from "@/components/ui/brand";
 import { Appearance } from "@/components/ui/appearance";
 import { ROLE_LABEL, can, type Role } from "@/constants/access";
@@ -95,7 +96,7 @@ export function AdminShell({ user, children }: { user: { name: string; role: Rol
   const switcher = maySwitch && (
     <Link href={CHOOSE_PATH} onClick={() => setMenuOpen(false)}
       className="tap mt-4 flex items-center gap-2 rounded-[10px] border border-[var(--line-2)] px-3 text-xs font-semibold text-[var(--ink-2)] transition-colors hover:bg-[var(--surface-2)]">
-      <Repeat size={14} className="shrink-0" />
+      <NavIcon icon={Repeat} size={14} />
       Switch CRM
     </Link>
   );
@@ -112,7 +113,7 @@ export function AdminShell({ user, children }: { user: { name: string; role: Rol
               className={`tap flex items-center gap-3 rounded-[10px] px-3 text-sm font-medium transition-colors ${
                 isActive(pathname, href) ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "text-[var(--ink-2)] hover:bg-[var(--surface-2)]"
               }`}>
-              <Icon size={18} className="shrink-0" />{label}
+              <NavIcon icon={Icon} />{label}
             </Link>
           ))}
         </div>
