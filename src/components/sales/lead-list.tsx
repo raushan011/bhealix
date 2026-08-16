@@ -249,8 +249,19 @@ export function LeadList({ mayEdit, reloadToken }: { mayEdit: boolean; reloadTok
                     </span>
                   )}
 
+                  {/*
+                    * A lead that has been spoken to and one that has not are the
+                    * two things this list is scanned for, so the chip carries
+                    * the difference rather than only saying it: filled and in
+                    * the brand when there is a thread behind it, a quiet outline
+                    * when it is an invitation to start one.
+                    */}
                   <button type="button" onClick={() => setReading(lead)}
-                    className="inline-flex min-h-[38px] items-center gap-1.5 rounded-full border border-[var(--line-2)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--ink-2)] transition-colors hover:bg-[var(--surface-2)]">
+                    className={`inline-flex min-h-[38px] items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors ${
+                      count
+                        ? "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand)] hover:bg-[var(--brand-tint)]"
+                        : "border-[var(--line-2)] bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--surface-2)]"
+                    }`}>
                     <MessageSquare size={12} />
                     {count ? `${count} remark${count === 1 ? "" : "s"}` : "Add a remark"}
                   </button>
@@ -273,14 +284,30 @@ export function LeadList({ mayEdit, reloadToken }: { mayEdit: boolean; reloadTok
                   {lead.createdAt && <span>saved {formatDate(lead.createdAt)}</span>}
                 </div>
 
+                {/*
+                  * The last thing said, set off like the quotation it is.
+                  *
+                  * The accent is a real element rather than a left border,
+                  * which matters more than it sounds: `border` and `border-l-*`
+                  * are a shorthand and a longhand for the same property, and
+                  * which one lands depends on the order the two utilities happen
+                  * to be emitted in. A span cannot be overruled.
+                  *
+                  * It earns the emphasis — this is the sentence that decides
+                  * what happens to the lead next, and it used to sit in a 1px
+                  * outline that all but vanished on a dark screen.
+                  */}
                 {remark && (
                   <button type="button" onClick={() => setReading(lead)}
-                    className="mt-2 block w-full rounded-[10px] border border-[var(--line)] px-3 py-2 text-left">
-                    <span className="line-clamp-2 wrap-break-word text-xs text-[var(--ink-2)]">
-                      &ldquo;{remark.text}&rdquo;
-                    </span>
-                    <span className="mt-0.5 block text-[11px] text-[var(--muted)]">
-                      {remark.channel} · {formatDateTime(remark.at)}{remark.byName ? ` · ${remark.byName}` : ""}
+                    className="mt-2 flex w-full gap-2.5 rounded-[10px] border border-[var(--line-2)] bg-[var(--surface-2)] px-3 py-2 text-left transition-colors hover:bg-[var(--brand-soft)]">
+                    <span aria-hidden className="w-[3px] shrink-0 self-stretch rounded-full bg-[var(--brand)]" />
+                    <span className="min-w-0 flex-1">
+                      <span className="line-clamp-2 wrap-break-word text-xs text-[var(--ink)]">
+                        &ldquo;{remark.text}&rdquo;
+                      </span>
+                      <span className="mt-0.5 block text-[11px] text-[var(--muted)]">
+                        {remark.channel} · {formatDateTime(remark.at)}{remark.byName ? ` · ${remark.byName}` : ""}
+                      </span>
                     </span>
                   </button>
                 )}

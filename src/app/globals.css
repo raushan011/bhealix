@@ -192,18 +192,33 @@
   --surface-veil: rgb(255 255 255 / .95);
   --overlay: rgb(0 0 0 / .4);
 
-  --ok-bg: #f0f0f1;
-  --ok-ink: #2b2b2e;
-  --ok-line: #c8c8cc;
-  --warn-bg: #ebebec;
-  --warn-ink: #3a3a3d;
-  --warn-line: #bcbcc1;
-  --danger-bg: #e3e3e5;
+  /*
+   * A ladder, not four shades of the same grey.
+   *
+   * The first cut of this palette set these within two or three points of
+   * `--surface`, which made a status chip invisible — "Contacted" rendered as
+   * loose text on a card. Hue is what usually separates these, so with hue gone
+   * the separation has to be *weight*, and the steps have to be big enough to
+   * read at eleven pixels across a room.
+   *
+   * The order is fixed by `danger` carrying more than a badge: it is also the
+   * Delete button and the error notice, so it has to be the strongest thing
+   * here rather than the quietest. Everything else falls in behind it —
+   * untouched, contacted, warned, done, closed — each a clear step darker than
+   * the last, and each dark enough to hold its own ink.
+   */
+  --ok-bg: #c8c8d1;
+  --ok-ink: #17171c;
+  --ok-line: #a9a9b6;
+  --warn-bg: #d5d5dd;
+  --warn-ink: #26262c;
+  --warn-line: #b8b8c3;
+  --danger-bg: #b6b6c1;
   --danger-ink: #000000;
-  --danger-line: #a9a9af;
-  --info-bg: #f4f4f5;
-  --info-ink: #4a4a4e;
-  --info-line: #d6d6da;
+  --danger-line: #9494a2;
+  --info-bg: #e2e2e7;
+  --info-ink: #35353c;
+  --info-line: #c9c9d1;
 
   /*
    * A gold star on an otherwise greyscale page is the single most visible way
@@ -244,18 +259,19 @@
   --surface-veil: rgb(22 22 23 / .95);
   --overlay: rgb(0 0 0 / .6);
 
-  --ok-bg: #1a1a1c;
-  --ok-ink: #d4d4d8;
-  --ok-line: #343437;
-  --warn-bg: #202022;
-  --warn-ink: #e4e4e7;
-  --warn-line: #3f3f42;
-  --danger-bg: #29292c;
+  /* The same ladder climbing the other way — see the light block above. */
+  --ok-bg: #3f3f46;
+  --ok-ink: #f2f2f5;
+  --ok-line: #5c5c67;
+  --warn-bg: #35353b;
+  --warn-ink: #e8e8ee;
+  --warn-line: #4e4e58;
+  --danger-bg: #4d4d56;
   --danger-ink: #ffffff;
-  --danger-line: #55555a;
-  --info-bg: #161618;
-  --info-ink: #b4b4b9;
-  --info-line: #2c2c2f;
+  --danger-line: #6e6e7a;
+  --info-bg: #2e2e33;
+  --info-ink: #d8d8de;
+  --info-line: #464650;
 
   /* The chip carries over from the light monochrome block; only the star turns. */
   --star: #c9c9cd;
@@ -285,18 +301,18 @@
     --surface-veil: rgb(22 22 23 / .95);
     --overlay: rgb(0 0 0 / .6);
 
-    --ok-bg: #1a1a1c;
-    --ok-ink: #d4d4d8;
-    --ok-line: #343437;
-    --warn-bg: #202022;
-    --warn-ink: #e4e4e7;
-    --warn-line: #3f3f42;
-    --danger-bg: #29292c;
+    --ok-bg: #3f3f46;
+    --ok-ink: #f2f2f5;
+    --ok-line: #5c5c67;
+    --warn-bg: #35353b;
+    --warn-ink: #e8e8ee;
+    --warn-line: #4e4e58;
+    --danger-bg: #4d4d56;
     --danger-ink: #ffffff;
-    --danger-line: #55555a;
-    --info-bg: #161618;
-    --info-ink: #b4b4b9;
-    --info-line: #2c2c2f;
+    --danger-line: #6e6e7a;
+    --info-bg: #2e2e33;
+    --info-ink: #d8d8de;
+    --info-line: #464650;
 
     --star: #c9c9cd;
 

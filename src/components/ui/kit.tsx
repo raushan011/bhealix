@@ -43,16 +43,26 @@ export function PageTitle({ title, subtitle, actions }:
 }
 
 type BadgeTone = "neutral" | "brand" | "success" | "warn" | "danger" | "info";
+
+/**
+ * Every tone carries its own outline as well as its fill.
+ *
+ * A fill alone is enough to tell a status apart when the fills are different
+ * hues, and not enough when they are steps on one grey ladder — which is what
+ * the monochrome palette makes them. The border is what gives a chip an edge
+ * against the card behind it whatever palette is on, so "Contacted" is a chip
+ * rather than a run of loose text.
+ */
 const badgeTone: Record<BadgeTone, string> = {
-  neutral: "bg-[var(--brand-soft)] text-[var(--ink-2)]",
-  brand: "bg-[var(--brand)] text-[var(--on-brand)]",
-  success: "bg-[var(--ok-bg)] text-[var(--ok-ink)]",
-  warn: "bg-[var(--warn-bg)] text-[var(--warn-ink)]",
-  danger: "bg-[var(--danger-bg)] text-[var(--danger-ink)]",
-  info: "bg-[var(--info-bg)] text-[var(--info-ink)]"
+  neutral: "bg-[var(--brand-soft)] text-[var(--ink-2)] border-[var(--line-2)]",
+  brand: "bg-[var(--brand)] text-[var(--on-brand)] border-[var(--brand)]",
+  success: "bg-[var(--ok-bg)] text-[var(--ok-ink)] border-[var(--ok-line)]",
+  warn: "bg-[var(--warn-bg)] text-[var(--warn-ink)] border-[var(--warn-line)]",
+  danger: "bg-[var(--danger-bg)] text-[var(--danger-ink)] border-[var(--danger-line)]",
+  info: "bg-[var(--info-bg)] text-[var(--info-ink)] border-[var(--info-line)]"
 };
 export function Badge({ tone = "neutral", children }: { tone?: BadgeTone; children: React.ReactNode }) {
-  return <span className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${badgeTone[tone]}`}>{children}</span>;
+  return <span className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${badgeTone[tone]}`}>{children}</span>;
 }
 
 /** Maps domain values to a consistent colour so a status means the same thing everywhere. */

@@ -202,13 +202,18 @@ export function ContactLead({ lead, mayEdit, onClose, onSaved }: {
         <Notice tone="warning">Google published no number for this one. Add it with Edit on the row.</Notice>
       )}
 
+      {/* The same quoted-and-accented signature the row and the log use, so a
+          remark is recognisable as one wherever it turns up. */}
       {latest && (
-        <div className="rounded-[10px] border border-[var(--line)] px-3.5 py-3">
-          <p className="text-xs font-semibold text-[var(--muted)]">Last time</p>
-          <p className="mt-1 wrap-break-word text-sm">{latest.text}</p>
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            {latest.channel} · {formatDateTime(latest.at)}{latest.byName ? ` · ${latest.byName}` : ""}
-          </p>
+        <div className="flex gap-2.5 rounded-[10px] border border-[var(--line-2)] bg-[var(--surface-2)] px-3.5 py-3">
+          <span aria-hidden className="w-[3px] shrink-0 self-stretch rounded-full bg-[var(--brand)]" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-[var(--muted)]">Last time</p>
+            <p className="mt-1 wrap-break-word text-sm text-[var(--ink)]">{latest.text}</p>
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              {latest.channel} · {formatDateTime(latest.at)}{latest.byName ? ` · ${latest.byName}` : ""}
+            </p>
+          </div>
         </div>
       )}
 
@@ -292,43 +297,47 @@ export function LeadRemarks({ lead, mayEdit, onClose, onChanged }: {
             Nothing written down yet. The first call is the one worth recording.
           </p>
         ) : remarks.map(remark => (
-          <div key={remark._id} className="rounded-[10px] border border-[var(--line)] px-3.5 py-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge tone={remarkTone(remark.channel)}>{remark.channel}</Badge>
-              {remark.status && <Badge tone={leadTone(remark.status)}>&rarr; {remark.status}</Badge>}
-              <span className="text-xs text-[var(--muted)]">{formatDateTime(remark.at)}</span>
-            </div>
+          <div key={remark._id}
+            className="flex gap-2.5 rounded-[10px] border border-[var(--line-2)] bg-[var(--surface-2)] px-3.5 py-3">
+            <span aria-hidden className="w-[3px] shrink-0 self-stretch rounded-full bg-[var(--brand)]" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone={remarkTone(remark.channel)}>{remark.channel}</Badge>
+                {remark.status && <Badge tone={leadTone(remark.status)}>&rarr; {remark.status}</Badge>}
+                <span className="text-xs text-[var(--muted)]">{formatDateTime(remark.at)}</span>
+              </div>
 
-            {editing === remark._id ? (
-              <div className="mt-2 space-y-2">
-                <textarea className="textarea" rows={3} value={draft}
-                  onChange={event => setDraft(event.target.value)} />
-                <div className="flex gap-2">
-                  <Button tone="secondary" className="flex-1" onClick={() => setEditing(undefined)}>Cancel</Button>
-                  <Button className="flex-1" busy={busy} disabled={draft.trim().length < 2}
-                    onClick={() => saveEdit(remark._id)}>Save</Button>
+              {editing === remark._id ? (
+                <div className="mt-2 space-y-2">
+                  <textarea className="textarea" rows={3} value={draft}
+                    onChange={event => setDraft(event.target.value)} />
+                  <div className="flex gap-2">
+                    <Button tone="secondary" className="flex-1" onClick={() => setEditing(undefined)}>Cancel</Button>
+                    <Button className="flex-1" busy={busy} disabled={draft.trim().length < 2}
+                      onClick={() => saveEdit(remark._id)}>Save</Button>
+                  </div>
                 </div>
-              </div>
-            ) : <>
-              <p className="mt-1.5 wrap-break-word text-sm whitespace-pre-wrap">{remark.text}</p>
-              <div className="mt-1.5 flex items-center justify-between gap-3">
-                <span className="truncate text-xs text-[var(--muted)]">{remark.byName ?? "—"}</span>
-                {mayEdit && (
-                  <span className="flex shrink-0 items-center gap-3">
-                    <button onClick={() => { setEditing(remark._id); setDraft(remark.text); }}
-                      aria-label="Edit this remark"
-                      className="tap inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand)]">
-                      <Pencil size={12} />Edit
-                    </button>
-                    <button onClick={() => remove(remark._id)} disabled={busy}
-                      aria-label="Delete this remark"
-                      className="tap inline-flex items-center text-[var(--muted)] hover:text-[var(--danger-ink)]">
-                      <Trash2 size={13} />
-                    </button>
-                  </span>
-                )}
-              </div>
-            </>}
+              ) : <>
+                <p className="mt-1.5 wrap-break-word text-sm whitespace-pre-wrap text-[var(--ink)]">{remark.text}</p>
+                <div className="mt-1.5 flex items-center justify-between gap-3">
+                  <span className="truncate text-xs text-[var(--muted)]">{remark.byName ?? "—"}</span>
+                  {mayEdit && (
+                    <span className="flex shrink-0 items-center gap-3">
+                      <button onClick={() => { setEditing(remark._id); setDraft(remark.text); }}
+                        aria-label="Edit this remark"
+                        className="tap inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand)]">
+                        <Pencil size={12} />Edit
+                      </button>
+                      <button onClick={() => remove(remark._id)} disabled={busy}
+                        aria-label="Delete this remark"
+                        className="tap inline-flex items-center text-[var(--muted)] hover:text-[var(--danger-ink)]">
+                        <Trash2 size={13} />
+                      </button>
+                    </span>
+                  )}
+                </div>
+              </>}
+            </div>
           </div>
         ))}
       </div>

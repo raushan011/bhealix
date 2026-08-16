@@ -133,7 +133,13 @@ export function RemarksLog({ mayEdit }: { mayEdit: boolean }) {
               {row.status && <Badge tone={leadTone(row.status)}>&rarr; {row.status}</Badge>}
             </div>
 
-            <p className="mt-1.5 wrap-break-word text-sm whitespace-pre-wrap">{row.text}</p>
+            {/* Quoted and accented, the way the row and the thread draw one — the
+                wording is what this whole screen exists to show, and it was
+                reading as ordinary body text between two lines of metadata. */}
+            <div className="mt-2 flex gap-2.5 rounded-[10px] border border-[var(--line-2)] bg-[var(--surface-2)] px-3 py-2">
+              <span aria-hidden className="w-[3px] shrink-0 self-stretch rounded-full bg-[var(--brand)]" />
+              <p className="min-w-0 flex-1 wrap-break-word text-sm whitespace-pre-wrap text-[var(--ink)]">{row.text}</p>
+            </div>
 
             <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted)]">
               <span>{formatDateTime(row.at)}</span>
