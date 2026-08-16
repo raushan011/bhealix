@@ -10,7 +10,7 @@ import { clockOf, dayRange, formatDate, shiftDay, todayIso, toDisplayTime } from
 import { daysLeft } from "@/lib/visits";
 import { placeLabel } from "@/lib/geo";
 import type { PhotoLocation } from "@/components/visits/visit-photos";
-import { VisitDateFilter } from "@/components/visits/visit-date-filter";
+import { SAMPLE_ANY, SAMPLE_NONE, VisitDateFilter } from "@/components/visits/visit-date-filter";
 
 export const dynamic = "force-dynamic";
 
@@ -38,20 +38,59 @@ type PhotoDoc = { _id: unknown; visit: unknown; expiresAt: Date; location?: Phot
  */
 const timeOf = (visit: VisitDoc) => visit.checkInAt ? clockOf(visit.checkInAt) : visit.plannedStart;
 
+/**
+ * The sample choice as a condition on the visit.
+ *
+ * "Any" and "none" are the two questions stock actually asks — who is handing
+ * samples out at all, and which calls went empty-handed — so they are offered
+ * beside the products rather than left to be worked out from a full list.
+ * Anything unrecognised filters nothing, the same as a mangled date.
+ */
+function sampleFilter(sample?: string) {
+  if (sample === SAMPLE_ANY) return { "samples.0": { $exists: true } };
+  if (sample === SAMPLE_NONE) return { "samples.0": { $exists: false } };
+  return sample ? { "samples.product": sample } : {};
+}
+
+/**
+ * Whether a visit that has happened handed anything over.
+ *
+ * Said on every completed call, not only the ones that gave something out: a
+ * card with no sample line reads as "nobody filled this in", and the difference
+ * between that and "the rep gave nothing" is the whole question. A visit still
+ * ahead of the rep is left alone, having nothing to report yet.
+ */
+const SETTLED = ["Completed", "Missed"];
+
 export default async function VisitsPage({ searchParams }: {
-  searchParams: Promise<{ status?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ status?: string; from?: string; to?: string; sample?: string }>;
 }) {
   await requireAdminPanel();
-  const { status, from, to } = await searchParams;
+  const { status, from, to, sample } = await searchParams;
   await connectDb();
 
+  // Everything a rep has ever handed over — taken from the visits rather than
+  // the catalogue, because a product since retired is still in this log and a
+  // name the dropdown cannot offer is a question nobody can ask.
+  const products = ((await Visit.distinct("samples.product")) as string[]).filter(Boolean).sort();
+
+  // An unrecognised choice filters nothing, the same as a mangled date: it
+  // arrives from the address bar, and a silently empty list is a worse answer
+  // than the whole log.
+  const sampleChoice = sample === SAMPLE_ANY || sample === SAMPLE_NONE || (sample && products.includes(sample))
+    ? sample : "";
+
   const range = dayRange(from, to);
-  const filter = { ...(status ? { status } : {}), ...(range ? { plannedDate: range } : {}) };
+  const filter = {
+    ...(status ? { status } : {}),
+    ...(range ? { plannedDate: range } : {}),
+    ...sampleFilter(sampleChoice)
+  };
 
   // Sixty is enough of an open-ended feed to be worth reading. A chosen span is
   // a question with an answer, though, and cutting a day's work off at sixty
-  // would be a wrong one, so the ceiling lifts once the days are named.
-  const ceiling = range ? 300 : 60;
+  // would be a wrong one, so the ceiling lifts once the filters are set.
+  const ceiling = range || sampleChoice ? 300 : 60;
   const visits = await Visit.find(filter)
     .populate("doctor", "name area city")
     .populate("employee", "name")
@@ -97,28 +136,38 @@ export default async function VisitsPage({ searchParams }: {
     : fromDay ? `since ${formatDate(fromDay)}`
     : `up to ${formatDate(toDay)}`;
 
+  const chosenSample = sampleChoice === SAMPLE_ANY ? "a sample given"
+    : sampleChoice === SAMPLE_NONE ? "no sample given"
+    : sampleChoice ? `${sampleChoice} given` : "";
+  const chosen = [chosenDays, chosenSample].filter(Boolean).join(" · ");
+
   return <div className="space-y-5">
     <PageTitle title="Visits" subtitle="Every field visit, what was discussed and what was handed out" />
 
+    {/* Plain anchors, like the date filter below and for the same reason: a
+        client-side navigation changes the address here without repainting the
+        list, so the tab moved while the visits under it did not. */}
     <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
       {tabs.map(tab => {
         const active = status === tab.value || (!status && !tab.value);
         const query = new URLSearchParams({
           ...(tab.value ? { status: tab.value } : {}),
-          ...(fromDay ? { from: fromDay } : {}), ...(toDay ? { to: toDay } : {})
+          ...(fromDay ? { from: fromDay } : {}), ...(toDay ? { to: toDay } : {}),
+          ...(sampleChoice ? { sample: sampleChoice } : {})
         }).toString();
-        return <Link key={tab.label} href={query ? `/admin/visits?${query}` : "/admin/visits"}
+        return <a key={tab.label} href={query ? `/admin/visits?${query}` : "/admin/visits"}
           className={`min-h-[38px] shrink-0 rounded-full border px-4 text-xs font-semibold leading-[36px] ${
             active ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--on-brand)]" : "border-[var(--line-2)] bg-[var(--surface)] text-[var(--ink-2)]"
-          }`}>{tab.label}</Link>;
+          }`}>{tab.label}</a>;
       })}
     </div>
 
-    <VisitDateFilter presets={presets} from={fromDay} to={toDay} status={status} />
+    <VisitDateFilter presets={presets} from={fromDay} to={toDay}
+      sample={sampleChoice} status={status} products={products} />
 
-    {visits.length > 0 && chosenDays && (
+    {visits.length > 0 && chosen && (
       <p className="text-xs text-[var(--muted)]">
-        {visits.length === ceiling ? `First ${ceiling}` : visits.length} visit{visits.length === 1 ? "" : "s"} · {chosenDays}
+        {visits.length === ceiling ? `First ${ceiling}` : visits.length} visit{visits.length === 1 ? "" : "s"} · {chosen}
       </p>
     )}
 
@@ -154,9 +203,14 @@ export default async function VisitsPage({ searchParams }: {
             {Boolean(visit.productsDiscussed?.length) && (
               <p className="mt-1 text-xs text-[var(--muted)]">Discussed: {visit.productsDiscussed!.join(", ")}</p>
             )}
-            {Boolean(visit.samples?.length) && (
-              <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-[var(--brand)]">
-                <Package size={12} />{visit.samples!.map(s => `${s.product} ×${s.quantity}`).join(", ")}
+            {visit.samples?.length ? (
+              <p className="mt-1 flex items-start gap-1.5 text-xs font-medium text-[var(--brand)]">
+                <Package size={12} className="mt-0.5 shrink-0" />
+                <span>Samples given: {visit.samples.map(s => `${s.product} ×${s.quantity}`).join(", ")}</span>
+              </p>
+            ) : SETTLED.includes(visit.status) && (
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-[var(--muted)]">
+                <Package size={12} className="shrink-0" />No samples given
               </p>
             )}
             {visit.orderValue ? <p className="mt-1 text-xs font-semibold">Order ₹{visit.orderValue.toLocaleString("en-IN")}</p> : null}
@@ -194,9 +248,9 @@ export default async function VisitsPage({ searchParams }: {
         })}
       </Card>
     ) : (
-      <EmptyState icon={ClipboardList} title={chosenDays ? "Nothing on those days" : "No visits here"}
-        description={chosenDays
-          ? `Nothing was recorded for ${chosenDays}. Widen the dates, or clear them to read the whole log.`
+      <EmptyState icon={ClipboardList} title={chosen ? "Nothing matches that" : "No visits here"}
+        description={chosen
+          ? `Nothing was recorded for ${chosen}. Widen the search, or clear it to read the whole log.`
           : "Visits appear once a route plan is assigned to a representative, or when one registers a call they made without a plan."} />
     )}
   </div>;

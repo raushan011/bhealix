@@ -1323,7 +1323,7 @@ samples, history, leave, payslips and profile behind **More**.
 |---|---|
 | Billing | `BillForm`, `CustomerForm`, `CustomerPicker`, `InvoiceDocument` (print layout), `InvoiceView`, `InvoiceRow` + `invoiceTone`/`invoiceLabel`, `PaymentForm`, `PaymentProof`, `PaymentQr`, `PrintButton` |
 | Doctors | `CallScheduleEditor`, `DoctorCallTimeCard`, `DoctorDetailsForm`, `DoctorPicker` (+ `hasCoordinates`, `placeOf`) |
-| Visits | `VisitForm`, `VisitPhotos` |
+| Visits | `VisitForm`, `VisitPhotos`, `RegisterVisit`, `VisitDateFilter` (named days, a from/to pair and the sample dropdown; a plain GET form and links, so `Apply` is an ordinary submit and the status tab is carried through) |
 | Plans | `PlanAssignment`, `DeletePlanButton` |
 | HR | `PayslipDocument`, `SalaryCard` |
 | Sales | `SyncButton` (reports what a sync did, not just that it ran), `RepForm` (previews the coupon codes it will create), `OrderList` (+ the delivery override), `ImportOrders`, `AutomationPanel`, `LeadsScreen` (Search / Saved tabs), `LeadSearch` (results arrive ticked; saving is the second step), `LeadList` (status saves from the row, everything else from a dialog) |
@@ -1446,7 +1446,9 @@ the server knows more about than the request does belongs there too, not in `fie
 | `$match` does not cast | A string id in an aggregation `$match` silently matches nothing, so totals come back zero while `find()` works. | Wrap ids in `new Types.ObjectId(...)` for any filter reused in an aggregation — see `/api/invoices` GET. |
 | Overwriting `filter.status` | Writing a literal `status` beside a filter that already set one makes summary cards total every bill while the count shows the filtered few. | Fold extra conditions into `$and`. |
 | A key called `type` in a nested object | Mongoose reads it as the type declaration and turns the whole parent into a String field. | Spell it `type: { type: String }` (see `Invoice.billTo.type`). |
-| Dates at midnight | `toISOString()` east of UTC reports the previous day, so a saved plan or invoice walks its date backwards. | `fromDateInput()` anchors at **local midday**; `toDateInput()` formats locally. |
+| Dates at midnight | `toISOString()` east of UTC reports the previous day, so a saved plan or invoice walks its date backwards. | `fromDateInput()` anchors at **midday on the working clock**; `toDateInput()` reads it back on the same one. |
+| Soft navigation on `/admin/visits` | A `<Link>` or `router.push` changes the address without repainting the list: the tab moves, the visits under it do not, and a date filter reads as "nothing that day". Reproduces in a production build, and on other admin pages too. | The tabs and `VisitDateFilter` use plain `<a>`/GET-form navigation. Unfixed underneath — see the note in `visit-date-filter.tsx`. |
+| Reading a clock off the host | The server keeps UTC, so `getHours()`, `setHours(0,0,0,0)` and a bare `toLocaleString()` are five and a half hours out — a call at 12:17 was written down as 06:47, and "today" ran from 05:30 to 05:30. | Everything goes through `lib/time.ts`, which reads one named zone (`ZONE`): `clockOf()` for a time, `dayOf()`/`todayIso()` for a day, `todayRange()`/`dayRange()`/`startOfDay()` for a query. Never `getHours` / `setHours` / `getDay` on a stored date. |
 | Appending derived ledger rows | Re-submitting a completed visit or re-saving an invoice doubles the stock movement. | Always delete-then-insert: `syncDispenseLedger`, `syncInvoiceStock`. |
 | Renaming a product | Both ledgers key on `productName`, so the balance is stranded under the old name and the product reads zero. | Call `renameProductInLedgers(from, to)`. |
 | Forgetting `recalculate()` | `amountPaid` / `balanceDue` / `status` drift away from `payments[]`. | Call it after any change to `payments`. |
@@ -1538,7 +1540,7 @@ Co-located `*.test.ts` next to the module they cover; `npm test` runs vitest onc
 | `lib/hr/payroll-days.test.ts` | divisor days, on-roll days, loss of pay |
 | `lib/hr/hr.test.ts` | leave counting and balances |
 | `lib/routing.test.ts` | call-window ordering, conflicts, distance tie-breaks |
-| `lib/time.test.ts` | clock parsing, local-date conversions |
+| `lib/time.test.ts` | clock parsing, working-clock days and ranges (these pass under any host `TZ` — that is the point) |
 | `lib/visits.test.ts` | photo retention arithmetic |
 | `lib/samples/movements.test.ts` | signed quantities, `foldStock`, dispense rows |
 | `lib/inventory/movements.test.ts` | signed stock, `foldLevels`, `levelChange`, alerts |
