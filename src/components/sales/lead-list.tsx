@@ -259,7 +259,7 @@ export function LeadList({ mayEdit, reloadToken }: { mayEdit: boolean; reloadTok
                 <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted)]">
                   {lead.rating !== undefined && (
                     <span className="flex items-center gap-1">
-                      <Star size={11} className="fill-amber-400 text-amber-400" />
+                      <Star size={11} className="fill-[var(--star)] text-[var(--star)]" />
                       {lead.rating} ({lead.reviewCount ?? 0})
                     </span>
                   )}

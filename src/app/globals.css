@@ -51,6 +51,20 @@
   --info-ink: #0b5a86;
   --info-line: #bcdcf5;
 
+  /*
+   * The two things that are painted *on top of* content rather than in it, and
+   * so cannot read from the surface tokens: a Google rating star, and the chip
+   * marking a site photograph as carrying a position.
+   *
+   * Set here only. Custom properties cascade like any other declaration, so the
+   * dark block below inherits both — amber reads on cream and on near-black
+   * alike, and the chip sits on a photograph either way. Only the monochrome
+   * palette has cause to restate them.
+   */
+  --star: #fbbf24;
+  --media-chip: rgb(5 150 105 / .9);
+  --media-chip-ink: #ffffff;
+
   color-scheme: light;
 }
 
@@ -140,6 +154,157 @@
 }
 
 /*
+ * The second palette: black and white.
+ *
+ * A second *axis*, not a third theme. Light and dark answer "how bright is the
+ * room"; this answers "do I want the brand on screen at all", and the two are
+ * independent — somebody wants monochrome at night as much as at noon. So it
+ * rides on its own attribute and every combination of the two is a real state.
+ *
+ * The original stays the default. Nothing here is reached without `data-palette`
+ * being set, so a browser that has never been told renders exactly the warm
+ * cream it always did.
+ *
+ * Monochrome reaches the status colours too, which is the part worth being
+ * deliberate about: green for delivered and red for returned are *reinforcement*
+ * in this app, never the message itself — every badge, notice and figure that
+ * uses them carries its own word beside it. So the meaning survives, and what is
+ * left carries urgency by weight instead of by hue: danger darkest, info
+ * lightest, in a straight line between them.
+ */
+:root[data-palette="mono"] {
+  --bg: #f4f4f5;
+  --surface: #ffffff;
+  --surface-2: #ebebed;
+  --brand: #111113;
+  --brand-hover: #000000;
+  --brand-soft: #ededee;
+  --brand-tint: #dededf;
+  --on-brand: #ffffff;
+
+  --ink: #111113;
+  --ink-2: #3f3f42;
+  --muted: #6e6e73;
+  --line: #e4e4e7;
+  --line-2: #cfcfd3;
+  --placeholder: #9a9aa0;
+  --focus-ring: rgb(17 17 19 / .16);
+  --surface-veil: rgb(255 255 255 / .95);
+  --overlay: rgb(0 0 0 / .4);
+
+  --ok-bg: #f0f0f1;
+  --ok-ink: #2b2b2e;
+  --ok-line: #c8c8cc;
+  --warn-bg: #ebebec;
+  --warn-ink: #3a3a3d;
+  --warn-line: #bcbcc1;
+  --danger-bg: #e3e3e5;
+  --danger-ink: #000000;
+  --danger-line: #a9a9af;
+  --info-bg: #f4f4f5;
+  --info-ink: #4a4a4e;
+  --info-line: #d6d6da;
+
+  /*
+   * A gold star on an otherwise greyscale page is the single most visible way
+   * this palette could fail to mean what it says. The chip inverts instead of
+   * greying, because it sits on a photograph and needs to hold its own against
+   * whatever is underneath — white on the located one, against the black chip
+   * the unlocated one already wears.
+   */
+  --star: #3f3f42;
+  --media-chip: rgb(255 255 255 / .92);
+  --media-chip-ink: #111113;
+
+  color-scheme: light;
+}
+
+/*
+ * Monochrome after dark. Higher specificity than either single-axis block, so
+ * it beats both the warm dark palette above and the monochrome light one — each
+ * of which matches an element carrying both attributes.
+ */
+:root[data-palette="mono"][data-theme="dark"] {
+  --bg: #0b0b0c;
+  --surface: #161617;
+  --surface-2: #202022;
+  --brand: #f4f4f5;
+  --brand-hover: #ffffff;
+  --brand-soft: #232325;
+  --brand-tint: #2e2e31;
+  --on-brand: #111113;
+
+  --ink: #f4f4f5;
+  --ink-2: #c9c9cd;
+  --muted: #8e8e93;
+  --line: #262628;
+  --line-2: #3a3a3d;
+  --placeholder: #757579;
+  --focus-ring: rgb(244 244 245 / .22);
+  --surface-veil: rgb(22 22 23 / .95);
+  --overlay: rgb(0 0 0 / .6);
+
+  --ok-bg: #1a1a1c;
+  --ok-ink: #d4d4d8;
+  --ok-line: #343437;
+  --warn-bg: #202022;
+  --warn-ink: #e4e4e7;
+  --warn-line: #3f3f42;
+  --danger-bg: #29292c;
+  --danger-ink: #ffffff;
+  --danger-line: #55555a;
+  --info-bg: #161618;
+  --info-ink: #b4b4b9;
+  --info-line: #2c2c2f;
+
+  /* The chip carries over from the light monochrome block; only the star turns. */
+  --star: #c9c9cd;
+
+  color-scheme: dark;
+}
+
+/* Monochrome, following a device nobody has overruled — see the warm twin above. */
+@media (prefers-color-scheme: dark) {
+  :root[data-palette="mono"]:not([data-theme="light"]):not([data-theme="dark"]) {
+    --bg: #0b0b0c;
+    --surface: #161617;
+    --surface-2: #202022;
+    --brand: #f4f4f5;
+    --brand-hover: #ffffff;
+    --brand-soft: #232325;
+    --brand-tint: #2e2e31;
+    --on-brand: #111113;
+
+    --ink: #f4f4f5;
+    --ink-2: #c9c9cd;
+    --muted: #8e8e93;
+    --line: #262628;
+    --line-2: #3a3a3d;
+    --placeholder: #757579;
+    --focus-ring: rgb(244 244 245 / .22);
+    --surface-veil: rgb(22 22 23 / .95);
+    --overlay: rgb(0 0 0 / .6);
+
+    --ok-bg: #1a1a1c;
+    --ok-ink: #d4d4d8;
+    --ok-line: #343437;
+    --warn-bg: #202022;
+    --warn-ink: #e4e4e7;
+    --warn-line: #3f3f42;
+    --danger-bg: #29292c;
+    --danger-ink: #ffffff;
+    --danger-line: #55555a;
+    --info-bg: #161618;
+    --info-ink: #b4b4b9;
+    --info-line: #2c2c2f;
+
+    --star: #c9c9cd;
+
+    color-scheme: dark;
+  }
+}
+
+/*
  * Everything below is layered on purpose.
  *
  * Unlayered CSS outranks every cascade layer, so a bare `a { color: inherit }`
@@ -195,6 +360,14 @@
   }
   .input::placeholder, .textarea::placeholder { color: var(--placeholder); }
   .input:disabled, .select:disabled { background: var(--surface-2); color: var(--muted); }
+
+  /*
+   * The monogram is raster artwork in the brand's walnut, so it is the one
+   * thing on screen the tokens cannot reach. Left alone it would sit as the
+   * only colour on an otherwise monochrome page, which reads as a bug rather
+   * than as a logo.
+   */
+  :root[data-palette="mono"] .brand-mark { filter: grayscale(1); }
 
   .card {
     background: var(--surface);

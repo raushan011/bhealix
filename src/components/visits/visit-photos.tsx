@@ -314,7 +314,7 @@ export function VisitPhotos({ visitId, initial, canAdd }: {
             {/* Says at a glance which photos carry a position — the stamp on the
                 image says the same, but at thumbnail size it cannot be read. */}
             <span className={`absolute bottom-1 left-1 grid size-5 place-items-center rounded-full ${
-              isLocated(photo) ? "bg-emerald-600/90 text-white" : "bg-black/60 text-white/80"
+              isLocated(photo) ? "bg-[var(--media-chip)] text-[var(--media-chip-ink)]" : "bg-black/60 text-white/80"
             }`} title={isLocated(photo) ? placeSummary(photo.location) : "No location"}>
               {isLocated(photo) ? <MapPin size={11} /> : <Crosshair size={11} />}
             </span>

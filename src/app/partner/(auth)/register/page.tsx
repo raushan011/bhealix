@@ -7,7 +7,7 @@ import { Loader2, ShieldCheck } from "lucide-react";
 import { Brand, BrandMark } from "@/components/ui/brand";
 import { Button, Field, Notice } from "@/components/ui/kit";
 import { PasswordInput } from "@/components/ui/password-input";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { Appearance } from "@/components/ui/appearance";
 import { normaliseCode } from "@/lib/sales/coupons";
 import { passwordProblem, repCodeProblem, suggestRepCode } from "@/lib/sales/partners";
 
@@ -77,7 +77,7 @@ export default function PartnerRegisterPage() {
   }
 
   return <main className="grid min-h-[100dvh] place-items-center px-5 py-10">
-    <ThemeToggle className="fixed right-3 top-3" />
+    <Appearance className="fixed right-3 top-3" />
     <div className="page-enter w-full max-w-[420px]">
       <Brand subtitle="Sales partners" />
       <h1 className="mt-9 text-2xl">Sell with Bhealix</h1>

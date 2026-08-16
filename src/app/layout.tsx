@@ -27,6 +27,9 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   // The browser paints its own chrome with this before the page has loaded, so
   // a dark device gets a dark bar rather than a walnut one over a dark page.
+  // Only until the app is up: these know nothing of an overruled device or of
+  // the monochrome palette, so `paintBrowserChrome` replaces them on mount with
+  // the colour the page is actually painted in.
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#73461f" },
     { media: "(prefers-color-scheme: dark)", color: "#15110d" }
@@ -36,9 +39,9 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   /*
    * `suppressHydrationWarning` on <html>: the script below stamps `data-theme`
-   * on it before React arrives, so the served markup and the live element
-   * differ by exactly that attribute. It suppresses nothing else — the warning
-   * is scoped to this element's own attributes.
+   * and `data-palette` on it before React arrives, so the served markup and the
+   * live element differ by exactly those attributes. It suppresses nothing else
+   * — the warning is scoped to this element's own attributes.
    */
   return <html lang="en" suppressHydrationWarning>
     <head>

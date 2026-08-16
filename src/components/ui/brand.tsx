@@ -16,7 +16,9 @@ export function BrandMark({ size = 34 }: { size?: number }) {
     width={size}
     height={size}
     priority
-    className="shrink-0 object-contain"
+    // `brand-mark` is what the monochrome palette greys out — it is raster
+    // artwork, so it is the one thing on screen the colour tokens cannot reach.
+    className="brand-mark shrink-0 object-contain"
     style={{ width: size, height: size }}
   />;
 }

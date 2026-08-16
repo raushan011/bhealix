@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LayoutGrid, LogOut, ShoppingBag, Tag, Wallet } from "lucide-react";
 import { BrandMark } from "@/components/ui/brand";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { Appearance } from "@/components/ui/appearance";
 
 /**
  * The affiliate's own panel.
@@ -56,7 +56,7 @@ export function PartnerShell({ rep, children }: {
           </span>
         </Link>
         <div className="flex shrink-0 items-center">
-          <ThemeToggle />
+          <Appearance />
           <button onClick={signOut} aria-label="Sign out"
             className="tap grid shrink-0 place-items-center rounded-[10px] text-[var(--muted)] hover:bg-[var(--surface-2)]">
             <LogOut size={18} />

@@ -4,7 +4,7 @@ import { ArrowRight, Stethoscope, TrendingUp } from "lucide-react";
 import { requireSession } from "@/lib/auth/guard";
 import { can, homeFor, usesAdminPanel } from "@/constants/access";
 import { Brand } from "@/components/ui/brand";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { Appearance } from "@/components/ui/appearance";
 import { WORKSPACE_BLURB, WORKSPACE_HOME, WORKSPACE_LABEL } from "@/lib/workspace";
 
 /**
@@ -25,7 +25,7 @@ export default async function ChoosePage() {
   const first = session.name.trim().split(/\s+/)[0] || "there";
 
   return <main className="grid min-h-[100dvh] place-items-center px-5 py-10">
-    <ThemeToggle className="fixed right-3 top-3" />
+    <Appearance className="fixed right-3 top-3" />
 
     <div className="page-enter w-full max-w-[760px]">
       <Brand />

@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { CalendarCheck, LayoutGrid, LogOut, Receipt, Route, Stethoscope } from "lucide-react";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { BrandMark } from "@/components/ui/brand";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { Appearance } from "@/components/ui/appearance";
 import { ROLE_LABEL, type Role } from "@/constants/access";
 
 /**
@@ -56,7 +56,7 @@ export function FieldShell({ user, children }: { user: { name: string; role: Rol
           </div>
         </div>
         <div className="flex shrink-0 items-center">
-          <ThemeToggle />
+          <Appearance />
           <button onClick={signOut} aria-label="Sign out" className="tap grid shrink-0 place-items-center rounded-[10px] text-[var(--muted)] hover:bg-[var(--surface-2)]"><LogOut size={18} /></button>
         </div>
       </div>

@@ -596,7 +596,7 @@ export default function DiscoverPage() {
                       <span className="flex items-center gap-1">
                         <Star
                           size={11}
-                          className="fill-amber-400 text-amber-400"
+                          className="fill-[var(--star)] text-[var(--star)]"
                         />
                         {match.rating} ({match.reviewCount ?? 0})
                       </span>
@@ -704,7 +704,7 @@ export default function DiscoverPage() {
                           <span className="inline-flex items-center gap-1 text-xs text-[var(--muted)]">
                             <Star
                               size={12}
-                              className="fill-amber-400 text-amber-400"
+                              className="fill-[var(--star)] text-[var(--star)]"
                             />
                             {row.rating} ({row.reviewCount ?? 0})
                           </span>

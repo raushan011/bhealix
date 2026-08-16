@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { BadgePercent, BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, HeartHandshake, LayoutDashboard, LogOut, Menu, Package, Receipt, Repeat, Search, Settings, ShoppingBag, Stethoscope, Tag, Truck, Users, Wallet, Warehouse, X } from "lucide-react";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { Brand, BrandMark } from "@/components/ui/brand";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { Appearance } from "@/components/ui/appearance";
 import { ROLE_LABEL, can, type Role } from "@/constants/access";
 import { CHOOSE_PATH, WORKSPACE_LABEL, workspaceOf, type Workspace } from "@/lib/workspace";
 
@@ -127,7 +127,7 @@ export function AdminShell({ user, children }: { user: { name: string; role: Rol
         <p className="truncate text-sm font-semibold">{user.name}</p>
         <p className="truncate text-xs text-[var(--muted)]">{ROLE_LABEL[user.role]}</p>
       </div>
-      <ThemeToggle />
+      <Appearance />
       <button onClick={signOut} aria-label="Sign out" className="tap grid shrink-0 place-items-center rounded-[10px] text-[var(--muted)] hover:bg-[var(--surface-2)]"><LogOut size={17} /></button>
     </div>
   );
