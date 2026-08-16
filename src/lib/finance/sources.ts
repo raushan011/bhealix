@@ -31,6 +31,31 @@
  */
 export type Collection = "pull" | "upload";
 
+/**
+ * The companies this vault can hold an API key for. One per vendor rather than
+ * per source, because Shiprocket's three documents are all reached with the same
+ * login.
+ */
+export const CONNECTORS = ["shiprocket", "razorpay", "shopify", "meta"] as const;
+export type ConnectorKey = (typeof CONNECTORS)[number];
+
+/**
+ * What comes back when a source is pulled, and the difference matters to whoever
+ * files the return.
+ *
+ * `document` is the vendor's **own tax invoice**, fetched as they issued it —
+ * the piece of paper the input credit is actually claimed on.
+ *
+ * `statement` is a sheet this application builds from what the vendor's API will
+ * tell it: every transaction for the month with the fee and the tax on it, and
+ * the totals. It is real data pulled with a real key, and it is *not* a tax
+ * invoice. Several of these companies publish the figures on an API and the
+ * invoice itself only in their dashboard, and pretending otherwise would leave
+ * somebody claiming credit against a spreadsheet. The screen says which is
+ * which, and a source that only yields a statement still asks for its PDF.
+ */
+export type Yield = "document" | "statement";
+
 export type SourceKey =
   | "shiprocket-recharge"
   | "shiprocket-order"
@@ -47,6 +72,15 @@ export type Source = {
   label: string;
   blurb: string;
   collection: Collection;
+  /** Which stored API key reaches it. Absent means nothing can fetch this one. */
+  connector?: ConnectorKey;
+  /** What a pull produces — the vendor's own invoice, or a statement built from their data. */
+  yields?: Yield;
+  /**
+   * Said on the card when a pull cannot produce the tax invoice itself, so
+   * nobody concludes the month is finished because a fetch succeeded.
+   */
+  stillNeedsPdf?: string;
   /** Where a person goes to download it by hand. Shown beside every upload box. */
   billingUrl?: string;
   /**
@@ -73,8 +107,10 @@ export const SOURCES: readonly Source[] = [
     key: "shiprocket-order",
     vendor: "Shiprocket",
     label: "Order tax invoices",
-    blurb: "The tax invoice raised against each shipment. Pulled straight from Shiprocket using the credentials already held under Sales settings.",
+    blurb: "The tax invoice raised against each shipment, fetched as Shiprocket issued it.",
     collection: "pull",
+    connector: "shiprocket",
+    yields: "document",
     billingUrl: "https://app.shiprocket.in/orders",
     expected: true
   },
@@ -91,8 +127,11 @@ export const SOURCES: readonly Source[] = [
     key: "razorpay",
     vendor: "Razorpay",
     label: "Gateway fees",
-    blurb: "Razorpay's own monthly tax invoice for what it charged on the payments it collected.",
-    collection: "upload",
+    blurb: "Every payment Razorpay collected in the month with the fee and the GST it charged on each, totalled — pulled with the API key.",
+    collection: "pull",
+    connector: "razorpay",
+    yields: "statement",
+    stillNeedsPdf: "Razorpay publishes the figures on its API and the monthly tax invoice only in the dashboard. File that PDF as well — the credit is claimed on it, not on this statement.",
     billingUrl: "https://dashboard.razorpay.com/app/settings/invoices",
     expected: true
   },
@@ -101,7 +140,10 @@ export const SOURCES: readonly Source[] = [
     vendor: "Shopify",
     label: "Subscription & apps",
     blurb: "The shop's own bill: the plan, the apps on it and any transaction fees.",
-    collection: "upload",
+    collection: "pull",
+    connector: "shopify",
+    yields: "statement",
+    stillNeedsPdf: "Shopify's Admin API exposes the payout and fee figures but not the monthly subscription invoice. File that PDF as well.",
     billingUrl: "https://admin.shopify.com/settings/billing",
     expected: true
   },
@@ -109,8 +151,11 @@ export const SOURCES: readonly Source[] = [
     key: "meta-ads",
     vendor: "Meta",
     label: "Ads billing",
-    blurb: "What was spent on Facebook and Instagram advertising, as Meta's receipts for the month.",
-    collection: "upload",
+    blurb: "What was actually spent on Facebook and Instagram advertising in the month, read from the ad account.",
+    collection: "pull",
+    connector: "meta",
+    yields: "statement",
+    stillNeedsPdf: "Meta bills a card and publishes the receipt in Ads Manager only. File that PDF as well — this statement is the spend, not the invoice.",
     billingUrl: "https://business.facebook.com/billing_hub/accounts",
     expected: true
   },

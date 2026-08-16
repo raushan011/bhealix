@@ -5,30 +5,35 @@ import { can } from "@/constants/access";
 import { badRequest, fail, ok } from "@/lib/api";
 import { record } from "@/lib/audit";
 import { IntegrationError } from "@/lib/sales/http";
+import { connectorFor } from "@/lib/finance/connectors";
+import { loadCredentials, recordFetch } from "@/lib/finance/connections";
+import { fileFetched } from "@/lib/finance/file-fetched";
 import { isPeriod } from "@/lib/finance/period";
 import { pullShiprocketOrderInvoices } from "@/lib/finance/pull";
 import { sourceOf } from "@/lib/finance/sources";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-/** Each batch of thirty is a render on Shiprocket's side and then a download. */
+/** Each Shiprocket batch is a render on their side and then a download. */
 export const maxDuration = 300;
 
 const schema = z.object({
-  period: z.string().refine(isPeriod, "Choose the month to pull"),
+  period: z.string().refine(isPeriod, "Choose the month to fetch"),
   source: z.string()
 });
 
 /**
- * Fetches what can be fetched.
+ * Fetches a month of one vendor, with the API key stored for it.
  *
- * One source qualifies today — Shiprocket's order tax invoices — and the route
- * refuses the rest by name rather than pretending to try. That refusal is the
- * important part: a "sync" that ran against Razorpay or Meta and filed nothing
- * would leave a month looking synced and empty, which is indistinguishable on
- * screen from a month that genuinely had no bills. Being told "Razorpay does not
- * publish this on an API — here is the page to download it from" is a smaller
- * feature and a much more useful one.
+ * Dispatch is by the source's declared connector rather than by a switch over
+ * vendor names, so a fifth vendor is a file in `lib/finance/connectors` and a
+ * line in the registry. Shiprocket is the single exception and is called
+ * directly: its fetch needs the `SalesOrder` records as well as the credentials,
+ * which no other connector does and none of them should have to know about.
+ *
+ * Three refusals, each a different thing to fix and each said in those terms:
+ * a source nothing can fetch, a source whose key has not been entered, and a
+ * vendor that refused the key it was given.
  */
 export async function POST(request: Request) {
   try {
@@ -39,28 +44,67 @@ export async function POST(request: Request) {
     const { period, source } = schema.parse(await request.json());
     const chosen = sourceOf(source);
 
-    if (chosen.collection !== "pull") {
+    if (!chosen.connector) {
       return badRequest(
-        `${chosen.vendor} does not publish its ${chosen.label.toLowerCase()} on an API this account can call. Download it from their dashboard and file it here — the upload box beside this source links straight to the page.`
+        `${chosen.vendor} does not publish its ${chosen.label.toLowerCase()} on any API this account can call. `
+        + "Download it from their dashboard and file it here — the card links straight to the page."
       );
     }
 
+    const connector = connectorFor(chosen.connector);
+    const credentials = await loadCredentials(chosen.connector);
+    if (!credentials) {
+      return badRequest(`No API key is stored for ${connector.label}. Add it under Super admin → Connections.`);
+    }
+
     try {
-      const outcome = await pullShiprocketOrderInvoices(period, auth.session.userId);
+      /*
+       * Shiprocket's own path. It reads the orders this application booked and
+       * fetches the invoice Shiprocket rendered for each — the only one of the
+       * four that comes back as the vendor's own document rather than as a
+       * statement built from their figures.
+       */
+      if (chosen.connector === "shiprocket") {
+        const outcome = await pullShiprocketOrderInvoices(period, auth.session.userId);
+        await recordFetch("shiprocket");
+        await record({
+          actor: auth.session.userId, action: "finance.invoices.pulled",
+          entityType: "VendorInvoice", entityId: period,
+          metadata: { period, source, filed: outcome.filed, skipped: outcome.skipped }
+        });
+        return ok(outcome);
+      }
+
+      const result = await connector.fetch(credentials, period, auth.session.userId);
+      const filed = await fileFetched(chosen.key, period, result.documents, auth.session.userId);
+      await recordFetch(chosen.connector);
 
       await record({
-        actor: auth.session.userId,
-        action: "finance.invoices.pulled",
-        entityType: "VendorInvoice",
-        entityId: period,
-        metadata: { period, source, filed: outcome.filed, skipped: outcome.skipped }
+        actor: auth.session.userId, action: "finance.invoices.pulled",
+        entityType: "VendorInvoice", entityId: period,
+        metadata: { period, source, filed, yields: chosen.yields }
       });
 
-      return ok(outcome);
+      return ok({
+        source: chosen.key,
+        filed,
+        skipped: 0,
+        message: result.message,
+        /*
+         * Carried back so the screen can go on asking for the PDF rather than
+         * letting a successful fetch read as a finished month. A statement is
+         * real data and is not the document credit is claimed against.
+         */
+        stillNeedsPdf: chosen.yields === "statement" ? chosen.stillNeedsPdf : undefined
+      });
     } catch (error) {
-      // The supplier's own words reach the screen: "Shiprocket refused the
-      // request (401)" is what gets somebody to check the API user, and
-      // "Something went wrong" is not.
+      const message = error instanceof IntegrationError
+        ? error.message
+        : error instanceof Error ? error.message : "The fetch failed.";
+      await recordFetch(chosen.connector, message);
+      // The vendor's own words reach the screen: "Razorpay refused the request
+      // (401)" is what gets somebody to check the key, and "Something went
+      // wrong" is not.
       if (error instanceof IntegrationError) return badRequest(error.message, 502);
       throw error;
     }

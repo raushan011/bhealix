@@ -158,7 +158,19 @@ export const AUDIT_ACTIONS = {
   "finance.archive.downloaded": "Downloaded a month's invoice bundle",
   "finance.period.handed-over": "Marked a month sent to the accountant",
   "finance.period.reopened": "Reopened a month already sent to the accountant",
-  "finance.period.noted": "Left a note against an accounting month"
+  "finance.period.noted": "Left a note against an accounting month",
+
+  /**
+   * A vendor's API key, entered or removed.
+   *
+   * The key itself never appears on the line — only which fields were touched.
+   * What makes this worth recording at all is that these credentials read
+   * accounts holding money: a Razorpay secret can list every payment this
+   * company has taken, so "who put that key in, and when" is a question worth
+   * being able to answer.
+   */
+  "finance.connection.updated": "Changed a supplier's API key",
+  "finance.connection.removed": "Removed a supplier's API key"
 } as const;
 
 export type AuditAction = keyof typeof AUDIT_ACTIONS;

@@ -1,5 +1,5 @@
 import { Schema, model, models } from "mongoose";
-import { SOURCE_KEYS } from "@/lib/finance/sources";
+import { CONNECTORS, SOURCE_KEYS } from "@/lib/finance/sources";
 import { VAULT_FILE_TYPES } from "@/lib/finance/files";
 
 /**
@@ -116,3 +116,40 @@ const FinancePeriodSchema = new Schema({
 }, { timestamps: true });
 
 export const FinancePeriod = models.FinancePeriod ?? model("FinancePeriod", FinancePeriodSchema);
+
+/**
+ * One vendor's API credentials.
+ *
+ * A document per connector rather than a field per vendor on one settings
+ * singleton, which is what the affiliate settings next door do. Four vendors
+ * want four completely different sets of fields — a login, a key pair, a shop
+ * domain and a token, an account id and a long-lived token — and a schema
+ * enumerating all of them would have to be edited for a fifth. `secrets` is a
+ * free-form map instead, and the connector declares what belongs in it.
+ *
+ * **`select: false`, and that is the important line.** These are live keys into
+ * accounts that hold money: a Razorpay secret can read every payment this
+ * company has taken. Left selectable, the settings screen that only wants to say
+ * "connected" would drag them into memory and, one careless serialisation later,
+ * into its own HTML. Exactly one helper asks for them with `+`.
+ */
+const FinanceConnectionSchema = new Schema({
+  connector: { type: String, enum: CONNECTORS, required: true, unique: true, index: true },
+
+  /** The parts that are safe to show: a key id, a shop domain, an account id. */
+  publicFields: { type: Map, of: String, default: () => ({}) },
+  /** The parts that are not. Each value encrypted at rest with AUTH_SECRET. */
+  secrets: { type: Map, of: String, select: false, default: () => ({}) },
+
+  /** What the last "Test connection" said, so the screen can show it on load. */
+  lastTestedAt: Date,
+  lastTestOk: Boolean,
+  lastTestMessage: String,
+
+  lastFetchedAt: Date,
+  lastFetchError: String,
+
+  updatedBy: { type: Schema.Types.ObjectId, ref: "User" }
+}, { timestamps: true });
+
+export const FinanceConnection = models.FinanceConnection ?? model("FinanceConnection", FinanceConnectionSchema);

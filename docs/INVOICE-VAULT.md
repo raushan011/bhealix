@@ -73,40 +73,70 @@ Seven sources. Shiprocket appears three times on purpose: they are three
 different documents raised by three different parts of that company against three
 different expenses, and a CA reconciles them separately.
 
-| Source | What it is | How it arrives |
+| Source | What it is | Fetch brings back |
 |---|---|---|
-| Shiprocket — wallet recharge | Money put into the wallet: freight paid in advance | Upload |
-| Shiprocket — order tax invoices | The tax invoice against each shipment | **Fetched automatically** |
-| Shiprocket — checkout charges | What Shiprocket Checkout bills for the cart it powers | Upload |
-| Razorpay — gateway fees | Razorpay's monthly tax invoice for what it charged | Upload |
-| Shopify — subscription & apps | The plan, the apps on it, transaction fees | Upload |
-| Meta — ads billing | Facebook and Instagram advertising receipts | Upload |
-| Offline & other | Anything on paper or by email: the CA's fee, rent, a manual courier bill | Upload |
+| Shiprocket — order tax invoices | The tax invoice against each shipment | **Shiprocket's own PDFs** |
+| Razorpay — gateway fees | Every payment with the fee and GST charged on it | A statement (see below) |
+| Shopify — subscription & apps | Payout processing fees | A statement (see below) |
+| Meta — ads billing | What was spent on advertising, by day | A statement (see below) |
+| Shiprocket — wallet recharge | Money put into the wallet: freight paid in advance | Nothing — upload only |
+| Shiprocket — checkout charges | What Shiprocket Checkout bills for the cart | Nothing — upload only |
+| Offline & other | Rent, the CA's own fee, a manual courier bill | Nothing — upload only |
 
-### Why only one of them is automatic
+### Documents versus statements
 
-Because only one of them **can** be, and saying so plainly is better than a sync
-button that quietly does nothing.
+The distinction the whole design turns on, and the one to understand before
+trusting a green tick.
 
-Shiprocket's order invoices are fetchable because this application already books
-those parcels: it holds the credentials (under **Sales CRM → Settings**), knows
-each order's Shiprocket id, and already calls the endpoint that renders their
-invoices — the same one the picking desk prints from. Pointing that at the
-accountant is not a new integration.
+A **document** is the vendor's own tax invoice, fetched as they issued it. That
+is the piece of paper input credit is claimed against. Only Shiprocket's order
+invoices come back this way, and they can because this application already books
+those parcels — it knows each order's Shiprocket id and already calls the
+endpoint that renders their invoices, the same one the picking desk prints from.
 
-The other six are published in their vendor's own dashboard and on no API this
-account can call. A "sync" written against them would file nothing and leave the
-month looking synced and empty, which on screen is indistinguishable from a month
-with no bills in it. So instead the vault:
+A **statement** is a sheet built here from what the vendor's API will say: every
+transaction in the month with the fee and the tax on it, and the totals. It is
+real data pulled with a real key, it ties to the bank line, and it is **not a tax
+invoice** — the file says so in its own first three lines. Razorpay, Shopify and
+Meta all publish the figures on an API and the invoice itself only in their
+dashboard, so this is the most that can honestly be fetched. Those source cards
+go on saying the PDF is still needed, and a fetch that produces a statement
+reports as a warning rather than a success for the same reason.
 
-- links straight to each vendor's billing page from the card and the upload box,
-- takes the file in two clicks once it has been downloaded,
-- and **says which months are missing which vendor**, on the card and on the
-  super admin overview, until somebody files it.
+Three sources have no connector at all, and a fetch on them is refused by name
+rather than run to no effect. A sync that filed nothing would leave a month
+looking synced and empty, which on screen is indistinguishable from a month with
+no bills in it.
 
-If any of those vendors opens up a billing API this account can reach, one
-connector in `src/lib/finance/pull.ts` and one flag in `src/lib/finance/sources.ts`
-turns that source from an upload into a pull. Nothing else changes.
+### Adding a supplier
+
+A file in `src/lib/finance/connectors/` exporting a `Connector`, a line in that
+folder's `index.ts`, and an entry in `src/lib/finance/sources.ts`. The settings
+screen renders whatever credential fields the connector declares, so no form
+changes; the pull route dispatches by key, so no route changes.
+
+---
+
+## Supplier connections
+
+**Super admin → Connections** (`/admin/control/connections`) holds one API key
+per supplier.
+
+| Supplier | What to create | Where |
+|---|---|---|
+| Razorpay | An API key pair. Read access is enough. | Dashboard → Account & Settings → API Keys |
+| Shopify | An Admin API token with `read_shopify_payments_payouts` | Settings → Apps → Develop apps |
+| Meta | A system user token with `ads_read`, and the ad account assigned to it | Business Settings → Users → System Users |
+| Shiprocket | An API user — a separate login from a person's | Settings → API → Configure |
+
+- **Save & test** proves the key before anybody waits until month end to find
+  out. The outcome is remembered, so a key that stopped working three weeks ago
+  is visible on the screen rather than only on the next fetch.
+- Secrets are encrypted at rest with AES-256-GCM under `AUTH_SECRET` and are
+  **never sent back to the browser** — the form shows the last four characters
+  and leaving a box blank keeps what is stored.
+- Rotating `AUTH_SECRET` makes them unreadable, which is the correct behaviour:
+  they are re-entered here.
 
 ---
 

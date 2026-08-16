@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, CircleAlert, Download, ExternalLink, FileArchive, FileText, Plus, RefreshCw, Send, Trash2, Undo2 } from "lucide-react";
-import { Badge, Button, Card, EmptyState, Field, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
+import { CheckCircle2, CircleAlert, Download, ExternalLink, FileArchive, FileText, Plug, Plus, RefreshCw, Send, Trash2, Undo2 } from "lucide-react";
+import { Badge, Button, Card, EmptyState, Field, LinkButton, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
 import { UploadInvoice } from "./upload-invoice";
 import { formatBytes } from "@/lib/finance/files";
 import { financialYearOf, formatPeriod, isPeriod } from "@/lib/finance/period";
@@ -104,12 +104,23 @@ export function Vault({ periods: initialPeriods }: { periods: string[] }) {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ period, source })
     });
-    const json = await response.json() as { data?: { message: string }; error?: string };
+    const json = await response.json() as { data?: { message: string; stillNeedsPdf?: string }; error?: string };
 
-    setNotice(response.ok
-      ? { tone: "success", text: json.data?.message ?? "Pulled." }
-      : { tone: "warning", text: json.error ?? "Could not pull from that supplier." });
-    if (response.ok) await load(period);
+    if (!response.ok) {
+      return setNotice({ tone: "warning", text: json.error ?? "Could not fetch from that supplier." });
+    }
+
+    /*
+     * A fetch that produced a statement rather than the vendor's own invoice
+     * reports as a *warning*, not a success — and says why in the same breath.
+     * A green "fetched" beside a source whose tax invoice is still sitting in
+     * somebody's dashboard is exactly how a month ends up short of the document
+     * the credit is claimed on.
+     */
+    setNotice(json.data?.stillNeedsPdf
+      ? { tone: "warning", text: `${json.data.message} ${json.data.stillNeedsPdf}` }
+      : { tone: "success", text: json.data?.message ?? "Fetched." });
+    await load(period);
   }
 
   async function remove(document: VaultDocument) {
@@ -177,6 +188,7 @@ export function Vault({ periods: initialPeriods }: { periods: string[] }) {
         <select className="select max-w-[190px]" value={period} onChange={event => setPeriod(event.target.value)} aria-label="Accounting month">
           {months.map(month => <option key={month} value={month}>{formatPeriod(month)}</option>)}
         </select>
+        <LinkButton tone="ghost" href="/admin/control/connections"><Plug size={16} /> Connections</LinkButton>
         <Button tone="secondary" onClick={() => download(`period=${period}`)} disabled={!summary?.documents}>
           <FileArchive size={16} /> Download month
         </Button>
@@ -261,11 +273,24 @@ export function Vault({ periods: initialPeriods }: { periods: string[] }) {
 
                 <p className="text-xs leading-relaxed text-[var(--muted)]">{source.blurb}</p>
 
+                {/*
+                  * Said on the card, not only after a fetch. A source whose API
+                  * gives the figures but not the invoice needs its PDF filed
+                  * whatever the Fetch button reports, and somebody deciding
+                  * whether a month is finished is reading this card rather than
+                  * a notice that has since scrolled away.
+                  */}
+                {source.stillNeedsPdf && <p className="rounded-[8px] bg-[var(--warn-bg)] px-2.5 py-2 text-xs leading-relaxed text-[var(--warn-ink)]">
+                  {source.stillNeedsPdf}
+                </p>}
+
                 <div className="mt-auto flex flex-wrap items-center gap-2">
-                  {source.collection === "pull"
-                    ? <Button tone="secondary" onClick={() => pull(source.key)}><RefreshCw size={15} /> Pull</Button>
+                  {source.connector
+                    ? <Button tone="secondary" onClick={() => pull(source.key)}>
+                        <RefreshCw size={15} /> {source.yields === "document" ? "Fetch invoices" : "Fetch figures"}
+                      </Button>
                     : null}
-                  <Button tone={source.collection === "pull" ? "ghost" : "secondary"} onClick={() => setFiling(source.key)}>
+                  <Button tone={source.connector ? "ghost" : "secondary"} onClick={() => setFiling(source.key)}>
                     <Plus size={15} /> File one
                   </Button>
                   {source.billingUrl && <a href={source.billingUrl} target="_blank" rel="noreferrer"

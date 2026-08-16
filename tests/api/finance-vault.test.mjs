@@ -214,13 +214,29 @@ describe("the vendor invoice vault", () => {
     expect(reopened.data.summary.handedOverAt).toBeUndefined();
   });
 
-  it("declines to invent a sync for a supplier that has no API", async () => {
-    // The important refusal. A "sync" that ran and filed nothing would leave the
-    // month looking synced and empty, which reads exactly like a month with no
-    // bills in it.
-    const pulled = await sup.post("/api/finance/pull", { period: PERIOD, source: "razorpay" });
+  it("declines to invent a fetch for a source no API reaches", async () => {
+    /*
+     * The important refusal. A "sync" that ran and filed nothing would leave the
+     * month looking synced and empty, which reads exactly like a month with no
+     * bills in it.
+     *
+     * The wallet recharge, specifically: Shiprocket has a connector — its order
+     * invoices are fetched with it — and publishes the recharge receipts nowhere
+     * but its own billing page. So a stored key is not the missing piece here
+     * and never will be, which is a different sentence from "add the key".
+     */
+    const pulled = await sup.post("/api/finance/pull", { period: PERIOD, source: "shiprocket-recharge" });
     expect(pulled.status).toBe(400);
     expect(pulled.error).toMatch(/dashboard/i);
+  });
+
+  it("asks for the key rather than the dashboard when a source could be fetched", async () => {
+    // Razorpay's fees *are* reachable, so the fix is a credential, not a manual
+    // download — and telling somebody to go to the dashboard would send them to
+    // do by hand a job the application can do.
+    const pulled = await sup.post("/api/finance/pull", { period: PERIOD, source: "razorpay" });
+    expect(pulled.status).toBe(400);
+    expect(pulled.error).toMatch(/No API key is stored/i);
   });
 
   it("deletes a document, and the file with it", async () => {
