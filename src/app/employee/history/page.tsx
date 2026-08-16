@@ -4,7 +4,7 @@ import { requireFieldPanel } from "@/lib/auth/guard";
 import { connectDb } from "@/lib/db/mongoose";
 import { Visit } from "@/models/Visit";
 import { Badge, Card, EmptyState, PageTitle, Stat, statusTone } from "@/components/ui/kit";
-import { formatDate } from "@/lib/time";
+import { formatDate, startOfDay, todayIso } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +17,8 @@ export default async function HistoryPage() {
   const session = await requireFieldPanel();
   await connectDb();
 
-  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+  // The month as it is read here, not on whatever clock the server keeps.
+  const monthStart = startOfDay(`${todayIso().slice(0, 7)}-01`);
 
   const [visits, completedThisMonth, samplesThisMonth] = await Promise.all([
     Visit.find({ employee: session.userId, status: { $in: ["Completed", "Missed"] } })

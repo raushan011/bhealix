@@ -11,7 +11,7 @@ import { Doctor } from "@/models/Doctor";
 import { User } from "@/models/User";
 import { AuditEvent } from "@/models/Catalog";
 import { Badge, Card, EmptyState, PageTitle, Stat, statusTone } from "@/components/ui/kit";
-import { formatDate, toDisplayTime } from "@/lib/time";
+import { clockOf, formatDate, shiftDay, startOfDay, todayIso, toDisplayTime } from "@/lib/time";
 import { auditLabel } from "@/lib/audit";
 import { can, ROLE_LABEL, type Role } from "@/constants/access";
 import { daysLeft, PHOTO_RETENTION_DAYS } from "@/lib/visits";
@@ -77,8 +77,8 @@ export default async function FieldActivityPage({ params, searchParams }: {
   if (!employee) notFound();
 
   const owner = new Types.ObjectId(id);
-  let since: Date | null = null;
-  if (days) { since = new Date(Date.now() - (days - 1) * 86_400_000); since.setHours(0, 0, 0, 0); }
+  // Whole days as the field counts them, rather than as the server's clock does.
+  const since = days ? startOfDay(shiftDay(todayIso(), -(days - 1))) : null;
 
   const visitFilter = { employee: owner, ...(since ? { plannedDate: { $gte: since } } : {}) };
   const sinceFilter = since ? { createdAt: { $gte: since } } : {};
@@ -245,7 +245,7 @@ export default async function FieldActivityPage({ params, searchParams }: {
                   <p className="mt-0.5 text-xs text-[var(--muted)]">
                     {formatDate(visit.plannedDate)}
                     {visit.plannedStart ? ` · planned ${toDisplayTime(visit.plannedStart)}` : ""}
-                    {visit.checkInAt ? ` · checked in ${new Date(visit.checkInAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}` : ""}
+                    {visit.checkInAt ? ` · checked in ${toDisplayTime(clockOf(visit.checkInAt))}` : ""}
                     {[visit.doctor?.area, visit.doctor?.city].filter(Boolean).length ? ` · ${[visit.doctor?.area, visit.doctor?.city].filter(Boolean).join(", ")}` : ""}
                   </p>
                 </div>

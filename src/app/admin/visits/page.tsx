@@ -6,10 +6,11 @@ import { connectDb } from "@/lib/db/mongoose";
 import { Visit } from "@/models/Visit";
 import { VisitPhoto } from "@/models/VisitPhoto";
 import { Badge, Card, EmptyState, PageTitle, statusTone } from "@/components/ui/kit";
-import { formatDate, toDisplayTime } from "@/lib/time";
+import { clockOf, dayRange, formatDate, shiftDay, todayIso, toDisplayTime } from "@/lib/time";
 import { daysLeft } from "@/lib/visits";
 import { placeLabel } from "@/lib/geo";
 import type { PhotoLocation } from "@/components/visits/visit-photos";
+import { VisitDateFilter } from "@/components/visits/visit-date-filter";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ const placesOf = (photos: PhotoDoc[]) => [...new Set(photos
   .map(photo => placeLabel(photo.location!, photo.location!)))];
 
 type VisitDoc = {
-  _id: unknown; plannedDate: Date; plannedStart?: string; status: string; outcome?: string;
+  _id: unknown; plannedDate: Date; plannedStart?: string; checkInAt?: Date; status: string; outcome?: string;
   interest?: string; notes?: string; orderValue?: number; routePlan?: unknown;
   samples?: Array<{ product: string; quantity: number }>; productsDiscussed?: string[];
   doctor?: { _id: unknown; name?: string; area?: string; city?: string };
@@ -27,16 +28,34 @@ type VisitDoc = {
 };
 type PhotoDoc = { _id: unknown; visit: unknown; expiresAt: Date; location?: PhotoLocation };
 
-export default async function VisitsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
+/**
+ * When a visit happened, as the field would tell it.
+ *
+ * A visit that was started carries the moment it was checked in, which is the
+ * one worth reading; only a call still lying ahead has nothing but the time its
+ * route plan intended. Reading the stamp rather than the stored clock also puts
+ * right the visits registered before this page knew which zone it was in.
+ */
+const timeOf = (visit: VisitDoc) => visit.checkInAt ? clockOf(visit.checkInAt) : visit.plannedStart;
+
+export default async function VisitsPage({ searchParams }: {
+  searchParams: Promise<{ status?: string; from?: string; to?: string }>;
+}) {
   await requireAdminPanel();
-  const status = (await searchParams).status;
+  const { status, from, to } = await searchParams;
   await connectDb();
 
-  const filter = status ? { status } : {};
+  const range = dayRange(from, to);
+  const filter = { ...(status ? { status } : {}), ...(range ? { plannedDate: range } : {}) };
+
+  // Sixty is enough of an open-ended feed to be worth reading. A chosen span is
+  // a question with an answer, though, and cutting a day's work off at sixty
+  // would be a wrong one, so the ceiling lifts once the days are named.
+  const ceiling = range ? 300 : 60;
   const visits = await Visit.find(filter)
     .populate("doctor", "name area city")
     .populate("employee", "name")
-    .sort({ plannedDate: -1, plannedStart: 1 }).limit(60).lean() as unknown as VisitDoc[];
+    .sort({ plannedDate: -1, plannedStart: 1 }).limit(ceiling).lean() as unknown as VisitDoc[];
 
   // Metadata for the visits on screen only, and nothing already past its thirty
   // days. The bytes are fetched by the browser one image at a time.
@@ -57,18 +76,51 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
     { label: "Missed", value: "Missed" }
   ];
 
+  // Worked out here rather than in the browser: the day a rep is having is the
+  // one this page must agree with, whatever clock the reader's laptop keeps.
+  const today = todayIso();
+  const yesterday = shiftDay(today, -1);
+  const presets = [
+    { label: "Today", from: today, to: today },
+    { label: "Yesterday", from: yesterday, to: yesterday },
+    { label: "Last 7 days", from: shiftDay(today, -6), to: today },
+    { label: "This month", from: `${today.slice(0, 7)}-01`, to: today }
+  ];
+
+  // Only the ends the range actually took, so a mangled address bar is neither
+  // read back to the reader nor carried across to the next tab.
+  const fromDay = range?.$gte ? from! : "";
+  const toDay = range?.$lte ? to! : "";
+  const chosenDays = !range ? ""
+    : fromDay === toDay ? formatDate(fromDay)
+    : fromDay && toDay ? `${formatDate(fromDay)} – ${formatDate(toDay)}`
+    : fromDay ? `since ${formatDate(fromDay)}`
+    : `up to ${formatDate(toDay)}`;
+
   return <div className="space-y-5">
     <PageTitle title="Visits" subtitle="Every field visit, what was discussed and what was handed out" />
 
     <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
       {tabs.map(tab => {
         const active = status === tab.value || (!status && !tab.value);
-        return <Link key={tab.label} href={tab.value ? `/admin/visits?status=${tab.value}` : "/admin/visits"}
+        const query = new URLSearchParams({
+          ...(tab.value ? { status: tab.value } : {}),
+          ...(fromDay ? { from: fromDay } : {}), ...(toDay ? { to: toDay } : {})
+        }).toString();
+        return <Link key={tab.label} href={query ? `/admin/visits?${query}` : "/admin/visits"}
           className={`min-h-[38px] shrink-0 rounded-full border px-4 text-xs font-semibold leading-[36px] ${
             active ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--on-brand)]" : "border-[var(--line-2)] bg-[var(--surface)] text-[var(--ink-2)]"
           }`}>{tab.label}</Link>;
       })}
     </div>
+
+    <VisitDateFilter presets={presets} from={fromDay} to={toDay} status={status} />
+
+    {visits.length > 0 && chosenDays && (
+      <p className="text-xs text-[var(--muted)]">
+        {visits.length === ceiling ? `First ${ceiling}` : visits.length} visit{visits.length === 1 ? "" : "s"} · {chosenDays}
+      </p>
+    )}
 
     {visits.length ? (
       <Card className="divide-y divide-[var(--line)]">
@@ -85,7 +137,7 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
                 ) : <p className="text-sm font-semibold">Doctor removed</p>}
                 <p className="mt-0.5 text-xs text-[var(--muted)]">
                   {formatDate(visit.plannedDate)}
-                  {visit.plannedStart ? ` · ${toDisplayTime(visit.plannedStart)}` : ""}
+                  {timeOf(visit) ? ` · ${toDisplayTime(timeOf(visit))}` : ""}
                   {visit.employee?.name ? ` · ${visit.employee.name}` : ""}
                 </p>
               </div>
@@ -142,8 +194,10 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
         })}
       </Card>
     ) : (
-      <EmptyState icon={ClipboardList} title="No visits here"
-        description="Visits appear once a route plan is assigned to a representative, or when one registers a call they made without a plan." />
+      <EmptyState icon={ClipboardList} title={chosenDays ? "Nothing on those days" : "No visits here"}
+        description={chosenDays
+          ? `Nothing was recorded for ${chosenDays}. Widen the dates, or clear them to read the whole log.`
+          : "Visits appear once a route plan is assigned to a representative, or when one registers a call they made without a plan."} />
     )}
   </div>;
 }

@@ -5,7 +5,7 @@ import { connectDb } from "@/lib/db/mongoose";
 import { Visit } from "@/models/Visit";
 import { RoutePlan } from "@/models/RoutePlan";
 import { Badge, Card, EmptyState, LinkButton, PageTitle, statusTone } from "@/components/ui/kit";
-import { formatDate, toDisplayTime, WEEKDAYS } from "@/lib/time";
+import { formatDate, todayIso, todayRange, toDisplayTime, weekdayOf, WEEKDAYS } from "@/lib/time";
 import { RegisterVisit } from "@/components/visits/register-visit";
 import { callTimeOn } from "@/lib/doctors/call-schedule";
 import type { EditableWindow } from "@/components/doctors/call-schedule-editor";
@@ -26,19 +26,20 @@ export default async function TodayPage() {
   const session = await requireFieldPanel();
   await connectDb();
 
-  const start = new Date(); start.setHours(0, 0, 0, 0);
-  const end = new Date(); end.setHours(23, 59, 59, 999);
-  const weekday = new Date().getDay();
+  // The day the rep is having, not the one the server is. A machine keeping UTC
+  // would call their first calls of the morning yesterday's work.
+  const today = todayRange();
+  const weekday = weekdayOf(todayIso());
 
   const [visits, plan, upcoming] = await Promise.all([
-    Visit.find({ employee: session.userId, plannedDate: { $gte: start, $lte: end } })
+    Visit.find({ employee: session.userId, plannedDate: today })
       .populate("doctor", "name clinicName area city phones fullAddress location callSchedule")
       .sort({ plannedStart: 1 }).lean() as unknown as Promise<VisitDoc[]>,
-    RoutePlan.findOne({ assignedTo: session.userId, date: { $gte: start, $lte: end } })
+    RoutePlan.findOne({ assignedTo: session.userId, date: today })
       .select("name totalDistanceKm stops").lean() as Promise<PlanDoc | null>,
     // Plans for later days are shown here too, so a route assigned today for
     // tomorrow is visible straight away instead of only on the morning it runs.
-    RoutePlan.find({ assignedTo: session.userId, date: { $gt: end } })
+    RoutePlan.find({ assignedTo: session.userId, date: { $gt: today.$lte } })
       .select("name date totalDistanceKm stops").sort({ date: 1 }).limit(3)
       .lean() as unknown as Promise<UpcomingPlan[]>
   ]);

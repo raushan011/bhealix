@@ -4,7 +4,7 @@ import { requireFieldPanel } from "@/lib/auth/guard";
 import { connectDb } from "@/lib/db/mongoose";
 import { RoutePlan } from "@/models/RoutePlan";
 import { Badge, EmptyState, LinkButton, PageTitle, statusTone } from "@/components/ui/kit";
-import { formatDate, toDisplayTime, WEEKDAYS } from "@/lib/time";
+import { formatDate, todayRange, toDisplayTime, WEEKDAYS } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -50,8 +50,8 @@ export default async function MyPlansPage() {
   const session = await requireFieldPanel();
   await connectDb();
 
-  const start = new Date(); start.setHours(0, 0, 0, 0);
-  const end = new Date(); end.setHours(23, 59, 59, 999);
+  // Today as the rep is living it, rather than as the server's clock has it.
+  const { $gte: start, $lte: end } = todayRange();
 
   const plans = await RoutePlan.find({ assignedTo: session.userId })
     .select("name date weekday status startTime totalDistanceKm stops")

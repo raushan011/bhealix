@@ -8,12 +8,9 @@ import { Visit } from "@/models/Visit";
 import { RoutePlan } from "@/models/RoutePlan";
 import { User } from "@/models/User";
 import { Badge, Card, LinkButton, PageTitle, Stat, statusTone } from "@/components/ui/kit";
-import { formatDate } from "@/lib/time";
+import { formatDate, todayRange } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
-
-const startOfToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
-const endOfToday = () => { const d = new Date(); d.setHours(23, 59, 59, 999); return d; };
 
 export default async function AdminDashboard() {
   const session = await requireAdminPanel();
@@ -23,14 +20,18 @@ export default async function AdminDashboard() {
   if (session.role === "HR") redirect("/admin/hr");
   await connectDb();
 
+  // Today on the clock the field works to, so the count agrees with the day a
+  // rep is having rather than with the server's.
+  const today = todayRange();
+
   const [doctors, missingCallTime, missingLocation, team, todayVisits, todayDone, plans] = await Promise.all([
     Doctor.countDocuments({ status: "Active" }),
     Doctor.countDocuments({ status: "Active", callSchedule: { $size: 0 } }),
     Doctor.countDocuments({ status: "Active", "location.coordinates": { $exists: false } }),
     User.countDocuments({ active: true, role: { $in: ["MR", "SALES"] } }),
-    Visit.countDocuments({ plannedDate: { $gte: startOfToday(), $lte: endOfToday() } }),
-    Visit.countDocuments({ plannedDate: { $gte: startOfToday(), $lte: endOfToday() }, status: "Completed" }),
-    RoutePlan.find({ date: { $gte: startOfToday() } }).populate("assignedTo", "name").sort({ date: 1 }).limit(5).lean()
+    Visit.countDocuments({ plannedDate: today }),
+    Visit.countDocuments({ plannedDate: today, status: "Completed" }),
+    RoutePlan.find({ date: { $gte: today.$gte } }).populate("assignedTo", "name").sort({ date: 1 }).limit(5).lean()
   ]);
 
   const quickLinks = [

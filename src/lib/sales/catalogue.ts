@@ -1,7 +1,7 @@
 import { SalesCoupon, SalesOrder, SalesRep } from "@/models/Sales";
 import { normaliseCode } from "./coupons";
 import { fetchDiscounts, isLive } from "./discounts";
-import { couponSetupOf, type CouponSetupState } from "./partners";
+import { couponSetupOf, setupIsStale, type CouponSetupState } from "./partners";
 import { loadCredentials, shopifyConfig } from "./settings";
 
 /**
@@ -107,6 +107,68 @@ export async function refreshFromShopify(): Promise<number> {
   })));
 
   return discounts.length;
+}
+
+/**
+ * Brings a rep's coupon back in step with what the shop actually has.
+ *
+ * `setup` records what happened when *this application* tried to create a
+ * discount. It is not a fact about Shopify, and the gap between the two is
+ * routine: an administrator creates the code by hand in the shop — very often
+ * the moment the partner asks, before the retry queue is ever looked at — and
+ * nothing tells this side. The row then reads `Awaiting setup` over a code that
+ * has been working for a fortnight.
+ *
+ * That is not merely untidy. The same field is what the partner's own portal
+ * reads, and it tells them their code "will not work at the checkout" while
+ * customers are busy using it. A stored state contradicted by the shop's own
+ * discount list is simply out of date, so it is corrected rather than displayed.
+ *
+ * Deliberately one-way. A code Shopify lists as live proves the setup finished;
+ * a code Shopify does not list proves nothing — it may be paused, scheduled,
+ * past its end date, or on a page the catalogue has not refreshed — and marking
+ * a working code as broken on that basis would be a worse error than the one
+ * this fixes.
+ *
+ * Returns the codes it corrected, so the caller can leave a line on the trail
+ * for a change nobody pressed a button for.
+ */
+export async function reconcileCouponSetup(): Promise<string[]> {
+  const catalogue = await SalesCoupon.find({}).select("code status").lean() as { code?: string; status?: string }[];
+  const live = new Set(
+    catalogue
+      .filter(entry => isLive(String(entry.status ?? "")))
+      .map(entry => normaliseCode(String(entry.code ?? "")))
+      .filter(Boolean)
+  );
+  if (!live.size) return [];
+
+  const reps = await SalesRep.find({ "coupons.code": { $in: [...live] } })
+    .select("coupons").lean() as RepDoc[];
+
+  const fixed: string[] = [];
+  const writes = [];
+
+  for (const rep of reps) {
+    for (const coupon of rep.coupons ?? []) {
+      const code = normaliseCode(coupon.code ?? "");
+      if (!code || !setupIsStale(coupon, live.has(code))) continue;
+
+      fixed.push(code);
+      writes.push({
+        updateOne: {
+          // Matched on the stored spelling rather than the normalised one: the
+          // positional `$` needs the filter to have found the element, and a
+          // code stored lower-case would not match its own upper-case form.
+          filter: { _id: rep._id, "coupons.code": coupon.code },
+          update: { $set: { "coupons.$.setup": "Live" }, $unset: { "coupons.$.setupError": "" } }
+        }
+      });
+    }
+  }
+
+  if (writes.length) await SalesRep.bulkWrite(writes);
+  return fixed;
 }
 
 type RepCouponDoc = { code?: string; suffix?: string; setup?: string; setupError?: string; issuedBy?: string };

@@ -8,6 +8,7 @@ import { usesFieldPanel } from "@/constants/access";
 import { badRequest, fail, ok, pageParams, OBJECT_ID } from "@/lib/api";
 import { record } from "@/lib/audit";
 import { completeFix } from "@/lib/geo";
+import { clockOf, dayRange, todayIso } from "@/lib/time";
 
 export async function GET(request: Request) {
   try {
@@ -26,13 +27,9 @@ export async function GET(request: Request) {
     if (params.get("doctor")) filter.doctor = params.get("doctor");
     if (params.get("status")) filter.status = params.get("status");
 
-    const from = params.get("from"), to = params.get("to");
-    if (from || to) {
-      const range: Record<string, Date> = {};
-      if (from) range.$gte = new Date(`${from}T00:00:00`);
-      if (to) range.$lte = new Date(`${to}T23:59:59`);
-      filter.plannedDate = range;
-    }
+    // The days are the ones the field worked, not the ones the server keeps.
+    const range = dayRange(params.get("from"), params.get("to"));
+    if (range) filter.plannedDate = range;
 
     const [items, total] = await Promise.all([
       Visit.find(filter)
@@ -91,12 +88,13 @@ export async function POST(request: Request) {
       { _id: unknown; name?: string } | null;
     if (!doctor) return badRequest("That doctor could not be found", 404);
 
-    const start = new Date(); start.setHours(0, 0, 0, 0);
-    const end = new Date(); end.setHours(23, 59, 59, 999);
+    // Today as the rep is living it. A server keeping UTC would otherwise call
+    // the first five and a half hours of their morning yesterday.
+    const today = todayIso();
 
     const existing = await Visit.findOne({
       employee: auth.session.userId, doctor: input.doctor,
-      plannedDate: { $gte: start, $lte: end }
+      plannedDate: dayRange(today, today)!
     }).select("_id status").lean() as { _id: unknown; status: string } | null;
 
     if (existing) {
@@ -113,7 +111,8 @@ export async function POST(request: Request) {
       doctor: input.doctor,
       employee: auth.session.userId,
       plannedDate: now,
-      plannedStart: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
+      // The clock the rep is standing under, not the one the server keeps.
+      plannedStart: clockOf(now),
       status: "In progress",
       checkInAt: now,
       ...(fix ? { checkInLocation: fix } : {}),

@@ -122,6 +122,21 @@ export type CouponSetupState = (typeof COUPON_SETUP_STATES)[number];
 export const couponSetupOf = (coupon: { setup?: string | null } | null | undefined): CouponSetupState =>
   (COUPON_SETUP_STATES as readonly string[]).includes(coupon?.setup ?? "") ? (coupon!.setup as CouponSetupState) : "Live";
 
+/**
+ * Whether a stored setup state has been overtaken by the shop's own answer.
+ *
+ * One-way on purpose. Shopify listing a code as live *proves* the setup
+ * finished, whoever did it and however; Shopify not listing one proves nothing
+ * — it may be paused, scheduled, past its end date, or simply on a page the
+ * catalogue has not read yet. Marking a working code as broken on that evidence
+ * would be a worse error than the stale row it set out to fix, and it would be
+ * shown to the partner as "your code does not work".
+ */
+export const setupIsStale = (
+  coupon: { setup?: string | null } | null | undefined,
+  liveInShopify: boolean
+) => liveInShopify && couponSetupOf(coupon) !== "Live";
+
 export function couponSetupTone(state: CouponSetupState): "success" | "warn" | "danger" {
   switch (state) {
     case "Live": return "success";

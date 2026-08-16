@@ -5,7 +5,7 @@ import { can } from "@/constants/access";
 import { connectDb } from "@/lib/db/mongoose";
 import { Visit } from "@/models/Visit";
 import { Card, EmptyState, PageTitle, Stat } from "@/components/ui/kit";
-import { formatDate } from "@/lib/time";
+import { endOfDay, formatDate, shiftDay, startOfDay, todayIso } from "@/lib/time";
 import { movementTotalsByEmployee } from "@/lib/samples/ledger";
 import { utilisation } from "@/lib/samples/movements";
 
@@ -31,9 +31,10 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const days = Math.min(180, Math.max(7, Number((await searchParams).days) || 30));
   await connectDb();
 
-  const to = new Date(); to.setHours(23, 59, 59, 999);
-  const from = new Date(Date.now() - (days - 1) * 86400000); from.setHours(0, 0, 0, 0);
-  const range = { $gte: from, $lte: to };
+  // Whole days on the clock the field works to: "the last 30 days" has to mean
+  // thirty of their days, not thirty counted off a server keeping UTC.
+  const today = todayIso();
+  const range = { $gte: startOfDay(shiftDay(today, -(days - 1))), $lte: endOfDay(today) };
 
   const [totalsRows, byEmployee, byOutcome, samples, byInterest, stockTotals] = await Promise.all([
     Visit.aggregate<Totals>([
@@ -81,7 +82,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const maxSample = Math.max(1, ...samples.map(row => row.quantity));
 
   return <div className="space-y-5">
-    <PageTitle title="Reports" subtitle={`${formatDate(from)} — ${formatDate(to)}`} />
+    <PageTitle title="Reports" subtitle={`${formatDate(range.$gte)} — ${formatDate(range.$lte)}`} />
 
     <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
       {[7, 30, 90].map(value => (

@@ -186,6 +186,17 @@ export default function SalesCouponsPage() {
                 </p>
               )}
 
+              {/*
+                * Two ways out, and the labels now say which is which.
+                *
+                * "It already exists there" described the situation rather than
+                * the action, so the one button that clears a stuck row read as a
+                * remark. It is the answer whenever somebody made the discount in
+                * the shop by hand, which is the ordinary case — and since the
+                * list now reconciles itself against Shopify on the way in, a row
+                * still sitting here is one the shop does not list as live, where
+                * a person's word is the only thing left to go on.
+                */}
               {data.mayManage && entry.setup && entry.setup !== "Live" && (
                 <div className="mt-2 flex flex-wrap gap-3">
                   <button disabled={busyCode === entry.code} onClick={() => fixSetup(entry.code, "retry-setup")}
@@ -193,8 +204,9 @@ export default function SalesCouponsPage() {
                     <RefreshCw size={12} />{busyCode === entry.code ? "Trying…" : "Create it in Shopify"}
                   </button>
                   <button disabled={busyCode === entry.code} onClick={() => fixSetup(entry.code, "mark-live")}
-                    className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted)] hover:underline disabled:opacity-50">
-                    <Check size={12} />It already exists there
+                    title="Say the discount already exists in Shopify, so this stops showing as awaiting setup"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--ink-2)] hover:underline disabled:opacity-50">
+                    <Check size={12} />Mark as set up
                   </button>
                 </div>
               )}

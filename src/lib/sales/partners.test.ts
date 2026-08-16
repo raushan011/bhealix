@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ROLES, ROLE_LABEL, usesAdminPanel, usesFieldPanel } from "@/constants/access";
 import { parseCoupon } from "./coupons";
 import {
-  couponSetupOf, generatedCode, generatedCodeProblem, mayHoldSession, mayTrade,
+  couponSetupOf, generatedCode, generatedCodeProblem, mayHoldSession, mayTrade, setupIsStale,
   passwordProblem, refusalFor, repCodeProblem, repStatusOf, suggestRepCode
 } from "./partners";
 
@@ -243,5 +243,45 @@ describe("generatedCodeProblem", () => {
   it("accepts a rep code ending in a digit, where the letters no longer describe the rule", () => {
     expect(generatedCodeProblem("PRIYA130", "PRIYA1", "30")).toBeNull();
     expect(parseCoupon("PRIYA130")?.suffix).toBe("130");
+  });
+});
+
+describe("a setup state the shop has overtaken", () => {
+  /**
+   * The case this exists for: an administrator made the discount in Shopify by
+   * hand, nothing told this side, and the row sat at "Awaiting setup" over a
+   * code that had been working for a fortnight — while the partner's own portal
+   * told them it would not work at the checkout.
+   */
+  it("is stale when Shopify lists the code live and the record does not", () => {
+    expect(setupIsStale({ setup: "Awaiting setup" }, true)).toBe(true);
+    expect(setupIsStale({ setup: "Failed" }, true)).toBe(true);
+  });
+
+  it("is not stale when the record already agrees", () => {
+    expect(setupIsStale({ setup: "Live" }, true)).toBe(false);
+  });
+
+  /**
+   * One-way, and this is the half that matters. Shopify not listing a code
+   * proves nothing — paused, scheduled, ended, or on a page the catalogue has
+   * not read — and marking a working code as broken would be worse than the
+   * stale row it set out to fix.
+   */
+  it("never reads the shop's silence as a code being broken", () => {
+    expect(setupIsStale({ setup: "Awaiting setup" }, false)).toBe(false);
+    expect(setupIsStale({ setup: "Failed" }, false)).toBe(false);
+    expect(setupIsStale({ setup: "Live" }, false)).toBe(false);
+  });
+
+  /**
+   * A coupon with no `setup` at all was typed in by an administrator because
+   * Shopify already had it — `couponSetupOf` reads that as Live, so there is
+   * nothing to correct and no pointless write.
+   */
+  it("leaves a hand-entered coupon alone", () => {
+    expect(setupIsStale({}, true)).toBe(false);
+    expect(setupIsStale(undefined, true)).toBe(false);
+    expect(setupIsStale({ setup: null }, true)).toBe(false);
   });
 });

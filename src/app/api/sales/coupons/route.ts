@@ -5,7 +5,7 @@ import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
 import { record } from "@/lib/audit";
-import { loadCatalogue, refreshFromShopify } from "@/lib/sales/catalogue";
+import { loadCatalogue, reconcileCouponSetup, refreshFromShopify } from "@/lib/sales/catalogue";
 import { isRepCode, normaliseCode, REP_CODE_SHAPE } from "@/lib/sales/coupons";
 import { PAYOUT_MODES } from "@/lib/sales/constants";
 import { provisionCoupon } from "@/lib/sales/provision";
@@ -71,6 +71,32 @@ export async function GET(request: Request) {
         await refreshFromShopify();
       } catch (error) {
         refreshError = error instanceof Error ? error.message : "Could not read the shop's discount list.";
+      }
+    }
+
+    /*
+     * Before the list is drawn, not only when Refresh is pressed.
+     *
+     * The stale state this corrects is one nobody knows to go looking for — the
+     * row says `Awaiting setup` over a code that has worked for a fortnight, and
+     * the partner's portal tells them it does not work. Running it on the read
+     * means the screen cannot show the contradiction it was opened to reveal.
+     *
+     * It costs one indexed query against a collection that is already loaded a
+     * line below, and writes nothing on the ordinary pass where there is nothing
+     * to fix. Gated on `manageSales` so that reading the list can never write.
+     */
+    if (can.manageSales(auth.session.role)) {
+      const fixed = await reconcileCouponSetup();
+      if (fixed.length) {
+        await record({
+          actor: auth.session.userId,
+          action: "sales.coupon.provisioned",
+          entityType: "SalesRep",
+          // A sweep across whoever held them, not one partner's record.
+          entityId: undefined,
+          metadata: { codes: fixed, by: "found already live in Shopify" }
+        });
       }
     }
 
