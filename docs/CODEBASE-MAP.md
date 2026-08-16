@@ -159,6 +159,7 @@ src/
 ├── app/
 │   ├── layout.tsx  page.tsx  error.tsx  not-found.tsx  manifest.ts
 │   ├── login/page.tsx
+│   ├── super-admin/{page,sign-in}.tsx   The super admin's own door -> /admin/control
 │   ├── admin/                       Desktop panel — SUPERADMIN + ADMIN + HR
 │   │   ├── layout.tsx               AdminShell + the CRM grant check (§5.5)
 │   │   ├── (doctor)/                The Doctor CRM. A route group, so the panel has a layout
@@ -445,7 +446,13 @@ reading it safe.
 
 ### 5.4 The permission table (`src/constants/access.ts`)
 
-Roles: `SUPERADMIN`, `ADMIN`, `HR`, `MR`, `SALES`.
+Roles: `SUPERADMIN`, `ADMIN`, `HR`, `MR`, `SALES`. **`ASSIGNABLE_ROLES` is `ROLES` minus
+`SUPERADMIN`**, and the Employees screen and its two API routes use that list rather than `ROLES` —
+adding a role to `ROLES` otherwise puts it straight into a `z.enum` and a `<select>` behind
+`can.manageEmployees`, which HR holds, so any administrator could mint the account meant to be above
+them. `mayEditAccount(actor, target)` closes that account's whole record — role, password, `active`,
+deletion — to everybody below it, because an administrator who could set its password could sign in
+as it.
 `usesAdminPanel` = SUPERADMIN | ADMIN | HR. `usesFieldPanel` = MR | SALES.
 `homeFor(role)` → `/admin` or `/employee`.
 
@@ -1657,6 +1664,8 @@ the server knows more about than the request does belongs there too, not in `fie
 | Sales dashboards and figures | `lib/sales/reporting.ts`, `app/admin/sales/**` |
 | Which CRM a screen belongs to | `lib/workspace.ts`, `components/layout/admin-shell.tsx`, `app/choose/page.tsx` |
 | Who may open which CRM | `lib/auth/grants.ts` (pure, + test), `lib/auth/access.ts`, `models/User.ts`, `app/api/control/access/route.ts`, `components/control/access-manager.tsx` |
+| Making a super administrator | `scripts/make-super-admin.mjs`, `constants/access.ts::ASSIGNABLE_ROLES` / `mayEditAccount`, `app/api/team/**` |
+| The super admin sign-in door | `app/super-admin/{page,sign-in}.tsx`, `app/api/auth/login/route.ts` (the `scope` field) |
 | Where a panel guard lives | `app/admin/layout.tsx` (the early one), `app/admin/{(doctor),sales,control}/layout.tsx`, `lib/auth/guard.ts`, `src/middleware.ts` |
 | Adding a vendor invoice source | `lib/finance/sources.ts` — one entry. Add a connector in `lib/finance/pull.ts` and flip `collection` to `"pull"` if it can be fetched |
 | How the ZIP is laid out or named | `lib/finance/archive.ts` (+ test), `lib/finance/zip.ts` (+ test) |

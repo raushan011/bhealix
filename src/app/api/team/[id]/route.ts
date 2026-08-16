@@ -9,7 +9,7 @@ import { SampleMovement } from "@/models/Sample";
 import { LeaveRequest } from "@/models/HR";
 import { Payslip, SalaryStructure } from "@/models/Payroll";
 import { apiSession } from "@/lib/auth/guard";
-import { can, ROLES, type Role } from "@/constants/access";
+import { ASSIGNABLE_ROLES, can, mayEditAccount, type Role } from "@/constants/access";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
 import type { LeaveType } from "@/lib/hr/leave";
 import { leaveBalanceFor } from "@/lib/hr/records";
@@ -20,7 +20,13 @@ const text = (max = 200) => z.string().trim().max(max).optional();
 
 const schema = z.object({
   name: z.string().min(2).optional(),
-  role: z.enum(ROLES).optional(),
+  /**
+   * Never SUPERADMIN. Promoting somebody is not an employment-record change —
+   * it is handing over the account that decides everybody else's access, and
+   * `manageEmployees` is held by HR as well as the administrator. It is done
+   * from a shell (`scripts/make-super-admin.mjs`) and nowhere else.
+   */
+  role: z.enum(ASSIGNABLE_ROLES).optional(),
   active: z.boolean().optional(),
   newPassword: z.string().min(8, "Password must be at least 8 characters").optional(),
 
@@ -124,6 +130,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!target) return badRequest("Employee not found", 404);
 
     /*
+     * A super administrator's record is closed to everybody below them.
+     *
+     * Not merely their role — the whole record, because this route also sets
+     * passwords and `active`. An administrator who could set that password
+     * could sign in as them; one who could deactivate them could remove the
+     * only account able to restore anybody's access, and there would be no way
+     * back through the interface. Refused as a whole rather than field by
+     * field, which is the kind of list somebody eventually adds a field to
+     * without noticing.
+     */
+    if (!mayEditAccount(auth.session.role, target.role)) {
+      return badRequest(`${target.name} is a super administrator. Their account is changed from a shell, not from here.`, 403);
+    }
+
+    /*
      * Who somebody is, is the administrator's to decide.
      *
      * HR keeps the employment record — designation, leave, contact details —
@@ -192,6 +213,12 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
     await connectDb();
     const user = await User.findById(id).select("name role");
     if (!user) return badRequest("Employee not found", 404);
+
+    // Closed for the same reason a super administrator cannot be edited above:
+    // deleting one removes the only account that can restore anybody's access.
+    if (!mayEditAccount(auth.session.role, user.role as Role)) {
+      return badRequest(`${user.name} is a super administrator and cannot be deleted from here.`, 403);
+    }
 
     if (user.role === "ADMIN" && await User.countDocuments({ role: "ADMIN", active: true }) <= 1) {
       return badRequest("This is the last administrator — create another before deleting this one");

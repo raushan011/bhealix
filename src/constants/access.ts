@@ -35,6 +35,35 @@ export const ROLE_LABEL: Record<Role, string> = {
  */
 const admin = (role: Role) => role === "ADMIN" || role === "SUPERADMIN";
 
+/**
+ * The roles the Employees screen is allowed to hand out.
+ *
+ * Everything except `SUPERADMIN`, and that omission is the whole security model
+ * of this role rather than a tidiness preference. Adding a role to `ROLES` puts
+ * it in a `z.enum` on two API routes and a `<select>` on two forms — all four
+ * reached by `can.manageEmployees`, which is **ADMIN or HR**. Left on that list,
+ * any administrator could create a super administrator, or promote themselves
+ * to one, and the account whose entire purpose is to be above them would be
+ * something they could mint at will.
+ *
+ * A super administrator is made from a shell (`scripts/make-super-admin.mjs`)
+ * and nowhere else. Shell access to the deployment is the right bar for the
+ * account that hands out everybody's access.
+ */
+export const ASSIGNABLE_ROLES = ROLES.filter(role => role !== "SUPERADMIN") as Exclude<Role, "SUPERADMIN">[];
+
+/**
+ * Whether this person may edit that account at all.
+ *
+ * A super administrator's record is off limits to everybody below them — not
+ * only their role. An administrator who could set their password could sign in
+ * as them; one who could deactivate or delete them could remove the only account
+ * able to restore anybody's access, with no way back through the interface. So
+ * the whole record is closed, and only another super administrator may touch it.
+ */
+export const mayEditAccount = (actor: Role, target: Role) =>
+  target !== "SUPERADMIN" || actor === "SUPERADMIN";
+
 /** SUPERADMIN, ADMIN and HR work at a desk; MR and SALES work from a phone in the field. */
 export const usesAdminPanel = (role: Role) => admin(role) || role === "HR";
 export const usesFieldPanel = (role: Role) => role === "MR" || role === "SALES";

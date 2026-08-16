@@ -3,7 +3,7 @@ import { z } from "zod";
 import { connectDb } from "@/lib/db/mongoose";
 import { User } from "@/models/User";
 import { apiSession } from "@/lib/auth/guard";
-import { can, ROLES } from "@/constants/access";
+import { ASSIGNABLE_ROLES, can } from "@/constants/access";
 import { fail, ok } from "@/lib/api";
 
 const createSchema = z.object({
@@ -11,7 +11,8 @@ const createSchema = z.object({
   employeeId: z.string().min(2, "Employee ID is required"),
   email: z.email("Enter a valid email"),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  role: z.enum(ROLES),
+  /** Never SUPERADMIN — see ASSIGNABLE_ROLES. That account is made from a shell. */
+  role: z.enum(ASSIGNABLE_ROLES),
   // Optional at hiring; the rest of the record is filled in on their profile.
   designation: z.string().trim().max(200).optional(),
   department: z.string().trim().max(200).optional(),

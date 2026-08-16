@@ -1,5 +1,60 @@
 import { describe, expect, it } from "vitest";
-import { can, homeFor, usesAdminPanel, usesFieldPanel } from "./access";
+import { ASSIGNABLE_ROLES, can, homeFor, mayEditAccount, usesAdminPanel, usesFieldPanel } from "./access";
+
+describe("the super administrator cannot be created from inside the app", () => {
+  it("is not on the list of roles the Employees screen may assign", () => {
+    /*
+     * The whole security model of this role. `ROLES` feeds a `z.enum` on two
+     * team API routes and a `<select>` on two forms, all four reached by
+     * `can.manageEmployees` — which is ADMIN *or HR*. On that list, any
+     * administrator could mint the account that is meant to be above them.
+     */
+    expect(ASSIGNABLE_ROLES).not.toContain("SUPERADMIN");
+    expect(ASSIGNABLE_ROLES).toEqual(["ADMIN", "HR", "MR", "SALES"]);
+  });
+
+  it("closes a super administrator's whole record to everybody below them", () => {
+    // Not only their role: this route also sets passwords and `active`. An
+    // administrator who could set that password could sign in as them, and one
+    // who could deactivate them could remove the only account able to restore
+    // anybody's access — with no way back through the interface.
+    expect(mayEditAccount("ADMIN", "SUPERADMIN")).toBe(false);
+    expect(mayEditAccount("HR", "SUPERADMIN")).toBe(false);
+    expect(mayEditAccount("SUPERADMIN", "SUPERADMIN")).toBe(true);
+  });
+
+  it("leaves every other account editable exactly as before", () => {
+    for (const target of ["ADMIN", "HR", "MR", "SALES"] as const) {
+      expect(mayEditAccount("ADMIN", target)).toBe(true);
+      expect(mayEditAccount("HR", target)).toBe(true);
+    }
+  });
+});
+
+describe("the super administrator has every administrator power", () => {
+  it("is granted whatever ADMIN is granted", () => {
+    // Written as a sweep rather than as a list, so a permission added later
+    // cannot quietly exclude the most senior account in the system.
+    for (const [name, allows] of Object.entries(can)) {
+      if (!allows("ADMIN")) continue;
+      expect(allows("SUPERADMIN"), `can.${name} excludes SUPERADMIN`).toBe(true);
+    }
+  });
+
+  it("holds the three that are theirs alone", () => {
+    for (const allows of [can.manageAccess, can.viewFinance, can.manageFinance]) {
+      expect(allows("SUPERADMIN")).toBe(true);
+      expect(allows("ADMIN")).toBe(false);
+      expect(allows("HR")).toBe(false);
+    }
+  });
+
+  it("works at a desk, not in the field", () => {
+    expect(usesAdminPanel("SUPERADMIN")).toBe(true);
+    expect(usesFieldPanel("SUPERADMIN")).toBe(false);
+    expect(homeFor("SUPERADMIN")).toBe("/admin");
+  });
+});
 
 describe("access", () => {
   it("sends desk roles to the admin panel and field roles to the mobile panel", () => {

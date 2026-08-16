@@ -5,14 +5,15 @@ import Link from "next/link";
 import { KeyRound, MapPinned, Plus, Trash2, UserRound } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Field, Notice, PageTitle, Spinner } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
-import { ROLES, ROLE_LABEL, usesFieldPanel, type Role } from "@/constants/access";
+import { ASSIGNABLE_ROLES, ROLE_LABEL, mayEditAccount, usesFieldPanel, type Role } from "@/constants/access";
 
 type Member = {
   _id: string; name: string; employeeId: string; email: string; role: Role; active: boolean;
   lastLoginAt?: string; designation?: string; department?: string;
 };
 
-const roleTone = (role: Role) => role === "ADMIN" ? "brand" : role === "HR" ? "info" : "neutral";
+const roleTone = (role: Role) =>
+  role === "SUPERADMIN" ? "danger" : role === "ADMIN" ? "brand" : role === "HR" ? "info" : "neutral";
 
 export default function TeamPage() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -101,19 +102,29 @@ export default function TeamPage() {
                   <MapPinned size={16} />
                 </Link>
               )}
-              <select value={member.role} aria-label={`Role for ${member.name}`}
-                onChange={e => patch(member._id, { role: e.target.value }, `${member.name} is now ${ROLE_LABEL[e.target.value as Role]}.`)}
-                className="select !min-h-[38px] !py-1 text-xs">
-                {ROLES.map(role => <option key={role} value={role}>{ROLE_LABEL[role]}</option>)}
-              </select>
-              <button onClick={() => setResetting(member)} aria-label={`Reset password for ${member.name}`}
-                className="tap grid place-items-center rounded-[10px] text-[var(--muted)] hover:bg-[var(--surface-2)]"><KeyRound size={16} /></button>
-              <Button tone="secondary" className="!min-h-[38px] !px-3 text-xs"
-                onClick={() => patch(member._id, { active: !member.active }, `${member.name} ${member.active ? "deactivated" : "reactivated"}.`)}>
-                {member.active ? "Deactivate" : "Activate"}
-              </Button>
-              <button onClick={() => remove(member)} aria-label={`Delete ${member.name}`}
-                className="tap grid place-items-center rounded-[10px] text-[var(--danger-ink)] hover:bg-[var(--danger-bg)]"><Trash2 size={16} /></button>
+              {/*
+               * A super administrator's row carries no controls at all, for
+               * anybody but another super administrator. The API refuses every
+               * one of them (see `mayEditAccount`); showing buttons that always
+               * fail would only teach people to ignore the error.
+               */}
+              {mayEditAccount(viewer ?? "HR", member.role) ? <>
+                <select value={member.role} aria-label={`Role for ${member.name}`}
+                  onChange={e => patch(member._id, { role: e.target.value }, `${member.name} is now ${ROLE_LABEL[e.target.value as Role]}.`)}
+                  className="select !min-h-[38px] !py-1 text-xs">
+                  {ASSIGNABLE_ROLES.map(role => <option key={role} value={role}>{ROLE_LABEL[role]}</option>)}
+                </select>
+                <button onClick={() => setResetting(member)} aria-label={`Reset password for ${member.name}`}
+                  className="tap grid place-items-center rounded-[10px] text-[var(--muted)] hover:bg-[var(--surface-2)]"><KeyRound size={16} /></button>
+                <Button tone="secondary" className="!min-h-[38px] !px-3 text-xs"
+                  onClick={() => patch(member._id, { active: !member.active }, `${member.name} ${member.active ? "deactivated" : "reactivated"}.`)}>
+                  {member.active ? "Deactivate" : "Activate"}
+                </Button>
+                <button onClick={() => remove(member)} aria-label={`Delete ${member.name}`}
+                  className="tap grid place-items-center rounded-[10px] text-[var(--danger-ink)] hover:bg-[var(--danger-bg)]"><Trash2 size={16} /></button>
+              </> : (
+                <p className="text-xs text-[var(--muted)]">Changed from a shell, not from here</p>
+              )}
             </div>
           </div>
         ))}
@@ -175,7 +186,7 @@ function AddMember({ onClose, onAdded }: { onClose: () => void; onAdded: () => v
         */}
       <Field label="Role" hint="Somebody selling on commission with their own coupon code is not an employee — add them under Sales CRM → Partners.">
         <select name="role" defaultValue="MR" className="select">
-          {ROLES.map(role => <option key={role} value={role}>{ROLE_LABEL[role]}</option>)}
+          {ASSIGNABLE_ROLES.map(role => <option key={role} value={role}>{ROLE_LABEL[role]}</option>)}
         </select>
       </Field>
 

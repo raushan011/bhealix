@@ -20,17 +20,50 @@ credit sits on.
 
 ## Getting a super administrator
 
-Nothing in the application creates one. A screen that could would be a way for an
-administrator to promote themselves, which is the thing the role exists to
-prevent — so it takes shell access:
+Nothing in the application creates one, and that is the security model rather
+than an oversight. `SUPERADMIN` is deliberately off the Employees screen's role
+list (`ASSIGNABLE_ROLES`), because that screen is reached by `manageEmployees` —
+which HR holds as well as the administrator — and a role anybody there could
+assign is not a role above them. The same reasoning closes the account itself:
+its role, its password, its active flag and its deletion are all refused to
+everybody below it, since an administrator who could set that password could
+simply sign in as them.
+
+So it takes shell access, from the project directory:
 
 ```bash
-npm run super-admin -- someone@bhealix.com
+npm run super-admin                                             # list the desk accounts
+npm run super-admin -- boss@bhealix.com                         # promote an existing one
+npm run super-admin -- boss@bhealix.com --create --name "…"     # a separate credential
 ```
 
-The account must already exist (create it from **Admin → Employees**). It keeps
-its name, password and employment record; only the role changes. To take it back,
-set the role to Administrator from the Employees screen.
+**Run it with no arguments first.** It prints which database it is talking to and
+every desk account on it, which is the answer to "no account with that email" —
+usually the address is simply not the one you remembered.
+
+**Promoting** changes the role and nothing else: the name, password, employment
+record and history stay exactly as they were. To take it back, set the role to
+Administrator from **Admin → Employees**.
+
+**`--create`** makes an account that need not be an employee at all — a login
+that exists only to hold the books. It prints a generated password once, or takes
+`--password "…"`.
+
+The script reads `MONGODB_URI` from the environment in preference to
+`.env.local`, so it can be pointed at staging: `MONGODB_URI=… npm run
+super-admin`. It names the database it connected to on every run.
+
+## Signing in
+
+`/super-admin` is the door. It lands directly on the control panel rather than on
+the CRM chooser, and refuses an account that is not a super administrator before
+any cookie is set — with a sentence saying so, rather than the "incorrect
+password" that would have somebody conclude their account was broken.
+
+**It is a door, not a lock.** The address is not a secret and knowing it grants
+nothing: the password and the role are what protect the account, and the same
+person can sign in at `/login` and reach the same panel through the chooser.
+What it buys is one address to remember and a refusal that explains itself.
 
 ---
 
