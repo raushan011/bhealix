@@ -1,5 +1,6 @@
 import { Schema, model, models } from "mongoose";
 import { ROLES } from "@/constants/access";
+import { GRANTABLE_WORKSPACES } from "@/lib/workspace";
 import { LEAVE_TYPES } from "@/lib/hr/leave";
 import { EMPLOYMENT_STATUSES } from "@/lib/hr/payroll";
 
@@ -20,6 +21,21 @@ const UserSchema = new Schema({
   passwordHash: { type: String, required: true, select: false },
   role: { type: String, enum: ROLES, required: true },
   permissions: [String],
+  /**
+   * Which CRMs this person may enter, set by the super administrator.
+   *
+   * `undefined` and `[]` mean different things here, and the difference is the
+   * whole migration story. **Absent** means nobody has ever decided for this
+   * account, so their role's customary panels apply — which is what every
+   * existing administrator and HR user has, and why granting became a feature
+   * without anybody losing access on the deploy that shipped it. An **array**,
+   * empty or not, is a decision somebody took and is obeyed exactly.
+   *
+   * `default: undefined` rather than Mongoose's usual `[]` for an array field is
+   * therefore load-bearing: the default would silently convert every account in
+   * the database to "decided, and decided to be nothing".
+   */
+  workspaces: { type: [String], enum: GRANTABLE_WORKSPACES, default: undefined },
   active: { type: Boolean, default: true },
   lastLoginAt: Date,
 

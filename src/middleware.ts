@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { jwtVerify } from "jose";
+import { PATH_HEADER } from "@/lib/auth/path-header";
 
 /**
  * `/api/sales/shopify/webhook` is public because Shopify has no session with
@@ -28,8 +29,29 @@ const HEADERS: [string, string][] = [
   ["referrer-policy", "strict-origin-when-cross-origin"]
 ];
 
-const pass = () => {
-  const response = NextResponse.next();
+/**
+ * Lets the request through, with the security headers on the way out and the
+ * matched path on the way in.
+ *
+ * That second half exists because neither the route handlers nor the layouts can
+ * ask what they are serving. A handler is given a `Request` whose URL is the one
+ * the browser sent, which behind a rewrite or a proxy is not the route that
+ * matched — and `apiSession`, where the CRM grant is checked, is handed no
+ * request at all. A **layout** is worse off still: it is never told the path, by
+ * design. Both read it back off this header instead.
+ *
+ * **Set, not appended.** A client is perfectly capable of sending a
+ * `x-bhealix-path` of its own choosing, and that header decides which CRM's
+ * grant a request is held to — so whatever it arrives with is overwritten on
+ * every request the matcher covers, and the matcher covers `/admin` and `/api`
+ * entirely. Nobody can arrange for this middleware *not* to run, which is what
+ * makes reading the header safe.
+ */
+const pass = (request: NextRequest) => {
+  const headers = new Headers(request.headers);
+  headers.set(PATH_HEADER, request.nextUrl.pathname);
+
+  const response = NextResponse.next({ request: { headers } });
   for (const [name, value] of HEADERS) response.headers.set(name, value);
   return response;
 };
@@ -52,7 +74,7 @@ export async function middleware(request: NextRequest) {
     return partnerGate(request, pathname, secret);
   }
 
-  if (PUBLIC_API.includes(pathname)) return NextResponse.next();
+  if (PUBLIC_API.includes(pathname)) return pass(request);
 
   const isApi = pathname.startsWith("/api/");
   const token = request.cookies.get("bhealix_session")?.value;
@@ -71,13 +93,21 @@ export async function middleware(request: NextRequest) {
     if (payload.aud === "partner") return signedOut();
 
     const role = String(payload.role);
-    const deskRole = role === "ADMIN" || role === "HR";
+    // The super administrator works at a desk like the other two. Left out, the
+    // most senior account in the system would be bounced out of `/admin` into
+    // a field panel it has no business being in.
+    const deskRole = role === "SUPERADMIN" || role === "ADMIN" || role === "HR";
 
-    // Keep each role inside its own panel; page-level guards enforce finer rules.
+    /*
+     * Keep each role inside its own panel; page-level guards enforce finer
+     * rules. **Which CRM inside `/admin`** is deliberately not decided here: the
+     * grant lives in MongoDB and the Edge runtime has no business reading it, so
+     * `app/admin/layout.tsx` asks — reading the path off the header set below.
+     */
     if (pathname.startsWith("/admin") && !deskRole) return NextResponse.redirect(new URL("/employee", request.url));
     if (pathname.startsWith("/employee") && deskRole) return NextResponse.redirect(new URL("/admin", request.url));
 
-    return pass();
+    return pass(request);
   } catch {
     return signedOut();
   }
@@ -124,7 +154,7 @@ async function partnerGate(request: NextRequest, pathname: string, secret: strin
     if (signedIn && !endedSession && (pathname === "/partner/login" || pathname === "/partner/register")) {
       return NextResponse.redirect(new URL("/partner", request.url));
     }
-    return pass();
+    return pass(request);
   }
 
   if (!signedIn) {
@@ -133,7 +163,7 @@ async function partnerGate(request: NextRequest, pathname: string, secret: strin
       : NextResponse.redirect(new URL(`/partner/login?next=${encodeURIComponent(pathname)}`, request.url));
   }
 
-  return pass();
+  return pass(request);
 }
 
 // /invoices and /payslips are printable documents reached by both panels, so

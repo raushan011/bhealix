@@ -17,6 +17,7 @@ locations — is here. Read this, decide which 2–5 files your task touches, th
 | Call, change or add an HTTP endpoint | §7 |
 | Change business arithmetic (GST, payroll, stock, routing) | §8 |
 | Work on the affiliate/Sales CRM | §1, §6.15, §7.9, §8.8 |
+| Work on panel access or the invoice vault | §5.5, §6.16, §7.8a, `docs/INVOICE-VAULT.md` |
 | Work on screens/components | §9 |
 | Write new code in-house style | §10 |
 | Avoid a known trap | §11 |
@@ -46,24 +47,33 @@ operation:
 
 Two panels, one app: `/admin` (desktop, for ADMIN + HR) and `/employee` (mobile PWA, for MR + SALES).
 
-### Two CRMs share the desk panel
+### Three panels share the desk
 
-The desk panel holds two operations that barely touch, and a signed-in desk role is asked which they
-came for (`/choose`):
+The desk holds operations that barely touch, and a signed-in desk role is asked which they came for
+(`/choose`):
 
-| | **Doctor CRM** (`/admin`) | **Sales CRM** (`/admin/sales`) |
-|---|---|---|
-| Who sells | Employed medical representatives | Outside affiliates on commission |
-| Where | Clinics, in person | The Shopify storefront |
-| Paid by | Payroll | Weekly commission payout runs |
-| Domains | 1–9 above | 10 above |
+| | **Doctor CRM** (`/admin`) | **Sales CRM** (`/admin/sales`) | **Super admin** (`/admin/control`) |
+|---|---|---|---|
+| Who sells | Employed medical representatives | Outside affiliates on commission | — |
+| Where | Clinics, in person | The Shopify storefront | — |
+| Paid by | Payroll | Weekly commission payout runs | — |
+| Domains | 1–9 above | 10 above | 11 above |
+| Reached by | A grant | A grant | The `SUPERADMIN` role, never a grant |
 
-**There is no stored preference.** `lib/workspace.ts::workspaceOf(pathname)` decides which CRM the
+**There is no stored preference.** `lib/workspace.ts::workspaceOf(pathname)` decides which panel the
 shell is describing, so a bookmark, an emailed link and the back button all land somewhere that
 agrees with itself. A cookie would eventually disagree with the URL, and the sidebar would describe
 a different application from the one on screen. `landingFor(role)` (in `constants/access.ts`) sends
 desk roles to the chooser on sign-in; `homeFor(role)` is unchanged and still what a panel guard uses
 to bounce somebody.
+
+**Which CRMs an account may open is a per-person grant, not a role.** Stored on `User.workspaces`,
+decided at **Super admin → Panel access**, resolved by `lib/auth/grants.ts` and read from the
+database on every request by `lib/auth/access.ts` — never from the session token, because a
+twelve-hour token would keep a withdrawn panel working until nightfall. `undefined` means nobody has
+decided and the role's customary panels apply, which is why shipping grants changed nothing for
+anybody. The route group `src/app/admin/(doctor)/` exists solely so the Doctor CRM has a layout of
+its own to guard; it changes no URL. See §5.5.
 
 ### Stack
 
@@ -117,7 +127,7 @@ Seed admin: `admin@bhealix.com` / `Bhealix@123` — **change before production**
 
 ---
 
-## 2. The nine domains at a glance
+## 2. The domains at a glance
 
 | Domain | Collections | Pure logic | Server logic | API prefix |
 |---|---|---|---|---|
@@ -131,6 +141,8 @@ Seed admin: `admin@bhealix.com` / `Bhealix@123` — **change before production**
 | HR | `LeaveRequest`, `Attendance`, `Holiday` | `lib/hr/{leave,attendance}` | `lib/hr/records.ts` | `/api/hr/{leave,attendance,holidays,overview}` |
 | Payroll | `SalaryStructure`, `PayrollRun`, `Payslip`, `PayrollSettings` | `lib/hr/payroll.ts` | `lib/hr/payroll-run.ts` | `/api/hr/{payroll,payslips,salary}` |
 | Affiliate sales | `SalesRep`, `SalesOrder`, `SalesPayout`, `SalesPayoutLine`, `SalesLead`, `SalesSettings` | `lib/sales/{constants,coupons,commission,delivery,payouts,leads,fulfilment,types}` | `lib/sales/{settings,shopify,shiprocket,sync,booking,address,payout-run,reporting,secrets,http,reps}` | `/api/sales/*` |
+| Vendor invoices | `VendorInvoice`, `FinancePeriod` | `lib/finance/{sources,period,files,archive,zip,types}` | `lib/finance/{documents,pull}.ts` | `/api/finance/*` |
+| Panel access | `User.workspaces` | `lib/workspace.ts`, `lib/auth/grants.ts` | `lib/auth/access.ts` | `/api/control/access` |
 | Audit | `AuditEvent` | — | `lib/audit.ts` | — (written inline) |
 
 **The pure/server split is a rule, not an accident.** Files listed under "pure logic" contain no
@@ -143,33 +155,41 @@ same answer. See §4.1.
 
 ```
 src/
-├── middleware.ts                    Edge auth gate + security headers; panel routing by role
+├── middleware.ts                    Edge auth gate + security headers; stamps the request path (§5.3)
 ├── app/
 │   ├── layout.tsx  page.tsx  error.tsx  not-found.tsx  manifest.ts
 │   ├── login/page.tsx
-│   ├── admin/                       Desktop panel — ADMIN + HR (layout.tsx = AdminShell)
-│   │   ├── page.tsx                 dashboard
-│   │   ├── discover/                Google Places doctor search + Excel import/export
-│   │   ├── doctors/{page,new,[id]}
-│   │   ├── plans/{page,new,[id]}
-│   │   ├── visits/page.tsx
-│   │   ├── samples/page.tsx         per-rep sample stock matrix
-│   │   ├── products/page.tsx        catalogue + units-available box
-│   │   ├── inventory/page.tsx       warehouse ledger + stock levels
-│   │   ├── customers/page.tsx       trade buyer directory
-│   │   ├── billing/{page,new,[id],[id]/edit,settings}
-│   │   ├── team/{page,[id],[id]/activity}
-│   │   ├── hr/{page,attendance,leave,holidays,payroll,payroll/[id],payroll/settings}
-│   │   ├── reports/page.tsx
-│   │   └── sales/                   The Sales CRM (layout.tsx guards can.viewSales)
-│   │       ├── page.tsx             affiliate dashboard
-│   │       ├── leads/page.tsx       Google Places business search + the saved lead list
-│   │       ├── reps/{page,[id]}
-│   │       ├── orders/page.tsx      what the coupons brought in
-│   │       ├── orders/process/      the picking list (page guards can.processOrders)
-│   │       ├── payouts/{page,[id]}
-│   │       └── settings/{page,layout}   layout guards can.manageSales
-│   ├── choose/page.tsx              Doctor CRM or Sales CRM — the desk's landing page
+│   ├── admin/                       Desktop panel — SUPERADMIN + ADMIN + HR
+│   │   ├── layout.tsx               AdminShell + the CRM grant check (§5.5)
+│   │   ├── (doctor)/                The Doctor CRM. A route group, so the panel has a layout
+│   │   │   │                        of its own to guard with; it changes no URL beneath it.
+│   │   │   ├── page.tsx             dashboard, at /admin
+│   │   │   ├── layout.tsx           requireWorkspace("doctor")
+│   │   │   ├── discover/            Google Places doctor search + Excel import/export
+│   │   │   ├── doctors/{page,new,[id]}
+│   │   │   ├── plans/{page,new,[id]}
+│   │   │   ├── visits/page.tsx
+│   │   │   ├── samples/page.tsx     per-rep sample stock matrix
+│   │   │   ├── products/page.tsx    catalogue + units-available box
+│   │   │   ├── inventory/page.tsx   warehouse ledger + stock levels
+│   │   │   ├── customers/page.tsx   trade buyer directory
+│   │   │   ├── billing/{page,new,[id],[id]/edit,settings}
+│   │   │   ├── team/{page,[id],[id]/activity}
+│   │   │   ├── hr/{page,attendance,leave,holidays,payroll,payroll/[id],payroll/settings}
+│   │   │   └── reports/page.tsx
+│   │   ├── sales/                   The Sales CRM (layout.tsx: the grant, then can.viewSales)
+│   │   │   ├── page.tsx             affiliate dashboard
+│   │   │   ├── leads/page.tsx       Google Places business search + the saved lead list
+│   │   │   ├── reps/{page,[id]}
+│   │   │   ├── orders/page.tsx      what the coupons brought in
+│   │   │   ├── orders/process/      the picking list (page guards can.processOrders)
+│   │   │   ├── payouts/{page,[id]}
+│   │   │   └── settings/{page,layout}   layout guards can.manageSales
+│   │   └── control/                 Super admin (layout.tsx = requireWorkspace("control"))
+│   │       ├── page.tsx             this month and last, and who holds which panel
+│   │       ├── invoices/page.tsx    the vendor invoice vault
+│   │       └── access/page.tsx      grant and withdraw the two CRMs
+│   ├── choose/page.tsx              Which panel — the desk's landing page, granted ones only
 │   ├── employee/                    Mobile PWA panel — MR + SALES (layout.tsx = FieldShell)
 │   │   ├── page.tsx                 Today: the day's route in visiting order
 │   │   ├── plans/{page,new,[id]}    rep plans their own round
@@ -188,6 +208,8 @@ src/
 │   │                payment-proof, payment-qr, print-button
 │   ├── sales/       sync-button, rep-form, order-list, import-orders, automation-panel,
 │   │                leads-screen, lead-search, lead-list
+│   ├── finance/     vault (the month, its checklist and its archive), upload-invoice
+│   ├── control/     access-manager (who may open which CRM)
 │   ├── doctors/     call-schedule-editor, doctor-call-time-card, doctor-details-form, doctor-picker
 │   ├── visits/      visit-form, visit-photos
 │   ├── plans/       plan-assignment, delete-plan-button
@@ -198,8 +220,13 @@ src/
 │   ├── api.ts                       ok/badRequest/fail/pageParams/OBJECT_ID
 │   ├── audit.ts                     AUDIT_ACTIONS + record()
 │   ├── env.ts  time.ts  maps.ts  routing.ts  plans.ts
-│   ├── auth/        session.ts (JWT), guard.ts (requireSession/apiSession)
-│   ├── db/          mongoose.ts (cached connection + model registration)
+│   ├── auth/        session.ts (JWT), guard.ts (requireSession/requireWorkspace/apiSession)
+│   │                grants.ts (the grant rules, pure), access.ts (reads them per request)
+│   │                path-header.ts (the header name the middleware and guard share)
+│   ├── db/          mongoose.ts (cached connection + model registration), bytes.ts
+│   ├── finance/     sources, period, files, archive, zip, types                   (pure)
+│   │                documents (list + month summary), pull (Shiprocket)       (server)
+│   ├── http/        content-disposition.ts — a file name a header can carry
 │   ├── billing/     constants, gst, numbering, types, customers, attachments, invoices, compose
 │   ├── doctors/     fields, call-schedule, discovery, places
 │   ├── hr/          leave, attendance, payroll, payroll-run, records
@@ -209,11 +236,11 @@ src/
 │   │                fulfilment, types                                            (pure)
 │   │                secrets, http, shopify, shiprocket, settings, sync, booking,
 │   │                address, payout-run, reporting, reps                     (server)
-│   └── workspace.ts Which CRM a path belongs to
+│   └── workspace.ts Which panel a path belongs to, and which can be granted
 ├── models/                          One file per bounded context — see §6
 └── (tests co-located as *.test.ts next to what they test)
 public/    sw.js, offline.html, icons/, brand/
-scripts/   seed.mjs, generate-icons.mjs, backfill-sample-ledger.mjs
+scripts/   seed.mjs, make-super-admin.mjs, generate-icons.mjs, backfill-sample-ledger.mjs
 ```
 
 ---
@@ -384,8 +411,9 @@ server, which makes it look intermittent. **Add new models to that import list.*
 |---|---|---|
 | `requireSession()` | `lib/auth/guard.ts` | any page; redirects to `/login` |
 | `requireAdminPanel()` | ″ | `/admin` pages; field staff redirected to `/employee` |
+| `requireWorkspace(ws)` | ″ | one panel; sends somebody without the grant to one they hold, or to `/choose` |
 | `requireFieldPanel()` | ″ | `/employee` pages |
-| `apiSession(allow?)` | ″ | route handlers; returns `{session}` **or** `{response}` |
+| `apiSession(allow?)` | ″ | route handlers; returns `{session}` **or** `{response}`. **Also checks the CRM grant**, from the path — see §5.5 |
 
 Route-handler idiom, used everywhere:
 
@@ -399,17 +427,33 @@ if ("response" in auth) return auth.response;    // 401 or 403 already built
 
 Matches `/admin/*`, `/employee/*`, `/choose`, `/invoices/*`, `/payslips/*`, `/api/*`. Public:
 `/api/auth/login`, `/api/auth/logout`. Verifies the JWT; on failure returns 401 for API paths and redirects to
-`/login?next=…` for pages. Keeps desk roles (`ADMIN`, `HR`) out of `/employee` and field roles out of
-`/admin`. Sets `x-content-type-options: nosniff`, `x-frame-options: DENY`,
+`/login?next=…` for pages. Keeps desk roles (`SUPERADMIN`, `ADMIN`, `HR`) out of `/employee` and field
+roles out of `/admin`. **Which CRM inside `/admin`** is deliberately not decided here — the grant is
+in MongoDB and the Edge runtime has no business reading it. Sets `x-content-type-options: nosniff`, `x-frame-options: DENY`,
 `referrer-policy: strict-origin-when-cross-origin`.
 
 `/invoices` and `/payslips` are deliberately reachable by both panels — the page itself decides who
 may open that particular document. `/choose` belongs to neither and is confined by its own guard.
 
+It also stamps the matched path onto the request as `x-bhealix-path`
+(`lib/auth/path-header.ts`), because neither half of the application can otherwise ask what it is
+serving: a route handler's `Request` URL is what the browser sent rather than what matched, and a
+**layout is never told the path at all**. `apiSession()` and `app/admin/layout.tsx` both read it to
+decide which CRM's grant applies. The value is **set, not appended**, so a client sending one of its
+own is overwritten; a caller cannot arrange for the middleware not to run, which is what makes
+reading it safe.
+
 ### 5.4 The permission table (`src/constants/access.ts`)
 
-Roles: `ADMIN`, `HR`, `MR`, `SALES`.
-`usesAdminPanel` = ADMIN | HR. `usesFieldPanel` = MR | SALES. `homeFor(role)` → `/admin` or `/employee`.
+Roles: `SUPERADMIN`, `ADMIN`, `HR`, `MR`, `SALES`.
+`usesAdminPanel` = SUPERADMIN | ADMIN | HR. `usesFieldPanel` = MR | SALES.
+`homeFor(role)` → `/admin` or `/employee`.
+
+**A super administrator has every `ADMIN` power.** The module's private `admin(role)` helper is what
+every `can.*` below marked ✓ for ADMIN actually tests, so the two never drift apart — writing both
+role names at forty call sites would eventually miss one, and a permission that silently excludes the
+most senior account reads as a policy rather than as the bug it is. The SUPERADMIN column below is
+therefore ADMIN's column plus the last three rows.
 
 | `can.*` | ADMIN | HR | MR | SALES | Meaning |
 |---|:-:|:-:|:-:|:-:|---|
@@ -439,9 +483,51 @@ Roles: `ADMIN`, `HR`, `MR`, `SALES`.
 | `processOrders` | ✓ | ✓ | | | book a parcel with the courier, print its invoice and label — spends freight, decides no commission |
 | `runSalesPayout` | ✓ | ✓ | | | prepare a week's payout and adjust its lines |
 | `approveSalesPayout` | ✓ | | | | approve, reopen, mark paid, delete a draft |
+| `manageAccess` | | | | | **SUPERADMIN only** — grant and withdraw the two CRMs |
+| `viewFinance` | | | | | **SUPERADMIN only** — read the vendor invoice vault |
+| `manageFinance` | | | | | **SUPERADMIN only** — file, correct, delete, pull, close a month |
 
 Note `SALES` is a **field** role (a medical representative who also bills) and has nothing to do with
 the Sales CRM. An affiliate is a `SalesRep`, not a `User`, and has no login at all.
+
+### 5.5 CRM grants — who may open which panel
+
+A second, orthogonal axis. **The role decides the job; the grant decides the person.** Both have to
+agree: granting HR the Sales CRM lets them read it and does not let them issue a coupon, because
+that is still `can.manageSales`.
+
+| Piece | File | What it does |
+|---|---|---|
+| `WORKSPACES` / `GRANTABLE_WORKSPACES` | `lib/workspace.ts` | `doctor`, `sales`, `control` — only the first two can be handed out |
+| `workspaceOf(path)` / `apiWorkspaceOf(path)` | ″ | which panel a page or an API path belongs to |
+| `grantedWorkspaces` / `mayEnter` / `panelsFor` | `lib/auth/grants.ts` | the rules, pure and tested without a database |
+| `storedGrantFor` / `sessionMayEnter` / `panelsForSession` | `lib/auth/access.ts` | reads `User.workspaces`, memoised per request with React `cache` |
+| `User.workspaces` | `models/User.ts` | `["doctor","sales"]`, or **absent** |
+
+Four rules worth knowing before touching any of it:
+
+1. **Absent ≠ empty.** `undefined` means nobody has decided, so the role's customary panels apply —
+   which is why grants shipped without anybody losing access. An array, empty or not, is a decision
+   and is obeyed exactly. `default: undefined` on the schema field is load-bearing: Mongoose's usual
+   `[]` default would convert every existing account to "decided, and decided to be nothing".
+2. **Read from the database, never from the token.** A session lasts twelve hours; a withdrawn panel
+   has to shut now, not tonight. The per-request memo makes the repeated asking free.
+3. **`control` is not grantable.** It comes with the `SUPERADMIN` role, so there is no sequence of
+   clicks on the access screen ending with somebody letting themselves into the screen that hands out
+   grants. `mayEnter` refuses it even if a hand-edited database row lists it.
+4. **Field roles are exempt.** A rep holds one panel and it is neither of these; the desk guard has
+   already sent them away by the time a grant is asked about.
+
+Enforced in three places, each covering what the others cannot:
+
+- `app/admin/layout.tsx` — reads `x-bhealix-path` and checks before anything renders, so a refusal
+  is a 307. **A nested layout cannot do this**: it runs after its parent has begun streaming, at
+  which point Next falls back to a one-second meta refresh and somebody sent away from a withdrawn
+  panel watches its sidebar for a second first.
+- `app/admin/(doctor)|sales|control/layout.tsx` — each names its own workspace, so the guard does
+  not rest on a header alone.
+- `apiSession()` — derives the workspace from the path and refuses with a sentence naming the panel.
+  This is what stops a withdrawn panel's routes being reachable by `fetch` after the links are gone.
 
 ---
 
@@ -461,6 +547,7 @@ Account **and** employment record in one document.
 | `passwordHash` | String | required, **`select: false`** |
 | `role` | enum `ROLES` | required |
 | `permissions` | [String] | reserved; not currently consulted |
+| `workspaces` | [String] enum `GRANTABLE_WORKSPACES` | **`default: undefined`, and that is load-bearing** — absent means nobody has decided and the role's panels apply; an array, empty or not, is obeyed exactly. See §5.5 |
 | `active` | Boolean | `true` — controls sign-in |
 | `lastLoginAt` | Date | |
 | `designation`, `department`, `workLocation` | String | |
@@ -552,7 +639,13 @@ in the gap between expiry and the sweep. Max 8 per visit, max 3 MB each.
 `Product`: `name` (req, unique), `category`, `sampleAvailable`, `active`, `hsnCode`, `unit` (`"Pcs"`),
 `price`, `mrp`, `gstRate` (18), `reorderLevel`. **No stock field** — see §4.3.
 
-`AuditEvent`: `actor` → User, `action` (req, indexed), `entityType`, `entityId`, `metadata` (Mixed).
+`AuditEvent`: `actor` → User, `action` (req, indexed), `entityType`, `entityId` (**Mixed**), `metadata` (Mixed).
+
+`entityId` is Mixed rather than ObjectId because plenty of what is worth recording has no document
+id: the affiliate settings are a singleton keyed `"sales"`, an accounting month is `"2026-08"`, an
+import is a batch. Typed as an ObjectId every one of those failed to cast — and `record()` swallows
+its own failures by design, so they failed *silently* and those screens wrote no trail at all while
+appearing to.
 
 ### 6.7 `SampleMovement` — `models/Sample.ts`
 
@@ -763,6 +856,34 @@ Shopify admin token reads every order and customer the company has, so a databas
 hand it over in plain sight. **Rotating `AUTH_SECRET` makes them unreadable**, which is correct: they
 are re-entered on the settings screen.
 
+### 6.16 Vendor invoices — `models/Finance.ts`
+
+The company's own **purchase** paper — the opposite direction from `Invoice` (§6.10), which is money
+owed *to* the company. Nothing joins them.
+
+`VendorInvoice`
+
+| Field | Type | Notes |
+|---|---|---|
+| `period` | String | `"2026-08"`, required, indexed. The **accounting** month, chosen rather than derived — a Meta receipt dated 2 September is usually August's advertising |
+| `source` | enum `SOURCE_KEYS` | required, indexed. Seven; Shiprocket is three of them |
+| `number`, `documentDate`, `description` | String / Date / String | the vendor's own reference |
+| `amount`, `taxAmount`, `currency` | Number / Number / String | **all optional** — the file is the record, and a form that demands a figure ends with the invoice still in Downloads |
+| `data` | Buffer | required, **`select: false`** |
+| `contentType` | enum `VAULT_FILE_TYPES` | required |
+| `bytes`, `fileName` | Number / String | required |
+| `origin` | `"pulled"` | `"uploaded"` | required — changes what an empty month *means* |
+| `externalRef` | String | the vendor's id, so a second pull upserts. Sparse |
+| `uploadedBy` | ObjectId → User | |
+| `notes` | String | |
+
+Indexes: `{period:-1, source:1, documentDate:-1}` (the only query it is asked) and a **partial**
+unique `{source:1, externalRef:1}` filtered on `externalRef: {$type:"string"}` — partial rather than
+sparse so hand-filed documents, which have no external reference, are simply not its business.
+
+`FinancePeriod` — one per month: `period` (unique), `handedOverAt`, `handedOverBy` → User, `note`.
+It answers the one question the documents cannot: has this been sent to the accountant yet?
+
 ### 6.14 HR — `models/HR.ts`
 
 **`LeaveRequest`** — `employee` (req, indexed), `type` enum `LEAVE_TYPES` (req), `fromDate`, `toDate`
@@ -951,6 +1072,24 @@ warehouse are counted under the same name.
 | | PATCH | `manageEmployees` | the whole employment record + `newPassword?` + `leaveEntitlement?` |
 | | DELETE | `manageEmployees` | refused for anyone with visits, and for the last administrator |
 | `/api/reports` | GET | `viewAllReports` | `?from=&to=` (default last 30 days). One pass returning totals, per-employee `{planned, completed, samples, orderValue}`, outcome counts, sample distribution by product with distinct doctor count, interest split, and sample movement totals |
+
+### 7.8a Super admin — access and the invoice vault
+
+Every route below is `SUPERADMIN` only. `/api/finance` is deliberately **not** mapped to any CRM by
+`apiWorkspaceOf`: the vault is guarded by the role, which no grant can confer or withdraw.
+
+| Route | Method | Guard | Notes |
+|---|---|---|---|
+| `/api/control/access` | GET | `manageAccess` | desk accounts with the panels in force, whether that was decided or inherited, and the two grantable workspaces. Field roles are not listed |
+| | PATCH | `manageAccess` | `{userId, workspaces[]}` — the whole set, not a delta. Refuses `control`, refuses to trim a SUPERADMIN, refuses field roles. Writes both sides of the change to the trail |
+| `/api/finance/documents` | GET | `viewFinance` | `?period=&source=&vendor=` — the list, the month summary and the months to offer, in one request |
+| | POST | `manageFinance` | `multipart`: `file` + `period` + `source`, everything else optional. Answers with a note when the document's date falls outside its month |
+| `/api/finance/documents/[id]` | GET | `viewFinance` | the file. `?download=1` switches inline → attachment |
+| | PATCH | `manageFinance` | corrects what is *written* about it; the bytes are never replaced — evidence anyone can swap proves nothing |
+| | DELETE | `manageFinance` | copies month, source, number and amount into the trail on the way out |
+| `/api/finance/archive` | GET | `viewFinance` | `?period=` | `?period=&vendor=` | `?ids=a,b,c` → one ZIP, `Contents.csv` first, a folder per vendor. `x-documents-included`/`-omitted` on the response |
+| `/api/finance/pull` | POST | `manageFinance` | `{period, source}`. Only `shiprocket-order` is fetchable; the rest are refused **by name**, with the reason, rather than run to no effect |
+| `/api/finance/periods` | PATCH | `manageFinance` | `{period, handedOver?, note?, force?}`. Marking an incomplete month sent answers `{confirm:true}` once, then obeys with `force` |
 
 ### 7.9 Affiliate sales
 
@@ -1517,6 +1656,13 @@ the server knows more about than the request does belongs there too, not in `fie
 | Connecting Shopify (OAuth) | `lib/sales/oauth.ts` (+ `oauth.test.ts`), `app/api/sales/shopify/{install,callback}` |
 | Sales dashboards and figures | `lib/sales/reporting.ts`, `app/admin/sales/**` |
 | Which CRM a screen belongs to | `lib/workspace.ts`, `components/layout/admin-shell.tsx`, `app/choose/page.tsx` |
+| Who may open which CRM | `lib/auth/grants.ts` (pure, + test), `lib/auth/access.ts`, `models/User.ts`, `app/api/control/access/route.ts`, `components/control/access-manager.tsx` |
+| Where a panel guard lives | `app/admin/layout.tsx` (the early one), `app/admin/{(doctor),sales,control}/layout.tsx`, `lib/auth/guard.ts`, `src/middleware.ts` |
+| Adding a vendor invoice source | `lib/finance/sources.ts` — one entry. Add a connector in `lib/finance/pull.ts` and flip `collection` to `"pull"` if it can be fetched |
+| How the ZIP is laid out or named | `lib/finance/archive.ts` (+ test), `lib/finance/zip.ts` (+ test) |
+| The month checklist and its totals | `lib/finance/documents.ts::summarise`, `components/finance/vault.tsx` |
+| Accounting months | `lib/finance/period.ts` (+ test) |
+| Serving a file with a name in it | `lib/http/content-disposition.ts` (+ test) |
 | Permissions | `constants/access.ts` (+ `access.test.ts`) |
 | Session / login | `lib/auth/{session,guard}.ts`, `middleware.ts`, `app/api/auth/**` |
 | Navigation | `components/layout/{admin-shell,field-shell}.tsx` |

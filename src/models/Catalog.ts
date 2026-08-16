@@ -34,7 +34,21 @@ const AuditSchema = new Schema({
   actorRep: { type: Schema.Types.ObjectId, ref: "SalesRep" },
   action: { type: String, required: true, index: true },
   entityType: String,
-  entityId: Schema.Types.ObjectId,
+  /**
+   * What was acted on. Usually a document's `_id`, and not always.
+   *
+   * Declared as `Mixed` rather than `ObjectId` because a good many of the things
+   * worth recording are not documents with ids: the affiliate settings are a
+   * singleton keyed `"sales"`, an accounting month is `"2026-08"`, and an import
+   * is a batch rather than a record. Typed as an ObjectId, every one of those
+   * failed to cast — and `record()` swallows its own failures on purpose, so
+   * they failed *silently*, which meant the settings screen and the Shopify
+   * handshake had been writing no trail at all while appearing to.
+   *
+   * Existing lines are unaffected: an ObjectId is a perfectly good Mixed value,
+   * and nothing queries this field.
+   */
+  entityId: Schema.Types.Mixed,
   metadata: Schema.Types.Mixed
 }, { timestamps: true });
 export const AuditEvent = models.AuditEvent ?? model("AuditEvent", AuditSchema);

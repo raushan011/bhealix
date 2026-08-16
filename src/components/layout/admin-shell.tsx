@@ -3,12 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BadgePercent, BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, HeartHandshake, LayoutDashboard, LogOut, Menu, Package, Receipt, Repeat, Search, Settings, ShoppingBag, Stethoscope, Tag, Truck, Users, Wallet, Warehouse, X } from "lucide-react";
+import { BadgePercent, BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, FileArchive, HeartHandshake, KeyRound, LayoutDashboard, LogOut, Menu, Package, Receipt, Repeat, Search, Settings, ShoppingBag, Stethoscope, Tag, Truck, Users, Wallet, Warehouse, X } from "lucide-react";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { NavIcon } from "@/components/layout/nav-icon";
 import { Brand, BrandMark } from "@/components/ui/brand";
 import { Appearance } from "@/components/ui/appearance";
-import { ROLE_LABEL, can, type Role } from "@/constants/access";
+import { ROLE_LABEL, type Role } from "@/constants/access";
 import { CHOOSE_PATH, WORKSPACE_LABEL, workspaceOf, type Workspace } from "@/lib/workspace";
 
 /**
@@ -21,57 +21,73 @@ import { CHOOSE_PATH, WORKSPACE_LABEL, workspaceOf, type Workspace } from "@/lib
  * and showing all of it at once would put twenty unrelated links in one column.
  */
 const NAV = [
-  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, roles: ["ADMIN", "HR"], group: "", workspace: "doctor" },
-  { href: "/admin/discover", label: "Find doctors", icon: Search, roles: ["ADMIN"], group: "Field", workspace: "doctor" },
-  { href: "/admin/doctors", label: "Doctors", icon: Stethoscope, roles: ["ADMIN"], group: "Field", workspace: "doctor" },
-  { href: "/admin/plans", label: "Route plans", icon: CalendarRange, roles: ["ADMIN"], group: "Field", workspace: "doctor" },
-  { href: "/admin/visits", label: "Visits", icon: ClipboardList, roles: ["ADMIN"], group: "Field", workspace: "doctor" },
-  { href: "/admin/reports", label: "Reports", icon: BarChart3, roles: ["ADMIN"], group: "Field", workspace: "doctor" },
+  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "", workspace: "doctor" },
+  { href: "/admin/discover", label: "Find doctors", icon: Search, roles: ["SUPERADMIN", "ADMIN"], group: "Field", workspace: "doctor" },
+  { href: "/admin/doctors", label: "Doctors", icon: Stethoscope, roles: ["SUPERADMIN", "ADMIN"], group: "Field", workspace: "doctor" },
+  { href: "/admin/plans", label: "Route plans", icon: CalendarRange, roles: ["SUPERADMIN", "ADMIN"], group: "Field", workspace: "doctor" },
+  { href: "/admin/visits", label: "Visits", icon: ClipboardList, roles: ["SUPERADMIN", "ADMIN"], group: "Field", workspace: "doctor" },
+  { href: "/admin/reports", label: "Reports", icon: BarChart3, roles: ["SUPERADMIN", "ADMIN"], group: "Field", workspace: "doctor" },
 
-  { href: "/admin/billing", label: "Billing", icon: Receipt, roles: ["ADMIN", "HR"], group: "Trade", workspace: "doctor" },
-  { href: "/admin/customers", label: "Customers", icon: Building2, roles: ["ADMIN", "HR"], group: "Trade", workspace: "doctor" },
-  { href: "/admin/inventory", label: "Inventory", icon: Warehouse, roles: ["ADMIN", "HR"], group: "Trade", workspace: "doctor" },
-  { href: "/admin/products", label: "Products", icon: Package, roles: ["ADMIN"], group: "Trade", workspace: "doctor" },
-  { href: "/admin/samples", label: "Samples", icon: Boxes, roles: ["ADMIN", "HR"], group: "Trade", workspace: "doctor" },
+  { href: "/admin/billing", label: "Billing", icon: Receipt, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Trade", workspace: "doctor" },
+  { href: "/admin/customers", label: "Customers", icon: Building2, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Trade", workspace: "doctor" },
+  { href: "/admin/inventory", label: "Inventory", icon: Warehouse, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Trade", workspace: "doctor" },
+  { href: "/admin/products", label: "Products", icon: Package, roles: ["SUPERADMIN", "ADMIN"], group: "Trade", workspace: "doctor" },
+  { href: "/admin/samples", label: "Samples", icon: Boxes, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Trade", workspace: "doctor" },
 
-  { href: "/admin/hr", label: "People", icon: HeartHandshake, roles: ["ADMIN", "HR"], group: "People", workspace: "doctor" },
-  { href: "/admin/team", label: "Employees", icon: Users, roles: ["ADMIN", "HR"], group: "People", workspace: "doctor" },
-  { href: "/admin/hr/attendance", label: "Attendance", icon: CalendarCheck, roles: ["ADMIN", "HR"], group: "People", workspace: "doctor" },
-  { href: "/admin/hr/leave", label: "Leave", icon: ClipboardCheck, roles: ["ADMIN", "HR"], group: "People", workspace: "doctor" },
-  { href: "/admin/hr/holidays", label: "Holidays", icon: CalendarDays, roles: ["ADMIN", "HR"], group: "People", workspace: "doctor" },
-  { href: "/admin/hr/payroll", label: "Payroll", icon: Wallet, roles: ["ADMIN", "HR"], group: "People", workspace: "doctor" },
+  { href: "/admin/hr", label: "People", icon: HeartHandshake, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "People", workspace: "doctor" },
+  { href: "/admin/team", label: "Employees", icon: Users, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "People", workspace: "doctor" },
+  { href: "/admin/hr/attendance", label: "Attendance", icon: CalendarCheck, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "People", workspace: "doctor" },
+  { href: "/admin/hr/leave", label: "Leave", icon: ClipboardCheck, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "People", workspace: "doctor" },
+  { href: "/admin/hr/holidays", label: "Holidays", icon: CalendarDays, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "People", workspace: "doctor" },
+  { href: "/admin/hr/payroll", label: "Payroll", icon: Wallet, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "People", workspace: "doctor" },
 
-  { href: "/admin/sales", label: "Overview", icon: LayoutDashboard, roles: ["ADMIN", "HR"], group: "", workspace: "sales" },
-  { href: "/admin/sales/leads", label: "Leads", icon: Search, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
+  { href: "/admin/sales", label: "Overview", icon: LayoutDashboard, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "", workspace: "sales" },
+  { href: "/admin/sales/leads", label: "Leads", icon: Search, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
   // "Partners", not "Sales team". The Doctor CRM's Employees screen next door
   // holds field sales executives, who are staff; this holds outside affiliates.
   // Two links reading "sales …" in one application is how the two got confused.
-  { href: "/admin/sales/reps", label: "Partners", icon: Users, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
-  { href: "/admin/sales/coupons", label: "Coupons", icon: Tag, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
-  { href: "/admin/sales/orders", label: "Orders", icon: ShoppingBag, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
+  { href: "/admin/sales/reps", label: "Partners", icon: Users, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
+  { href: "/admin/sales/coupons", label: "Coupons", icon: Tag, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
+  { href: "/admin/sales/orders", label: "Orders", icon: ShoppingBag, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
   // Reading what came in and sending it are different jobs done by different
   // people at different times of day, so they are two screens rather than a mode
   // of one. Orders answers "what did this coupon bring in"; this one is the
   // morning's picking list.
-  { href: "/admin/sales/orders/process", label: "Process orders", icon: Truck, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
-  { href: "/admin/sales/payouts", label: "Payouts", icon: BadgePercent, roles: ["ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
-  { href: "/admin/sales/settings", label: "Settings", icon: Settings, roles: ["ADMIN"], group: "Affiliate", workspace: "sales" }
+  { href: "/admin/sales/orders/process", label: "Process orders", icon: Truck, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
+  { href: "/admin/sales/payouts", label: "Payouts", icon: BadgePercent, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
+  { href: "/admin/sales/settings", label: "Settings", icon: Settings, roles: ["SUPERADMIN", "ADMIN"], group: "Affiliate", workspace: "sales" },
+
+  { href: "/admin/control", label: "Overview", icon: LayoutDashboard, roles: ["SUPERADMIN"], group: "", workspace: "control" },
+  { href: "/admin/control/invoices", label: "Invoice vault", icon: FileArchive, roles: ["SUPERADMIN"], group: "Accounts", workspace: "control" },
+  { href: "/admin/control/access", label: "Panel access", icon: KeyRound, roles: ["SUPERADMIN"], group: "Control", workspace: "control" }
 ] as const;
 
 /**
- * Exact matching for the four that sit above others in the same path —
+ * Exact matching for the five that sit above others in the same path —
  * /admin/hr is the People dashboard, not an ancestor of Attendance,
- * /admin/sales is the affiliate overview rather than all of it, and
+ * /admin/sales is the affiliate overview rather than all of it,
  * /admin/sales/orders is the order list rather than the processing screen
- * beneath it. Any of them would otherwise light up alongside the screen
- * actually being looked at.
+ * beneath it, and /admin/control is the super admin overview rather than the
+ * vault and the access screen under it. Any of them would otherwise light up
+ * alongside the screen actually being looked at.
  */
-const EXACT = new Set(["/admin", "/admin/hr", "/admin/sales", "/admin/sales/orders"]);
+const EXACT = new Set(["/admin", "/admin/hr", "/admin/sales", "/admin/sales/orders", "/admin/control"]);
 const isActive = (pathname: string, href: string) =>
   EXACT.has(href) ? pathname === href : pathname.startsWith(href);
 const initials = (name: string) => name.trim().split(/\s+/).map(part => part[0]).slice(0, 2).join("").toUpperCase() || "?";
 
-export function AdminShell({ user, children }: { user: { name: string; role: Role }; children: React.ReactNode }) {
+/**
+ * `panels` is resolved on the server and handed down rather than worked out from
+ * the role here. Which CRMs somebody holds is a decision recorded in the
+ * database, and a client component cannot read it — guessing from the role would
+ * offer a "Switch CRM" link to a panel the guard is about to refuse, which is
+ * the one thing a switcher must never do.
+ */
+export function AdminShell({ user, panels, children }: {
+  user: { name: string; role: Role };
+  panels: readonly Workspace[];
+  children: React.ReactNode;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -80,8 +96,9 @@ export function AdminShell({ user, children }: { user: { name: string; role: Rol
   // different application from the one on screen.
   const workspace: Workspace = workspaceOf(pathname);
   const items = NAV.filter(item => item.workspace === workspace && (item.roles as readonly string[]).includes(user.role));
-  // Nobody is offered a switch to somewhere they would be refused.
-  const maySwitch = can.viewSales(user.role);
+  // Nobody is offered a switch to somewhere they would be refused, and nobody is
+  // offered a choice between one thing and itself.
+  const maySwitch = panels.length > 1;
 
   async function signOut() {
     await fetch("/api/auth/logout", { method: "POST" });

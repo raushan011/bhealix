@@ -127,7 +127,38 @@ export const AUDIT_ACTIONS = {
   "sales.lead.messaged": "Messaged a lead on WhatsApp",
   "sales.template.created": "Wrote an outreach message",
   "sales.template.updated": "Edited an outreach message",
-  "sales.template.deleted": "Deleted an outreach message"
+  "sales.template.deleted": "Deleted an outreach message",
+
+  /**
+   * Who may enter which CRM.
+   *
+   * The most consequential single line in this list. Every other permission in
+   * the application is decided by a role written into somebody's record; this is
+   * the one that can be changed from a screen, by one person, in a second — and
+   * "who took my access away, and when" is the first question asked the morning
+   * somebody finds a panel missing. The line carries what it was before as well
+   * as after, because a grant that changed twice looks exactly like one that
+   * changed once.
+   */
+  "access.workspaces.granted": "Changed who may enter which CRM",
+
+  /**
+   * The vendor invoice vault.
+   *
+   * This is the paperwork a GST return is built on. A deleted invoice is a
+   * deduction that quietly stops existing, and an amount corrected after the
+   * bundle went to the accountant is a figure that no longer agrees with the one
+   * they were sent — so both leave a line, and so does the moment a month is
+   * declared handed over, which is the date somebody will be asked for.
+   */
+  "finance.invoice.filed": "Filed a vendor invoice",
+  "finance.invoice.updated": "Corrected a vendor invoice",
+  "finance.invoice.deleted": "Deleted a vendor invoice",
+  "finance.invoices.pulled": "Pulled vendor invoices from a supplier",
+  "finance.archive.downloaded": "Downloaded a month's invoice bundle",
+  "finance.period.handed-over": "Marked a month sent to the accountant",
+  "finance.period.reopened": "Reopened a month already sent to the accountant",
+  "finance.period.noted": "Left a note against an accounting month"
 } as const;
 
 export type AuditAction = keyof typeof AUDIT_ACTIONS;

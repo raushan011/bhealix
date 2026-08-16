@@ -16,6 +16,7 @@
     "test:e2e": "playwright test",
     "icons": "node scripts/generate-icons.mjs",
     "seed": "node scripts/seed.mjs",
+    "super-admin": "node scripts/make-super-admin.mjs",
     "backfill:samples": "node scripts/backfill-sample-ledger.mjs",
     "coupons:delete": "node scripts/delete-coupons.mjs"
   },

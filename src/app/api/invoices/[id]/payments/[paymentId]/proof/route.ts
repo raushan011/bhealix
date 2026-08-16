@@ -7,6 +7,7 @@ import { apiSession } from "@/lib/auth/guard";
 import { can, usesFieldPanel } from "@/constants/access";
 import type { Session } from "@/lib/auth/session";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
+import { contentDisposition } from "@/lib/http/content-disposition";
 import { record } from "@/lib/audit";
 import { FILE_EXTENSION, MAX_PROOF_BYTES, PROOF_TYPES, sizeLimitText } from "@/lib/billing/attachments";
 
@@ -79,9 +80,17 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       headers: {
         "content-type": proof.contentType,
         "content-length": String(bytes.byteLength),
-        // Inline so a tap opens the screenshot rather than downloading it, and
-        // the name is kept so a PDF saved from here is still recognisable.
-        "content-disposition": `inline; filename="${name.replace(/["\\]/g, "")}"`,
+        /*
+         * Inline so a tap opens the screenshot rather than downloading it, and
+         * the name is kept so a PDF saved from here is still recognisable.
+         *
+         * Through `contentDisposition` because this name came off a rep's phone.
+         * A header value is a ByteString, and Node throws rather than mangling
+         * anything when handed a character above 255 — so a receipt saved as
+         * `भुगतान.pdf`, or with a rupee sign in it, would 500 on download rather
+         * than arriving with a slightly wrong name.
+         */
+        "content-disposition": contentDisposition(name, "inline"),
         "cache-control": "private, max-age=3600"
       }
     });

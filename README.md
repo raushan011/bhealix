@@ -80,33 +80,55 @@ Built for phones first — reps use it standing in a clinic corridor — and equ
 - The employment record and the field record are separate screens. HR keeps the first; a rep's call notes are the administrator's alone to read.
 - Reports: completion rate per representative, sample distribution by product, visit outcomes and doctor interest.
 
+**The super admin panel**
+- A third panel, at `/admin/control`, held by one role and not grantable to anybody: `SUPERADMIN`. Two jobs.
+- **Panel access.** Which CRMs each desk account may open, as a row of switches. Withdrawing one closes its screens *and the API behind them* on the next click — not at the next sign-in, because "I have taken that away from them" has to mean now. An account nobody has decided about keeps what its role has always had, so nothing changed for anybody on the day this shipped.
+- **The invoice vault** — every bill the company **receives**, in one place, by month. The other direction from `/admin/billing`, which is money owed *to* the company: this is the purchase paper the GST input credit sits on and the bundle the accountant asks for on the fifth.
+  - Shiprocket in its three separate documents — the **wallet recharge** receipts, the **order tax invoices** and the **checkout** charges — because they are raised by three different parts of that company against three different expenses and are reconciled separately.
+  - Razorpay's gateway fees, the Shopify subscription and app bill, Meta ads billing, and anything offline: the accountant's own fee, rent, a courier's manual bill.
+  - **A month's whole bundle as one ZIP.** A folder per vendor, every file named with its month and reference rather than the `invoice.pdf` every vendor calls everything, and a `Contents.csv` at the top listing the lot with its totals — so the figures can be tied to the bank statement without opening thirty PDFs. One vendor's slice, or just what was ticked, downloads the same way.
+  - **The gaps show.** The month lists every source that ought to have something and says plainly which have nothing filed, so a missing Meta receipt is noticed in August rather than in the return.
+  - **Shiprocket's order invoices are fetched automatically** using the credentials already held under Sales settings. The other sources are published only in their vendor's own dashboard and on no API this account can call, so the vault links straight to each billing page, takes the upload, and refuses to call a month finished while one is missing. A "sync" that ran and filed nothing would leave the month looking complete.
+  - Mark a month **sent to the CA** — with the date and who sent it — so "when did you send me August" has an answer three weeks later. Sending an incomplete month asks once and then does it, because a slow vendor is not a reason to miss a filing date.
+  - See `docs/INVOICE-VAULT.md`.
+
 ## Roles
 
-| | Admin | HR | MR | Field sales |
-|---|:---:|:---:|:---:|:---:|
-| Doctor directory and discovery | ✓ | | | |
-| Route planning and assignment | ✓ | | | |
-| Reports | ✓ | | | |
-| Employee management | ✓ | ✓ | | |
-| Attendance, leave approval and holidays | ✓ | ✓ | | |
-| Set a salary and prepare a payroll month | ✓ | ✓ | | |
-| Approve payroll and release the money | ✓ | | | |
-| Read somebody else's salary and payslips | ✓ | ✓ | | |
-| Read their own payslips | ✓ | ✓ | ✓ | ✓ |
-| Add a doctor to the directory | ✓ | | ✓ | ✓ |
-| Plan their own round | | | ✓ | ✓ |
-| Apply for leave | ✓ | ✓ | ✓ | ✓ |
-| Raise, cancel and edit bills | ✓ | | | |
-| Customer directory (stockists, distributors) | ✓ | | | |
-| Read every bill and what is owed | ✓ | ✓ | | |
-| Inventory: receive stock and correct counts | ✓ | | | |
-| Own daily route and visits | | | ✓ | ✓ |
-| Attach photos to their own visit | | | ✓ | ✓ |
-| Read a representative's field record | ✓ | | | |
-| Own bills: collect payment and download | | | ✓ | ✓ |
-| Update a doctor's call time | ✓ | | ✓ | ✓ |
+| | Super admin | Admin | HR | MR | Field sales |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Grant and withdraw CRM access | ✓ | | | | |
+| Vendor invoice vault | ✓ | | | | |
+| Doctor directory and discovery | ✓ | ✓ | | | |
+| Route planning and assignment | ✓ | ✓ | | | |
+| Reports | ✓ | ✓ | | | |
+| Employee management | ✓ | ✓ | ✓ | | |
+| Attendance, leave approval and holidays | ✓ | ✓ | ✓ | | |
+| Set a salary and prepare a payroll month | ✓ | ✓ | ✓ | | |
+| Approve payroll and release the money | ✓ | ✓ | | | |
+| Read somebody else's salary and payslips | ✓ | ✓ | ✓ | | |
+| Read their own payslips | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Add a doctor to the directory | ✓ | ✓ | | ✓ | ✓ |
+| Plan their own round | | | | ✓ | ✓ |
+| Apply for leave | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Raise, cancel and edit bills | ✓ | ✓ | | | |
+| Customer directory (stockists, distributors) | ✓ | ✓ | | | |
+| Read every bill and what is owed | ✓ | ✓ | ✓ | | |
+| Inventory: receive stock and correct counts | ✓ | ✓ | | | |
+| Own daily route and visits | | | | ✓ | ✓ |
+| Attach photos to their own visit | | | | ✓ | ✓ |
+| Read a representative's field record | ✓ | ✓ | | | |
+| Own bills: collect payment and download | | | | ✓ | ✓ |
+| Update a doctor's call time | ✓ | ✓ | | ✓ | ✓ |
 
-Admin and HR use the desktop panel at `/admin`; MR and Sales use the mobile panel at `/employee`. Middleware keeps each role in its own panel, and every API route re-checks permission on the server — the UI never decides access on its own.
+Super admin, Admin and HR use the desktop panel at `/admin`; MR and Sales use the mobile panel at `/employee`. Middleware keeps each role in its own panel, and every API route re-checks permission on the server — the UI never decides access on its own.
+
+**A super administrator is an administrator and then some.** Every administrator power is theirs, plus the two nobody else has: granting other people their panels, and the vendor invoice vault. There is no screen anywhere that creates one, deliberately — a button that could would be a way for an administrator to promote themselves, which is the exact thing the role exists to prevent. It takes shell access to the deployment:
+
+```bash
+npm run super-admin -- someone@bhealix.com   # the account must already exist
+```
+
+**The role decides the job; the grant decides the person.** The two CRMs on the desk are handed out per account at **Super admin → Panel access**, and both have to agree: granting HR the Sales CRM lets them read it, and does not give them the authority to issue a coupon or approve a payout — that is still the role. An account nobody has decided about keeps whatever its role has always had, so no existing user lost anything when grants shipped.
 
 **Sales affiliates are not in this table, and not in this staff register.** The affiliate business — strangers who sell online with a coupon code and take a share of what arrives — is a separate CRM with a separate panel of its own at `/partner`, where a rep signs up, creates their own coupon code once approved, follows every order it brings in, and sees what they are owed. Those orders are also **sent from inside the CRM**: **Sales CRM → Process orders** books the parcel with Shiprocket, chooses the courier by rule or by name out of what actually reaches that pin code, and prints the invoices and labels — one order or forty at a time, instead of a second browser tab open on Shiprocket's own panel all morning. They have no employee id, never appear in the HR screens and cannot be paid by payroll; their sign-in is a different cookie with its own audience, so no affiliate can reach `/admin` or `/employee` and no employee can reach `/partner`. See `docs/SALES-CRM-SETUP.md`.
 
@@ -146,6 +168,7 @@ A wide-radius search covers ground by querying a ring of sub-centres and merging
 ```bash
 npm run dev        # development server
 npm run seed       # accounts, products, and call-time migration
+npm run super-admin -- someone@bhealix.com   # promote an existing account
 npm run icons      # redraw the PWA icons from the brand mark
 npm run typecheck
 npm run lint

@@ -56,6 +56,8 @@ export const TEST_PASSWORD = readEnv("TEST_PASSWORD") ?? "TestOnly@12345";
 
 /** Accounts the seeder creates, one per role, so RBAC can be checked as a matrix. */
 export const ACCOUNTS = {
+  /** The one role that can hand out panels and read the vendor invoice vault. */
+  SUPERADMIN: { employeeId: "TEST-SUPER", email: "test-super@bhealix.test", name: "Test Super", role: "SUPERADMIN" },
   ADMIN: { employeeId: "TEST-ADMIN", email: "test-admin@bhealix.test", name: "Test Admin", role: "ADMIN" },
   HR: { employeeId: "TEST-HR", email: "test-hr@bhealix.test", name: "Test HR", role: "HR" },
   MR: { employeeId: "TEST-MR", email: "test-mr@bhealix.test", name: "Test MR", role: "MR" },

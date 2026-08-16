@@ -29,6 +29,7 @@ export async function disconnect() {
 
 /** Collections the suite writes to, in an order that is safe to delete in. */
 const COLLECTIONS = [
+  "vendorinvoices", "financeperiods",
   "visitphotos", "visits", "paymentproofs", "invoices", "routeplans",
   "samplemovements", "samplestocks", "inventorymovements", "stockitems",
   "attendances", "leaverequests", "payrollruns", "payslips",

@@ -30,7 +30,12 @@ describe("sales partners are not sales employees", () => {
     // A `SalesRep` is its own collection with its own credentials and its own
     // portal. If somebody ever adds "PARTNER" or "AFFILIATE" to ROLES, they are
     // about to give an outsider an employee record — this is where they find out.
-    expect(ROLES).toEqual(["ADMIN", "HR", "MR", "SALES"]);
+    //
+    // SUPERADMIN joined the list when panel grants shipped, and is exactly the
+    // kind of addition this assertion is meant to make somebody stop and think
+    // about: it is a staff role, held by one person, with an employee record
+    // like any other. An affiliate role would not be.
+    expect(ROLES).toEqual(["SUPERADMIN", "ADMIN", "HR", "MR", "SALES"]);
   });
 
   it("names the staff role so it cannot be read as an affiliate", () => {
