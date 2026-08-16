@@ -43,5 +43,11 @@ const CustomerSchema = new Schema({
 }, { timestamps: true });
 
 CustomerSchema.index({ type: 1, name: 1 });
+// The directory lists buyers still trading, in name order, and narrows by type
+// from there — so `active` has to lead, with `name` in the index to be sorted by
+// rather than sorted afterwards. Two entries because a type-filtered list and an
+// unfiltered one need `name` at different depths.
+CustomerSchema.index({ active: 1, name: 1 });
+CustomerSchema.index({ active: 1, type: 1, name: 1 });
 
 export const Customer = models.Customer ?? model("Customer", CustomerSchema);

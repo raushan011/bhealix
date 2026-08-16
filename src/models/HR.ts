@@ -32,6 +32,10 @@ const LeaveRequestSchema = new Schema({
 
 LeaveRequestSchema.index({ employee: 1, fromDate: -1 });
 LeaveRequestSchema.index({ status: 1, fromDate: -1 });
+// The leave screen sorts by when a request was raised, not by the dates it
+// covers — the two indexes above are for the calendar, these for the queue.
+LeaveRequestSchema.index({ createdAt: -1 });
+LeaveRequestSchema.index({ employee: 1, createdAt: -1 });
 
 export const LeaveRequest = models.LeaveRequest ?? model("LeaveRequest", LeaveRequestSchema);
 

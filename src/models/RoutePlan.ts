@@ -27,5 +27,8 @@ const RoutePlanSchema = new Schema({
 }, { timestamps: true });
 
 RoutePlanSchema.index({ assignedTo: 1, date: -1 });
+// Upcoming plans on the dashboard, and the plans list itself. One entry serves
+// both directions of sort — an index can be walked either way.
+RoutePlanSchema.index({ date: -1 });
 
 export const RoutePlan = models.RoutePlan ?? model("RoutePlan", RoutePlanSchema);

@@ -76,11 +76,11 @@ to bounce somebody.
 | Validation | Zod 4 on every write path |
 | Styling | Tailwind CSS 4 (via `@tailwindcss/postcss`) |
 | Forms | react-hook-form + `@hookform/resolvers` |
-| Charts | recharts |
+| Charts | none — the bars on the reports screen are divs with a percentage width |
 | Excel | `xlsx` |
 | Icons | `lucide-react` |
 | Tests | vitest + @testing-library/react + jsdom |
-| Hosting | Vercel + MongoDB Atlas (intended) |
+| Hosting | Vercel (`bom1`) + MongoDB Atlas (Mumbai) |
 
 ### Commands
 

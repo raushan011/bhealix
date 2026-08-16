@@ -34,5 +34,8 @@ const SampleMovementSchema = new Schema({
 
 SampleMovementSchema.index({ employee: 1, productName: 1, occurredAt: -1 });
 SampleMovementSchema.index({ employee: 1, occurredAt: -1 });
+// Both of the above lead with the rep. The desk reads the same ledger across
+// everybody, which has no rep to lead with.
+SampleMovementSchema.index({ occurredAt: -1, createdAt: -1 });
 
 export const SampleMovement = models.SampleMovement ?? model("SampleMovement", SampleMovementSchema);

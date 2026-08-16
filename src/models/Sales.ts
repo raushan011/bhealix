@@ -416,6 +416,13 @@ const SalesPayoutSchema = new Schema({
   note: String
 }, { timestamps: true });
 
+/*
+ * Payout runs are read newest-period-first, and the latest one is asked for by
+ * itself on three separate screens — the overview, the list, and the check that
+ * decides which period a new run should cover. All four are the same index.
+ */
+SalesPayoutSchema.index({ to: -1, createdAt: -1 });
+
 export const SalesPayout = models.SalesPayout ?? model("SalesPayout", SalesPayoutSchema);
 
 const AdjustmentSchema = new Schema({

@@ -181,3 +181,21 @@ Travel time is estimated from straight-line distance at 25 km/h, so it is a plan
 ## Deployment
 
 Deploy to Vercel with MongoDB Atlas. Set every environment variable in the Vercel project, rotate the seed passwords, restrict the Google key to your production APIs, lock down the Atlas network access list, and run `npm run build` before release. Never commit `.env.local`.
+
+### Keep the functions and the database in the same city
+
+`vercel.json` pins the functions to `bom1` (Mumbai) because that is where the
+Atlas cluster is. This is not a preference — it is the single largest thing
+governing how fast the application feels.
+
+Vercel defaults to `iad1` in Washington DC. Left at the default, every query
+crosses the Atlantic and the Indian Ocean twice: measured at the cluster, a
+round trip costs about 220 ms, against roughly 1 ms from inside Mumbai. Nothing
+in this codebase does only one query — a bill listing populates a doctor, a
+customer and an employee, and each populate is its own round trip — so the
+default region put the better part of a second into every screen before a line
+of application code ran. The users are in India too, so the same move shortens
+the browser's leg of the journey as well.
+
+**If the cluster is ever moved, move this with it.** A mismatch between the two
+is invisible in every log and profiler; it simply makes everything slow.

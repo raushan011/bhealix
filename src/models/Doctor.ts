@@ -99,4 +99,19 @@ DoctorSchema.pre(["updateOne", "findOneAndUpdate", "updateMany"], function (next
 DoctorSchema.index({ location: "2dsphere" });
 DoctorSchema.index({ "callSchedule.weekday": 1 });
 
+/*
+ * The directory's own shape: every active doctor, in name order.
+ *
+ * `status` and `name` were already indexed separately, which is not the same
+ * thing — MongoDB can use one index per query, so it would narrow by status and
+ * then sort the whole matched set in memory. That is the query behind the most
+ * visited screen in the app, and it gets slower with every doctor added. Held
+ * together in one index, the sort is the order the index is already in.
+ *
+ * The second is the same page as a rep sees it (`?mine=1`), where the
+ * assignment is an equality between the two.
+ */
+DoctorSchema.index({ status: 1, name: 1 });
+DoctorSchema.index({ status: 1, assignedTo: 1, name: 1 });
+
 export const Doctor = models.Doctor ?? model("Doctor", DoctorSchema);

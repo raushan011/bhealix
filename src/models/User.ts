@@ -66,4 +66,14 @@ const UserSchema = new Schema({
   notes: String
 }, { timestamps: true });
 
+/*
+ * The only index on this schema that is not a uniqueness constraint.
+ *
+ * `active` and `role` carried none at all, and between them they are the whole
+ * of "the field team": the admin dashboard counts them on every load and the
+ * team screen lists them by name. Small as the collection is, those were
+ * collection scans on the first page anybody sees after signing in.
+ */
+UserSchema.index({ active: 1, role: 1, name: 1 });
+
 export const User = models.User ?? model("User", UserSchema);

@@ -196,5 +196,12 @@ const InvoiceSchema = new Schema({
 InvoiceSchema.index({ employee: 1, invoiceDate: -1 });
 InvoiceSchema.index({ doctor: 1, invoiceDate: -1 });
 InvoiceSchema.index({ status: 1, dueDate: 1 });
+// The billing list as it opens, before anybody narrows it: newest first, with
+// `createdAt` settling two bills raised on the same day.
+InvoiceSchema.index({ invoiceDate: -1, createdAt: -1 });
+// The same list filtered to what is owed. `status: 1, dueDate: 1` above answers
+// "what is overdue"; this answers "show me the unpaid ones", which is sorted by
+// a different date and so cannot share it.
+InvoiceSchema.index({ status: 1, invoiceDate: -1 });
 
 export const Invoice = models.Invoice ?? model("Invoice", InvoiceSchema);

@@ -30,5 +30,11 @@ const VisitSchema = new Schema({
 
 VisitSchema.index({ employee: 1, plannedDate: -1 });
 VisitSchema.index({ doctor: 1, plannedDate: -1 });
+// The desk's own view of the diary — every rep's day at once, latest first,
+// which the two above only serve once somebody has been picked out of it.
+VisitSchema.index({ plannedDate: -1, plannedStart: 1 });
+// "Completed today", and every other count that fixes a status and then asks
+// for a span of dates: equality first so the range can be walked from an index.
+VisitSchema.index({ status: 1, plannedDate: -1 });
 
 export const Visit = models.Visit ?? model("Visit", VisitSchema);

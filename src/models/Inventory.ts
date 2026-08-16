@@ -39,5 +39,9 @@ const StockMovementSchema = new Schema({
 
 StockMovementSchema.index({ productName: 1, occurredAt: -1 });
 StockMovementSchema.index({ type: 1, occurredAt: -1 });
+// The ledger read straight down, which is how it is opened before a product or
+// a movement type is chosen. `occurredAt` alone was indexed but the sort asks
+// for `createdAt` behind it, so the tie-break was costing an in-memory sort.
+StockMovementSchema.index({ occurredAt: -1, createdAt: -1 });
 
 export const StockMovement = models.StockMovement ?? model("StockMovement", StockMovementSchema);
