@@ -48,17 +48,38 @@ const auth = (credentials: Credentials) => ({ "x-shopify-access-token": credenti
 export const shopify: Connector = {
   key: "shopify",
   label: "Shopify",
-  consoleUrl: "https://admin.shopify.com/settings/apps/development",
+  consoleUrl: "https://admin.shopify.com/settings/billing",
   guidance:
-    `Settings → Apps and sales channels → Develop apps → your app → Admin API access scopes, and grant `
-    + `\`${scope}\`. The Sales CRM already holds a token for this shop, but it was granted for orders — `
-    + `a token without the payouts scope reads nothing here, so either add the scope there or paste a `
-    + `separate token below.`,
+    `Nothing to enter. The vault uses the shop already connected under Sales CRM → Settings, whose token `
+    + `carries \`${scope}\` — press Test connection to check it. Shopify no longer issues the pasteable `
+    + `\`shpat_\` tokens a form like this used to expect; a Dev Dashboard app earns its token through the `
+    + `OAuth handshake and never shows it again, which is why there is nothing to copy. Fill the fields in `
+    + `only to point the vault at a *different* shop.`,
   fields: [
-    { name: "domain", label: "Shop domain", secret: false, required: true, placeholder: "your-shop.myshopify.com" },
-    { name: "accessToken", label: "Admin API access token", secret: true, required: true, hint: `Needs ${scope}` },
+    { name: "domain", label: "Shop domain", secret: false, required: true, placeholder: "Using the Sales CRM's shop" },
+    { name: "accessToken", label: "Admin API access token", secret: true, required: true, hint: `Only for a different shop — needs ${scope}` },
     { name: "apiVersion", label: "API version", secret: false, required: false, placeholder: "2026-07" }
   ],
+
+  /**
+   * The shop the Sales CRM is already connected to.
+   *
+   * That token was obtained by the OAuth handshake in `lib/sales/oauth.ts` and
+   * is the only Shopify credential this company has — there is no second one to
+   * paste, because Shopify does not hand them out any more. Borrowing it is not
+   * a shortcut; it is the only way this connector can work at all for a shop
+   * connected the modern way.
+   */
+  inherits: {
+    from: "Sales CRM → Settings",
+    async load() {
+      const { loadCredentials, shopifyConfig } = await import("@/lib/sales/settings");
+      const config = shopifyConfig(await loadCredentials());
+      return config
+        ? { domain: config.domain, accessToken: config.accessToken, apiVersion: config.apiVersion }
+        : null;
+    }
+  },
 
   async test(credentials) {
     /*

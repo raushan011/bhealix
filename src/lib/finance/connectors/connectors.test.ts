@@ -30,11 +30,28 @@ describe("the connector registry", () => {
   it("declares at least one required secret per connector", () => {
     // A connector with no secret is either misconfigured or does not need
     // credentials at all — and if the latter, it does not belong on a screen
-    // whose entire purpose is holding keys.
+    // whose entire purpose is holding keys. On a connector that inherits, this
+    // is what a *complete override* needs, not what somebody must type.
     for (const connector of ALL_CONNECTORS) {
       const secrets = connector.fields.filter(field => field.secret && field.required);
       expect(secrets.length, `${connector.key} asks for no secret`).toBeGreaterThan(0);
     }
+  });
+
+  it("gives the two suppliers already connected elsewhere somewhere to borrow from", () => {
+    /*
+     * Shopify is the reason this exists. Shopify stopped issuing the pasteable
+     * `shpat_` tokens a credential form expects — a Dev Dashboard app earns its
+     * token through the OAuth handshake and never shows it again — so there is
+     * nothing a person *can* type, and the only working credential is the one
+     * the Sales CRM already holds. Shiprocket borrows for a plainer reason: the
+     * invoices are for parcels booked with that very account.
+     */
+    expect(connectorFor("shopify").inherits?.from).toBe("Sales CRM → Settings");
+    expect(connectorFor("shiprocket").inherits?.from).toBe("Sales CRM → Settings");
+    // Razorpay and Meta have no such connection anywhere in the application.
+    expect(connectorFor("razorpay").inherits).toBeUndefined();
+    expect(connectorFor("meta").inherits).toBeUndefined();
   });
 
   it("gives every field a unique name, since they key the stored map", () => {

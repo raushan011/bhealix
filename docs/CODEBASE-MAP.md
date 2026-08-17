@@ -1676,6 +1676,7 @@ the server knows more about than the request does belongs there too, not in `fie
 | Where a panel guard lives | `app/admin/layout.tsx` (the early one), `app/admin/{(doctor),sales,control}/layout.tsx`, `lib/auth/guard.ts`, `src/middleware.ts` |
 | Adding a vendor invoice source | `lib/finance/sources.ts` — one entry |
 | Adding a supplier API integration | a file in `lib/finance/connectors/` exporting a `Connector`, a line in its `index.ts`, and `connector`/`yields` on the source. The settings form and the pull route both read the registry, so neither changes |
+| A supplier already connected elsewhere | `Connector.inherits` — Shopify and Shiprocket borrow the Sales CRM's credential, Shopify because it has no pasteable token to borrow *from* anywhere else. Resolved in `lib/finance/connections.ts::loadCredentials` |
 | Statements built from a vendor's API | `lib/finance/statement.ts` (+ test) — and note what it prints about not being a tax invoice |
 | How the ZIP is laid out or named | `lib/finance/archive.ts` (+ test), `lib/finance/zip.ts` (+ test) |
 | The month checklist and its totals | `lib/finance/documents.ts::summarise`, `components/finance/vault.tsx` |

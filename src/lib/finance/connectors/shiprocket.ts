@@ -21,13 +21,31 @@ export const shiprocket: Connector = {
   label: "Shiprocket",
   consoleUrl: "https://app.shiprocket.in/api-user",
   guidance:
-    "Settings → API → Configure, and create an API user. It is a separate login from the one a person "
-    + "signs in with, and the password is set when it is created. The Sales CRM holds these already — "
-    + "entering them here is only needed if the vault should use a different account.",
+    "Nothing to enter. The vault uses the API user already held under Sales CRM → Settings, which is the "
+    + "same account that books the parcels these invoices belong to. Fill the fields in only to point the "
+    + "vault at a different Shiprocket account — Settings → API → Configure creates one, and it is a "
+    + "separate login from the one a person signs in with.",
   fields: [
-    { name: "email", label: "API user email", secret: false, required: true, placeholder: "api-user@yourcompany.com" },
-    { name: "password", label: "API user password", secret: true, required: true }
+    { name: "email", label: "API user email", secret: false, required: true, placeholder: "Using the Sales CRM's API user" },
+    { name: "password", label: "API user password", secret: true, required: true, hint: "Only for a different Shiprocket account" }
   ],
+
+  /**
+   * The API user the affiliate side already signs in with.
+   *
+   * The invoices this connector fetches belong to parcels *this application*
+   * booked, with these credentials. A second copy of them in the vault would be
+   * a second thing to rotate and a way for the two halves to disagree about
+   * which Shiprocket account the company uses.
+   */
+  inherits: {
+    from: "Sales CRM → Settings",
+    async load() {
+      const { loadCredentials, shiprocketConfig } = await import("@/lib/sales/settings");
+      const config = shiprocketConfig(await loadCredentials());
+      return config ? { email: config.email, password: config.password } : null;
+    }
+  },
 
   async test(credentials) {
     await login({ email: credentials.email, password: credentials.password });

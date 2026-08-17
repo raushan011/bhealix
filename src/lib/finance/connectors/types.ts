@@ -22,6 +22,14 @@ export type CredentialField = {
   secret: boolean;
   placeholder?: string;
   hint?: string;
+  /**
+   * Needed for this credential to be usable — which on a connector that
+   * `inherits` means "needed **if you are overriding**", not "must be filled in".
+   * An empty form there borrows; a half-filled one is refused and told which
+   * field is missing, because silently falling back would connect somebody to
+   * the account they were in the middle of moving away from. The screen labels
+   * these optional when there is somewhere to borrow from.
+   */
   required: boolean;
 };
 
@@ -70,4 +78,26 @@ export type Connector = {
 
   /** A month, as documents ready to file. Empty is a legitimate answer. */
   fetch(credentials: Credentials, period: string, actor: string): Promise<FetchResult>;
+
+  /**
+   * Where this connector can borrow a credential from when the vault holds none
+   * of its own.
+   *
+   * Two of these suppliers are already connected elsewhere in this application —
+   * the Sales CRM holds a Shopify token and a Shiprocket API user, because it
+   * syncs orders and books parcels with them. Asking for the same credential a
+   * second time would be rude at best; for Shopify it is close to impossible,
+   * since Shopify stopped issuing the pasteable `shpat_` tokens that a form like
+   * this expects and a Dev Dashboard app's token is earned through an OAuth
+   * handshake and never shown again.
+   *
+   * So the fields on those two are *overrides*, not requirements: fill them in
+   * to point the vault at a different account, leave them empty and it uses the
+   * connection that is already working. `from` is what the screen says out loud,
+   * so nobody wonders why a supplier with an empty form reports as connected.
+   */
+  inherits?: {
+    from: string;
+    load(): Promise<Credentials | null>;
+  };
 };

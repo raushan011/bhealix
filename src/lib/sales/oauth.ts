@@ -35,7 +35,18 @@ import { normaliseDomain } from "./shopify";
  * keeps whatever it was granted until somebody presses Reconnect — which is why
  * every caller checks what was actually granted rather than what was requested.
  */
-export const DEFAULT_SCOPES = ["read_orders", "read_products", "read_discounts", "write_discounts"] as const;
+/*
+ * `read_shopify_payments_payouts` is asked for on behalf of a screen in the
+ * other panel: the super admin's invoice vault reads the payout fees to build
+ * the month's Shopify statement, and it borrows *this* connection to do it,
+ * Shopify no longer issuing the pasteable tokens a settings form could take. It
+ * is read-only and grants nothing over orders or discounts, and asking for it
+ * here means one handshake serves both rather than a second app existing purely
+ * to read a fee.
+ */
+export const DEFAULT_SCOPES = [
+  "read_orders", "read_products", "read_discounts", "write_discounts", "read_shopify_payments_payouts"
+] as const;
 
 export const CALLBACK_PATH = "/api/sales/shopify/callback";
 export const OAUTH_STATE_COOKIE = "bhealix_shopify_oauth";

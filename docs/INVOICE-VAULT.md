@@ -122,12 +122,36 @@ changes; the pull route dispatches by key, so no route changes.
 **Super admin → Connections** (`/admin/control/connections`) holds one API key
 per supplier.
 
-| Supplier | What to create | Where |
+| Supplier | What to enter | Where to get it |
 |---|---|---|
 | Razorpay | An API key pair. Read access is enough. | Dashboard → Account & Settings → API Keys |
-| Shopify | An Admin API token with `read_shopify_payments_payouts` | Settings → Apps → Develop apps |
 | Meta | A system user token with `ads_read`, and the ad account assigned to it | Business Settings → Users → System Users |
-| Shiprocket | An API user — a separate login from a person's | Settings → API → Configure |
+| **Shopify** | **Nothing** — it uses the shop already connected under Sales CRM → Settings | — |
+| **Shiprocket** | **Nothing** — it uses the API user already held under Sales CRM → Settings | — |
+
+### Why two of them are empty
+
+**Shopify has stopped issuing tokens you can paste.** A legacy custom app gave a
+`shpat_` token; a Dev Dashboard app earns its token through the OAuth handshake
+and never shows it again. So there is nothing for a credential form to take, and
+the only working Shopify credential this company has is the one the Sales CRM
+obtained when somebody pressed Connect. The vault borrows it — which is not a
+shortcut but the only thing that can work for a shop connected the modern way.
+
+The scope it needs, `read_shopify_payments_payouts`, is now in
+`DEFAULT_SCOPES` (`lib/sales/oauth.ts`), so a fresh connection asks for it. An
+existing connection keeps whatever it was granted until somebody presses
+**Reconnect with Shopify** — the Sales CRM settings screen lists the scopes
+actually granted, so it is visible there.
+
+**Shiprocket** borrows for a plainer reason: the invoices being fetched are for
+parcels this application booked with that very account.
+
+Both cards say **"Using Sales CRM → Settings"** when they are borrowing, so a
+card reporting *Connected* with an empty form does not read as a bug. Fill the
+fields in only to point the vault at a **different** account — and a *half*-filled
+override is refused rather than silently falling back, since that would connect
+you to the account you were in the middle of moving away from.
 
 - **Save & test** proves the key before anybody waits until month end to find
   out. The outcome is remembered, so a key that stopped working three weeks ago

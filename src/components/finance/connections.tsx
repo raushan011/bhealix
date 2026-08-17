@@ -136,10 +136,19 @@ export function Connections() {
               {connection.configured
                 ? <Badge tone={connection.lastTestOk === false ? "warn" : "success"}>
                     {connection.lastTestOk === false
-                      ? <><XCircle size={12} className="mr-1" /> Key stored, last test failed</>
+                      ? <><XCircle size={12} className="mr-1" /> Last test failed</>
                       : <><CheckCircle2 size={12} className="mr-1" /> Connected</>}
                   </Badge>
                 : <Badge tone="neutral">Not set up</Badge>}
+              {/* A card that reports "connected" with an empty form would read
+                  as a bug without this line. */}
+              {connection.inherited && <p className="mt-1.5 text-xs font-medium text-[var(--brand)]">
+                Using {connection.inheritsFrom}
+              </p>}
+              {!connection.inherited && connection.inheritsFrom && !connection.configured &&
+                <p className="mt-1.5 max-w-[240px] text-xs text-[var(--muted)]">
+                  Nothing to borrow from {connection.inheritsFrom} yet — connect it there, or fill this in.
+                </p>}
               {connection.lastTestedAt && <p className="mt-1.5 max-w-[240px] text-xs text-[var(--muted)]">
                 Tested {shortDate(connection.lastTestedAt)}
                 {connection.lastTestMessage ? ` — ${connection.lastTestMessage}` : ""}
@@ -152,7 +161,8 @@ export function Connections() {
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {connection.fields.map(field => (
-              <Field key={field.name} label={`${field.label}${field.required ? "" : " (optional)"}`}
+              <Field key={field.name}
+                label={`${field.label}${field.required && !connection.inheritsFrom ? "" : " (optional)"}`}
                 hint={field.secret && connection.hints[field.name]
                   ? `Stored: ${connection.hints[field.name]} — leave blank to keep it`
                   : field.hint}>
@@ -176,7 +186,10 @@ export function Connections() {
             <Button onClick={() => save(connection, true)}>Save &amp; test</Button>
             <Button tone="secondary" onClick={() => save(connection, false)}>Save</Button>
             <Button tone="ghost" onClick={() => test(connection)} disabled={!connection.configured}>Test connection</Button>
-            {connection.configured && <button onClick={() => remove(connection)}
+            {/* Only when something was actually typed. Offering to "remove" a
+                credential that is borrowed from elsewhere would delete nothing
+                and imply the Sales CRM's connection was about to go with it. */}
+            {connection.configured && !connection.inherited && <button onClick={() => remove(connection)}
               aria-label={`Remove the ${connection.label} key`} title="Remove the stored key"
               className="tap ml-auto grid place-items-center rounded-[10px] text-[var(--muted)] hover:bg-[var(--surface-2)] hover:text-[var(--danger-ink)]">
               <Trash2 size={16} />

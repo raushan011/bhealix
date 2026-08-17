@@ -120,6 +120,57 @@ describe("supplier connections", () => {
     expect(razorpay.hints.keySecret).toBeUndefined();
   });
 
+  it("says which suppliers borrow a credential rather than asking for one", async () => {
+    /*
+     * The reason this exists: Shopify stopped issuing the pasteable `shpat_`
+     * tokens a credential form expects. A Dev Dashboard app earns its token
+     * through the OAuth handshake and never shows it again, so there is nothing
+     * a person *can* paste — the only working credential is the one the Sales
+     * CRM already holds, and the vault has to be able to use it.
+     */
+    const { data } = await sup.get("/api/finance/connections");
+    const byKey = Object.fromEntries(data.connections.map(row => [row.connector, row]));
+
+    expect(byKey.shopify.inheritsFrom).toBe("Sales CRM → Settings");
+    expect(byKey.shiprocket.inheritsFrom).toBe("Sales CRM → Settings");
+    // Razorpay and Meta are connected nowhere else, so they must be filled in.
+    expect(byKey.razorpay.inheritsFrom).toBeUndefined();
+    expect(byKey.meta.inheritsFrom).toBeUndefined();
+  });
+
+  it("does not claim to be connected when there is nothing to borrow yet", async () => {
+    // No Shopify connection exists on the test database, so an empty Shopify
+    // card must read "not set up" rather than inheriting a credential that is
+    // not there.
+    const { data } = await sup.get("/api/finance/connections");
+    const shopify = data.connections.find(row => row.connector === "shopify");
+    expect(shopify.inherited).toBe(false);
+    expect(shopify.configured).toBe(false);
+  });
+
+  it("refuses a half-typed override rather than quietly falling back", async () => {
+    /*
+     * Somebody part-way through pointing the vault at a *different* shop. Going
+     * back to the borrowed credential there would connect them to the shop they
+     * were in the middle of moving away from, which is worse than being told
+     * the token is still empty.
+     */
+    await sup.put("/api/finance/connections", {
+      connector: "shopify", values: { domain: "other-shop.myshopify.com", accessToken: "" }, test: false
+    });
+
+    const { data } = await sup.get("/api/finance/connections");
+    const shopify = data.connections.find(row => row.connector === "shopify");
+    expect(shopify.inherited).toBe(false);
+    expect(shopify.configured).toBe(false);
+
+    const tested = await sup.post("/api/finance/connections", { connector: "shopify" });
+    expect(tested.data.ok).toBe(false);
+    expect(tested.data.message).toMatch(/every required field/i);
+
+    await sup.delete("/api/finance/connections?connector=shopify");
+  });
+
   it("refuses a connector it has never heard of", async () => {
     expect((await sup.put("/api/finance/connections", { connector: "stripe", values: {} })).status).toBe(400);
     expect((await sup.delete("/api/finance/connections?connector=stripe")).status).toBe(400);

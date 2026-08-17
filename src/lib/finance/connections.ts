@@ -54,6 +54,16 @@ export type ConnectionSummary = {
   /** `keySecret: "••••••••3f9a"` — enough to recognise, useless to anybody else. */
   hints: Record<string, string>;
   configured: boolean;
+  /**
+   * Where this supplier's credential comes from when the form is empty, and
+   * whether that source actually has one.
+   *
+   * Said on screen so a card reporting "connected" with nothing typed into it
+   * does not read as a bug. Absent for the suppliers that have nowhere to borrow
+   * from and must be filled in.
+   */
+  inheritsFrom?: string;
+  inherited?: boolean;
   lastTestedAt?: string;
   lastTestOk?: boolean;
   lastTestMessage?: string;
@@ -77,7 +87,7 @@ export async function describeConnections(): Promise<ConnectionSummary[]> {
   const byKey = new Map(stored.map(row => [row.connector, row]));
 
   const { ALL_CONNECTORS } = await import("./connectors");
-  return ALL_CONNECTORS.map(connector => {
+  return Promise.all(ALL_CONNECTORS.map(async connector => {
     const row = byKey.get(connector.key);
     const values = asRecord(row?.publicFields);
     /*
@@ -91,6 +101,20 @@ export async function describeConnections(): Promise<ConnectionSummary[]> {
       if (field.secret && secrets[field.name]) hints[field.name] = maskSecret(decryptSecret(secrets[field.name]));
     }
 
+    const typed = connector.fields.every(field =>
+      !field.required || Boolean(field.secret ? secrets[field.name] : values[field.name]));
+    const anyTyped = connector.fields.some(field =>
+      Boolean(field.secret ? secrets[field.name] : values[field.name]));
+
+    /*
+     * Only asked when the form is empty, and only for a connector that has
+     * somewhere to borrow from. It reads the affiliate settings, so asking on
+     * every card would be four settings reads to draw one screen.
+     */
+    const inherited = !anyTyped && connector.inherits
+      ? Boolean(await connector.inherits.load())
+      : false;
+
     return {
       connector: connector.key,
       label: connector.label,
@@ -99,15 +123,16 @@ export async function describeConnections(): Promise<ConnectionSummary[]> {
       fields: connector.fields.map(field => ({ ...field })),
       values,
       hints,
-      configured: connector.fields.every(field =>
-        !field.required || Boolean(field.secret ? secrets[field.name] : values[field.name])),
+      configured: anyTyped ? typed : inherited,
+      inheritsFrom: connector.inherits?.from,
+      inherited,
       lastTestedAt: row?.lastTestedAt?.toISOString(),
       lastTestOk: row?.lastTestOk,
       lastTestMessage: row?.lastTestMessage,
       lastFetchedAt: row?.lastFetchedAt?.toISOString(),
       lastFetchError: row?.lastFetchError
     };
-  });
+  }));
 }
 
 /**
@@ -118,20 +143,44 @@ export async function describeConnections(): Promise<ConnectionSummary[]> {
  * request with half a credential and get back a refusal it has to interpret.
  */
 export async function loadCredentials(key: ConnectorKey): Promise<Credentials | null> {
+  const connector = connectorFor(key);
+  const stored = await readStored(key);
+
+  /*
+   * Nothing typed at all, and somewhere to borrow from — so borrow.
+   *
+   * The test is "has anybody typed anything", not "is every field filled",
+   * because a *half*-filled override is somebody part-way through pointing the
+   * vault at a different account. Falling back there would quietly connect them
+   * to the shop they were in the middle of moving away from, which is a worse
+   * outcome than being told which field is still empty.
+   */
+  if (!stored.any && connector.inherits) return connector.inherits.load();
+
+  return stored.complete ? stored.credentials : null;
+}
+
+/** The stored half, decrypted, with whether it is empty and whether it is usable. */
+async function readStored(key: ConnectorKey) {
+  const connector = connectorFor(key);
   const row = await FinanceConnection.findOne({ connector: key })
     .select("+secrets").lean() as ConnectionDoc | null;
-  if (!row) return null;
 
-  const publicFields = asRecord(row.publicFields);
-  const secrets = asRecord(row.secrets);
+  const publicFields = asRecord(row?.publicFields);
+  const secrets = asRecord(row?.secrets);
 
   const credentials: Credentials = {};
-  for (const field of connectorFor(key).fields) {
+  let complete = true;
+  let any = false;
+
+  for (const field of connector.fields) {
     const value = field.secret ? decryptSecret(secrets[field.name]) : publicFields[field.name] ?? "";
-    if (!value && field.required) return null;
     credentials[field.name] = value;
+    if (value) any = true;
+    if (!value && field.required) complete = false;
   }
-  return credentials;
+
+  return { credentials, complete, any };
 }
 
 /**

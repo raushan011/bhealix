@@ -53,8 +53,16 @@ describe("authorizeUrl", () => {
    * work at the checkout. Nothing beyond that is asked for — a scope requested
    * and unused is a permission the merchant granted for no reason.
    */
-  it("asks for the scopes the sync and the coupon portal need, and nothing else", () => {
-    expect(new URL(url).searchParams.get("scope")).toBe("read_orders,read_products,read_discounts,write_discounts");
+  it("asks for the scopes the sync, the coupon portal and the invoice vault need, and nothing else", () => {
+    /*
+     * `read_shopify_payments_payouts` is the vault's, not the sync's: the super
+     * admin panel builds a month's Shopify fee statement from the payouts, and
+     * borrows *this* connection to do it because Shopify no longer issues the
+     * pasteable tokens a settings form could take. Read-only, and it grants
+     * nothing over orders or discounts.
+     */
+    expect(new URL(url).searchParams.get("scope"))
+      .toBe("read_orders,read_products,read_discounts,write_discounts,read_shopify_payments_payouts");
   });
 
   it("asks for an offline token, so the nightly sync survives the tab closing", () => {
