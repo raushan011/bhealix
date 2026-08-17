@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ClipboardList, Clock, MapPin, Package, Route, TrendingUp } from "lucide-react";
+import { ClipboardList, Clock, MapPin, Navigation, Package, Route, TrendingUp } from "lucide-react";
 import { requireAdminPanel } from "@/lib/auth/guard";
 import { connectDb } from "@/lib/db/mongoose";
 import { Visit } from "@/models/Visit";
@@ -29,14 +29,32 @@ export const dynamic = "force-dynamic";
 type VisitDoc = {
   _id: unknown; status: string; plannedStart?: string; checkInAt?: Date; checkOutAt?: Date;
   outcome?: string; interest?: string; notes?: string; orderValue?: number; routePlan?: unknown;
+  checkInLocation?: { latitude?: number; longitude?: number };
   samples?: Array<{ product: string; quantity: number }>; productsDiscussed?: string[];
-  doctor?: { _id: unknown; name?: string; area?: string; city?: string };
+  /** `location` is GeoJSON on the doctor: `coordinates` is [longitude, latitude]. */
+  doctor?: { _id: unknown; name?: string; area?: string; city?: string; location?: { coordinates?: number[] } };
   employee?: { _id: unknown; name?: string };
 };
 
 type PlanDoc = { _id: unknown; name?: string; assignedTo?: unknown; totalDistanceKm?: number };
 
 const rupees = (value: number) => `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+
+/**
+ * A doctor's stored point as the distance helpers want it.
+ *
+ * GeoJSON orders a position `[longitude, latitude]`; everything in `lib/routing`
+ * takes `{ latitude, longitude }`. Swapping them does not throw — it moves a
+ * Mumbai clinic into the Indian Ocean and reports the leg as nine hundred
+ * kilometres — so the unpacking happens once, here.
+ */
+const doctorFix = (location?: { coordinates?: number[] }) => {
+  const [longitude, latitude] = location?.coordinates ?? [];
+  return typeof latitude === "number" && typeof longitude === "number" ? { latitude, longitude } : undefined;
+};
+
+/** "1.4 km", or metres once a leg is short enough for kilometres to read as zero. */
+const distance = (km: number) => (km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`);
 
 /** "—" rather than "0m", so a figure nobody has earned yet is not reported as one. */
 const duration = (minutes: number) => (minutes > 0 ? formatDuration(minutes) : "—");
@@ -57,7 +75,7 @@ export default async function VisitDayPage({ searchParams }: {
 
   const [visits, plans] = await Promise.all([
     Visit.find({ plannedDate: dayRange(day, day)! })
-      .populate("doctor", "name area city")
+      .populate("doctor", "name area city location")
       .populate("employee", "name")
       .sort({ plannedStart: 1 })
       .lean() as unknown as Promise<VisitDoc[]>,
@@ -90,8 +108,21 @@ export default async function VisitDayPage({ searchParams }: {
       samples: visit.samples,
       productsDiscussed: visit.productsDiscussed,
       routePlan: visit.routePlan ? String(visit.routePlan) : null,
+      checkInLocation: visit.checkInLocation,
       doctor: visit.doctor
-        ? { id: String(visit.doctor._id), name: visit.doctor.name, area: visit.doctor.area, city: visit.doctor.city }
+        ? {
+            id: String(visit.doctor._id),
+            name: visit.doctor.name,
+            area: visit.doctor.area,
+            city: visit.doctor.city,
+            /*
+             * GeoJSON is [longitude, latitude] and every distance helper here
+             * takes {latitude, longitude}. Getting the pair the wrong way round
+             * does not throw — it silently relocates a Mumbai clinic to the
+             * Indian Ocean and reports a nine-hundred-kilometre leg.
+             */
+            location: doctorFix(visit.doctor.location)
+          }
         : undefined
     });
     byEmployee.set(id, bucket);
@@ -210,11 +241,12 @@ function RoundCard({ round, isToday }: { round: Round; isToday: boolean }) {
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-7">
         <Stat label="Worked" value={duration(round.workedMinutes)} />
         <Stat label="In clinics" value={duration(round.inClinicMinutes)} />
         <Stat label="Travel & waiting" value={duration(round.betweenMinutes)} />
         <Stat label="Average call" value={round.averageCallMinutes ? formatDuration(round.averageCallMinutes) : "—"} />
+        <Stat label="Distance covered" value={round.travelledKm ? distance(round.travelledKm) : "—"} />
         <Stat label="Sample units" value={round.sampleUnits} />
         <Stat label="Orders" value={rupees(round.orderValue)} />
       </div>
@@ -225,6 +257,19 @@ function RoundCard({ round, isToday }: { round: Round; isToday: boolean }) {
         * an average quietly computed over four of six calls is a figure somebody
         * would otherwise take at face value.
         */}
+      {/*
+        * A round walked in 61 km against a plan of 43 went somewhere it was not
+        * meant to; one walked in 12 is a plan mostly not attempted. Said only
+        * when there is a plan to compare against.
+        */}
+      {round.plannedDistanceKm && round.travelledKm > 0 && (
+        <p className="mt-2 flex items-start gap-1.5 text-xs text-[var(--muted)]">
+          <Navigation size={12} className="mt-0.5 shrink-0" />
+          {distance(round.travelledKm)} between the calls actually made, against {Math.round(round.plannedDistanceKm)} km planned
+          {round.travelledApproximate ? " — some legs measured from a registered address" : ""}.
+        </p>
+      )}
+
       {round.measuredCalls < done && (
         <p className="mt-2 flex items-start gap-1.5 text-xs text-[var(--muted)]">
           <Clock size={12} className="mt-0.5 shrink-0" />
@@ -289,19 +334,62 @@ function RoundCard({ round, isToday }: { round: Round; isToday: boolean }) {
                     {clockOf(visit.checkInAt)}
                     {visit.checkOutAt ? `–${clockOf(visit.checkOutAt)}` : " · still open"}
                     {visit.minutes != null ? ` · ${formatDuration(visit.minutes)} inside` : ""}
-                    {visit.gapMinutes != null ? ` · ${formatDuration(visit.gapMinutes)} since the last call` : ""}
                   </>
                 : visit.plannedStart ? `Planned for ${toDisplayTime(visit.plannedStart)}` : "No time planned"}
             </p>
 
-            {visit.outcome && <p className="mt-1 text-sm text-[var(--ink-2)]">{visit.outcome}</p>}
-            {visit.samples?.length ? (
-              <p className="mt-1 text-xs font-medium text-[var(--brand)]">
-                {visit.samples.map(sample => `${sample.product} ×${sample.quantity}`).join(", ")}
+            {/*
+              * The journey that got them here, on its own line and above the
+              * call rather than below it — a leg belongs to the arrival, and
+              * reading "8 km, 40 minutes" before "met the doctor" is the order
+              * somebody tells the day in.
+              */}
+            {(visit.distanceKm != null || visit.gapMinutes != null) && (
+              <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-[var(--ink-2)]">
+                <Navigation size={11} className="shrink-0 text-[var(--muted)]" />
+                {visit.distanceKm != null && <span className="font-semibold tabular-nums">{distance(visit.distanceKm)}</span>}
+                {visit.distanceKm != null && visit.gapMinutes != null && <span className="text-[var(--muted)]">·</span>}
+                {visit.gapMinutes != null && <span>{formatDuration(visit.gapMinutes)} since the last call</span>}
+                {/*
+                  * Marked when a leg was measured from the clinic's registered
+                  * address rather than from where the phone actually was. It is
+                  * usually right and is not evidence of anybody having been
+                  * there, which is a distinction worth one word.
+                  */}
+                {visit.distanceFrom === "registered" && (
+                  <span className="text-[var(--muted)]" title="Measured from the clinic's registered address, the phone having had no fix">
+                    · by address
+                  </span>
+                )}
               </p>
+            )}
+
+            {visit.outcome && <p className="mt-1.5 text-sm font-medium text-[var(--ink)]">{visit.outcome}</p>}
+            {visit.notes && (
+              <p className="mt-1 border-l-2 border-[var(--line-2)] pl-2.5 text-xs italic text-[var(--ink-2)]">
+                &ldquo;{visit.notes}&rdquo;
+              </p>
+            )}
+
+            {/* Chips, as on the log next door — stock that has left the building
+                is the figure a rep's month is judged on, and it should be the
+                thing on the row that catches the eye. */}
+            {visit.samples?.length ? (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <Package size={12} className="shrink-0 text-[var(--brand)]" />
+                {visit.samples.map(sample => (
+                  <span key={sample.product}
+                    className="inline-flex items-center gap-1 rounded-full border border-[var(--line-2)] bg-[var(--brand-soft)] px-2 py-0.5 text-xs font-medium">
+                    {sample.product}
+                    <span className="font-bold tabular-nums text-[var(--brand)]">×{sample.quantity}</span>
+                  </span>
+                ))}
+              </div>
             ) : null}
-            {visit.orderValue ? <p className="mt-1 text-xs font-semibold">Order {rupees(visit.orderValue)}</p> : null}
-            {visit.notes && <p className="mt-1 text-xs italic text-[var(--muted)]">&ldquo;{visit.notes}&rdquo;</p>}
+
+            {visit.orderValue ? (
+              <p className="mt-1.5 text-xs font-semibold text-[var(--ok-ink)]">Order {rupees(visit.orderValue)}</p>
+            ) : null}
           </div>
         </li>;
       })}

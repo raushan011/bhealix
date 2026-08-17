@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Camera, ClipboardList, MapPin, Package } from "lucide-react";
+import { CalendarDays, Camera, ClipboardList, MapPin, Package, UserRound } from "lucide-react";
 import { requireAdminPanel } from "@/lib/auth/guard";
 import { connectDb } from "@/lib/db/mongoose";
 import { Visit } from "@/models/Visit";
@@ -195,22 +195,49 @@ export default async function VisitsPage({ searchParams }: {
       <Card className="divide-y divide-[var(--line)]">
         {visits.map(visit => {
           const attached = photosByVisit.get(String(visit._id)) ?? [];
+          const units = (visit.samples ?? []).reduce((total, sample) => total + sample.quantity, 0);
+
           return <div key={String(visit._id)} className="px-5 py-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
+            {/*
+              * The badges wrap along the top rather than stacking down the right.
+              * Stacked, three of them made a column as tall as the card and left
+              * a hand's width of nothing beside the doctor's name — a card that
+              * looked broken on every visit that had an interest recorded.
+              */}
+            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+              <div className="min-w-0 flex-1">
                 {/* `block`, because `truncate` does nothing to an inline box. */}
                 {visit.doctor ? (
-                  <Link href={`/admin/doctors/${visit.doctor._id}`} className="block truncate text-sm font-semibold hover:text-[var(--brand)]">
+                  <Link href={`/admin/doctors/${visit.doctor._id}`} className="block truncate text-[15px] font-semibold hover:text-[var(--brand)]">
                     {visit.doctor.name}
                   </Link>
-                ) : <p className="text-sm font-semibold">Doctor removed</p>}
-                <p className="mt-0.5 text-xs text-[var(--muted)]">
-                  {formatDate(visit.plannedDate)}
-                  {timeOf(visit) ? ` · ${toDisplayTime(timeOf(visit))}` : ""}
-                  {visit.employee?.name ? ` · ${visit.employee.name}` : ""}
-                </p>
+                ) : <p className="text-[15px] font-semibold">Doctor removed</p>}
+
+                {/*
+                  * Where and who, on its own line with icons. The place was
+                  * being carried on the doctor record all along and never shown
+                  * here, which made two calls in different cities look alike.
+                  */}
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted)]">
+                  {(visit.doctor?.area || visit.doctor?.city) && (
+                    <span className="flex min-w-0 items-center gap-1">
+                      <MapPin size={11} className="shrink-0" />
+                      <span className="truncate">{[visit.doctor?.area, visit.doctor?.city].filter(Boolean).join(", ")}</span>
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1">
+                    <CalendarDays size={11} className="shrink-0" />
+                    {formatDate(visit.plannedDate)}{timeOf(visit) ? ` · ${toDisplayTime(timeOf(visit))}` : ""}
+                  </span>
+                  {visit.employee?.name && (
+                    <span className="flex items-center gap-1">
+                      <UserRound size={11} className="shrink-0" />{visit.employee.name}
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="flex shrink-0 flex-col items-end gap-1">
+
+              <div className="flex shrink-0 flex-wrap items-center gap-1.5">
                 <Badge tone={statusTone(visit.status)}>{visit.status}</Badge>
                 {/* Nothing but a route plan schedules a visit, so a visit
                     without one was a call the rep made on their own account. */}
@@ -219,22 +246,56 @@ export default async function VisitsPage({ searchParams }: {
               </div>
             </div>
 
-            {visit.outcome && <p className="mt-2 text-sm text-[var(--ink-2)]">{visit.outcome}</p>}
-            {Boolean(visit.productsDiscussed?.length) && (
-              <p className="mt-1 text-xs text-[var(--muted)]">Discussed: {visit.productsDiscussed!.join(", ")}</p>
-            )}
-            {visit.samples?.length ? (
-              <p className="mt-1 flex items-start gap-1.5 text-xs font-medium text-[var(--brand)]">
-                <Package size={12} className="mt-0.5 shrink-0" />
-                <span>Samples given: {visit.samples.map(s => `${s.product} ×${s.quantity}`).join(", ")}</span>
+            {visit.outcome && <p className="mt-3 text-sm font-medium text-[var(--ink)]">{visit.outcome}</p>}
+            {visit.notes && (
+              <p className="mt-1.5 border-l-2 border-[var(--line-2)] pl-2.5 text-sm italic text-[var(--ink-2)]">
+                &ldquo;{visit.notes}&rdquo;
               </p>
+            )}
+
+            {/*
+              * Samples get a panel of their own rather than a line of small
+              * text, because they are stock that has physically left the
+              * building. A rep's whole month is judged on where the samples
+              * went, and "Vitamin C serum ×2" set in the same faint grey as the
+              * photo caption was the one figure on this card nobody could scan
+              * for. Each product is its own chip, so eight of them wrap into a
+              * readable block instead of a comma-run.
+              */}
+            {visit.samples?.length ? (
+              <div className="mt-3 rounded-[10px] border border-[var(--brand-soft)] bg-[var(--brand-soft)] px-3 py-2.5">
+                <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[var(--brand)]">
+                  <Package size={12} className="shrink-0" />
+                  {units} sample unit{units === 1 ? "" : "s"} given
+                </p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {visit.samples.map(sample => (
+                    <span key={sample.product}
+                      className="inline-flex items-center gap-1 rounded-full border border-[var(--line-2)] bg-[var(--surface)] px-2 py-0.5 text-xs font-medium">
+                      {sample.product}
+                      <span className="font-bold tabular-nums text-[var(--brand)]">×{sample.quantity}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
             ) : SETTLED.includes(visit.status) && (
-              <p className="mt-1 flex items-center gap-1.5 text-xs text-[var(--muted)]">
+              /* Said on every settled call, not only the ones that gave
+                 something out: a card with no sample line reads as "nobody
+                 filled this in", and the difference between that and "the rep
+                 gave nothing" is the whole question. */
+              <p className="mt-3 flex items-center gap-1.5 text-xs text-[var(--muted)]">
                 <Package size={12} className="shrink-0" />No samples given
               </p>
             )}
-            {visit.orderValue ? <p className="mt-1 text-xs font-semibold">Order ₹{visit.orderValue.toLocaleString("en-IN")}</p> : null}
-            {visit.notes && <p className="mt-1 text-xs italic text-[var(--muted)]">“{visit.notes}”</p>}
+
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+              {Boolean(visit.productsDiscussed?.length) && (
+                <span className="text-[var(--muted)]">Discussed: {visit.productsDiscussed!.join(", ")}</span>
+              )}
+              {visit.orderValue ? (
+                <span className="font-semibold text-[var(--ok-ink)]">Order ₹{visit.orderValue.toLocaleString("en-IN")}</span>
+              ) : null}
+            </div>
 
             {attached.length > 0 && (
               <div className="mt-2.5">

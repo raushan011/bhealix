@@ -17,7 +17,24 @@
  * does when somebody looks at it again next March.
  */
 
+import { haversineKm, type Coordinates } from "./routing";
+
 export type RoundSample = { product: string; quantity: number };
+
+/**
+ * Where a call happened, and how well that is known.
+ *
+ * Two answers, and the difference is worth keeping. `checked-in` is where the
+ * rep's phone actually was when they arrived — the honest one, and the only one
+ * that reflects a clinic that has moved or an address entered wrongly.
+ * `registered` is the coordinate on the doctor's record, used when the phone had
+ * no fix; it is usually right and is not evidence of anybody having been there.
+ *
+ * The distinction is shown rather than smoothed over, because a distance built
+ * from registered coordinates is a distance between two *addresses* and not
+ * between two places somebody stood.
+ */
+export type FixSource = "checked-in" | "registered";
 
 export type RoundVisitInput = {
   id: string;
@@ -33,7 +50,13 @@ export type RoundVisitInput = {
   productsDiscussed?: string[];
   /** Absent means the rep made this call on their own account. */
   routePlan?: string | null;
-  doctor?: { id: string; name?: string; area?: string; city?: string };
+  /** Where the rep's phone was at check-in. The best answer, when there is one. */
+  checkInLocation?: { latitude?: number; longitude?: number } | null;
+  doctor?: {
+    id: string; name?: string; area?: string; city?: string;
+    /** The clinic's own coordinate, as the fallback when the phone had no fix. */
+    location?: { latitude?: number; longitude?: number } | null;
+  };
 };
 
 export type RoundVisit = RoundVisitInput & {
@@ -43,6 +66,18 @@ export type RoundVisit = RoundVisitInput & {
   minutes?: number;
   /** Minutes since the previous call was left — travel, lunch, waiting. */
   gapMinutes?: number;
+  /**
+   * Straight-line kilometres from the previous call.
+   *
+   * As the crow flies, which is not as the rep drove — Delhi traffic turns four
+   * kilometres into twenty minutes and a flyover turns it into six. It is still
+   * the useful figure: it says whether two calls were on the same street or
+   * across the city, which is what somebody reading a round wants to know, and
+   * anything more accurate would mean a routing API bill per row.
+   */
+  distanceKm?: number;
+  /** Which coordinate the distance above was measured from. */
+  distanceFrom?: FixSource;
   /** Nothing but a route plan schedules a visit. */
   unplanned: boolean;
   /** Has been to, or tried to get to. */
@@ -94,6 +129,18 @@ export type Round = {
   measuredCalls: number;
   averageCallMinutes?: number;
 
+  /**
+   * Straight-line kilometres between the calls that were actually made.
+   *
+   * Not the same figure as `plannedDistanceKm`, and comparing the two is most of
+   * the point: a round planned at 43 km and walked in 61 is a day that went
+   * somewhere it was not meant to, and one walked in 12 is a day where most of
+   * the plan was not attempted.
+   */
+  travelledKm: number;
+  /** True when any leg of the above was measured from a registered address. */
+  travelledApproximate: boolean;
+
   sampleUnits: number;
   samplesByProduct: RoundSample[];
   orderValue: number;
@@ -109,6 +156,34 @@ const at = (value: Date | string | undefined): Date | undefined => {
 };
 
 const minutesBetween = (from: Date, to: Date) => Math.max(0, Math.round((to.getTime() - from.getTime()) / 60_000));
+
+/** One decimal place. A tenth of a kilometre is already finer than a phone's fix. */
+const round1 = (value: number) => Math.round(value * 10) / 10;
+
+const isFix = (value: { latitude?: number; longitude?: number } | null | undefined): value is Coordinates =>
+  typeof value?.latitude === "number" && typeof value.longitude === "number"
+  && Number.isFinite(value.latitude) && Number.isFinite(value.longitude)
+  /*
+   * Null Island refused outright. A phone with no fix has more than once written
+   * 0°, 0° rather than nothing, and a call "in the Gulf of Guinea" would put
+   * six thousand kilometres between two clinics on the same street.
+   */
+  && !(value.latitude === 0 && value.longitude === 0);
+
+/**
+ * Where a call happened, preferring where the rep actually was.
+ *
+ * The check-in fix beats the clinic's registered coordinate because it is
+ * evidence rather than a record — it catches a clinic that has moved, an address
+ * typed wrongly, and a rep who checked in from the car park two streets away.
+ * The registered coordinate is the fallback for a call whose phone had no fix,
+ * which happens in a basement often enough to matter.
+ */
+function fixOf(visit: RoundVisitInput): { at: Coordinates; source: FixSource } | undefined {
+  if (isFix(visit.checkInLocation)) return { at: visit.checkInLocation, source: "checked-in" };
+  if (isFix(visit.doctor?.location)) return { at: visit.doctor!.location as Coordinates, source: "registered" };
+  return undefined;
+}
 
 /**
  * "14:00" as minutes past midnight, for ordering calls that have not happened
@@ -173,15 +248,34 @@ export function buildRound({ employeeId, employeeName, date, planName, plannedDi
   const ordered = order(visits);
 
   let previousLeft: Date | undefined;
+  let previousFix: { at: Coordinates; source: FixSource } | undefined;
+
   const enriched: RoundVisit[] = ordered.map((visit, index) => {
     const checkIn = at(visit.checkInAt);
     const checkOut = at(visit.checkOutAt);
+    const fix = fixOf(visit);
 
+    /*
+     * Distance is only measured between calls that have *happened*.
+     *
+     * A pending stop has a registered coordinate and so a distance could be
+     * computed to it — but it would be a distance from a place the rep has left
+     * to a place they have not been, mixed into a column of real journeys. The
+     * plan is where "how far is the next one" belongs.
+     *
+     * The weaker of the two sources wins the label, because a leg measured from
+     * one real fix and one registered address is only as good as the address.
+     */
+    const measurable = checkIn && fix && previousFix;
     const row: RoundVisit = {
       ...visit,
       position: index + 1,
       minutes: checkIn && checkOut ? minutesBetween(checkIn, checkOut) : undefined,
       gapMinutes: checkIn && previousLeft ? minutesBetween(previousLeft, checkIn) : undefined,
+      distanceKm: measurable ? round1(haversineKm(previousFix!.at, fix!.at)) : undefined,
+      distanceFrom: measurable
+        ? (previousFix!.source === "registered" || fix!.source === "registered" ? "registered" : "checked-in")
+        : undefined,
       unplanned: !visit.routePlan,
       settled: SETTLED.has(visit.status)
     };
@@ -190,6 +284,9 @@ export function buildRound({ employeeId, employeeName, date, planName, plannedDi
     // check-out if it has one, otherwise its check-in, so a call left open does
     // not make the following gap look like the whole afternoon.
     if (checkOut ?? checkIn) previousLeft = checkOut ?? checkIn;
+    // Likewise the next leg starts from here, but only once the rep has actually
+    // arrived — a pending stop must not become the origin of the next journey.
+    if (checkIn && fix) previousFix = fix;
     return row;
   });
 
@@ -235,6 +332,8 @@ export function buildRound({ employeeId, employeeName, date, planName, plannedDi
     betweenMinutes: Math.max(0, workedMinutes - inClinicMinutes),
     measuredCalls: measured.length,
     averageCallMinutes: measured.length ? Math.round(inClinicMinutes / measured.length) : undefined,
+    travelledKm: round1(enriched.reduce((total, visit) => total + (visit.distanceKm ?? 0), 0)),
+    travelledApproximate: enriched.some(visit => visit.distanceFrom === "registered"),
     sampleUnits: enriched.reduce((total, visit) =>
       total + (visit.samples ?? []).reduce((sum, sample) => sum + Math.max(0, sample.quantity || 0), 0), 0),
     samplesByProduct: tallySamples(enriched),

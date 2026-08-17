@@ -1652,6 +1652,7 @@ the server knows more about than the request does belongs there too, not in `fie
 | Call windows | `lib/doctors/call-schedule.ts`, `models/Doctor.ts`, `components/doctors/call-schedule-editor.tsx` |
 | Visit flow | `app/api/visits/[id]/route.ts`, `components/visits/visit-form.tsx`, `lib/visits.ts` |
 | A rep's day as it actually went | `lib/rounds.ts` (pure, + test), `app/admin/(doctor)/visits/day/page.tsx`, `components/visits/visit-day-picker.tsx` |
+| Distance between two calls | `lib/rounds.ts::fixOf` — the check-in fix beats the doctor's registered point, and `haversineKm` comes from `lib/routing`. Doctor coordinates are GeoJSON `[lng, lat]`; the page unpacks them once in `doctorFix` |
 | Visit photos | `models/VisitPhoto.ts`, `app/api/visits/[id]/photos/**`, `components/visits/visit-photos.tsx` |
 | Rep sample stock | `lib/samples/{movements,ledger}.ts`, `app/api/samples/**` |
 | Warehouse stock | `lib/inventory/{movements,ledger}.ts`, `app/api/inventory/**`, `app/admin/inventory/page.tsx` |

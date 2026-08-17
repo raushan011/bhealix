@@ -116,6 +116,105 @@ describe("time worked", () => {
   });
 });
 
+describe("how far the rep went", () => {
+  // Two points about 4.3 km apart in north-east Delhi, and one across the city.
+  const saboli = { latitude: 28.7092, longitude: 77.2731 };
+  const gokalpur = { latitude: 28.6959, longitude: 77.2895 };
+  const dwarka = { latitude: 28.5921, longitude: 77.0460 };
+
+  it("measures each leg from where the rep actually checked in", () => {
+    const built = round([
+      call({ id: "a", checkInAt: clock("09:30"), checkOutAt: clock("10:00"), checkInLocation: saboli }),
+      call({ id: "b", checkInAt: clock("10:40"), checkOutAt: clock("11:10"), checkInLocation: gokalpur })
+    ]);
+
+    expect(built.visits[0].distanceKm).toBeUndefined();   // nothing before the first
+    expect(built.visits[1].distanceKm).toBeCloseTo(2.2, 0);
+    expect(built.visits[1].distanceFrom).toBe("checked-in");
+  });
+
+  it("falls back to the clinic's own coordinate when the phone had no fix", () => {
+    // Basements happen. A leg measured from a registered address is still worth
+    // having, and is labelled so nobody reads it as evidence of being there.
+    const built = round([
+      call({ id: "a", checkInAt: clock("09:30"), checkOutAt: clock("10:00"), checkInLocation: saboli }),
+      call({ id: "b", checkInAt: clock("11:00"), checkOutAt: clock("11:30"),
+        doctor: { id: "d-b", name: "Doctor b", location: dwarka } })
+    ]);
+
+    expect(built.visits[1].distanceKm).toBeGreaterThan(20);
+    expect(built.visits[1].distanceFrom).toBe("registered");
+  });
+
+  it("refuses Null Island, which is what a phone with no fix sometimes writes", () => {
+    /*
+     * 0°, 0° is in the Gulf of Guinea. Taken at face value it would put six
+     * thousand kilometres between two clinics on the same street — and the day's
+     * total would be a number somebody might actually act on.
+     */
+    const built = round([
+      call({ id: "a", checkInAt: clock("09:30"), checkOutAt: clock("10:00"), checkInLocation: saboli }),
+      call({ id: "b", checkInAt: clock("10:30"), checkOutAt: clock("11:00"),
+        checkInLocation: { latitude: 0, longitude: 0 } })
+    ]);
+
+    expect(built.visits[1].distanceKm).toBeUndefined();
+    expect(built.travelledKm).toBe(0);
+  });
+
+  it("does not measure a distance to a clinic nobody has been to yet", () => {
+    /*
+     * A pending stop has a registered coordinate, so a distance *could* be
+     * computed — but it would be a journey that has not happened, sitting in a
+     * column of ones that have. "How far is the next one" is the plan's question.
+     */
+    const built = round([
+      call({ id: "done", checkInAt: clock("09:30"), checkOutAt: clock("10:00"), checkInLocation: saboli }),
+      call({ id: "todo", status: "Planned", plannedStart: "14:00",
+        doctor: { id: "d-todo", name: "Doctor todo", location: dwarka } })
+    ]);
+    expect(built.visits[1].distanceKm).toBeUndefined();
+  });
+
+  it("does not let a pending stop become the origin of the next leg", () => {
+    // The rep skipped the middle clinic entirely; the journey is from the first
+    // to the third, not from a place they never reached.
+    const built = round([
+      call({ id: "first", checkInAt: clock("09:30"), checkOutAt: clock("10:00"), checkInLocation: saboli }),
+      call({ id: "skipped", status: "Planned", plannedStart: "11:00",
+        doctor: { id: "d-skip", name: "Doctor skip", location: dwarka } }),
+      call({ id: "third", checkInAt: clock("12:00"), checkOutAt: clock("12:30"), checkInLocation: gokalpur })
+    ]);
+
+    const third = built.visits.find(visit => visit.id === "third")!;
+    expect(third.distanceKm).toBeCloseTo(2.2, 0);
+    expect(third.distanceFrom).toBe("checked-in");
+  });
+
+  it("totals the day, and says when any of it came from an address", () => {
+    const built = round([
+      call({ id: "a", checkInAt: clock("09:30"), checkOutAt: clock("10:00"), checkInLocation: saboli }),
+      call({ id: "b", checkInAt: clock("10:40"), checkOutAt: clock("11:10"), checkInLocation: gokalpur }),
+      call({ id: "c", checkInAt: clock("12:00"), checkOutAt: clock("12:30"),
+        doctor: { id: "d-c", name: "Doctor c", location: dwarka } })
+    ]);
+
+    expect(built.travelledKm).toBeCloseTo(
+      (built.visits[1].distanceKm ?? 0) + (built.visits[2].distanceKm ?? 0), 5);
+    expect(built.travelledApproximate).toBe(true);
+  });
+
+  it("reports nothing rather than zero when no call carried a position", () => {
+    const built = round([
+      call({ id: "a", checkInAt: clock("09:30"), checkOutAt: clock("10:00") }),
+      call({ id: "b", checkInAt: clock("11:00"), checkOutAt: clock("11:30") })
+    ]);
+    expect(built.travelledKm).toBe(0);
+    expect(built.travelledApproximate).toBe(false);
+    expect(built.visits[1].distanceKm).toBeUndefined();
+  });
+});
+
 describe("what the day came to", () => {
   it("counts done, missed and still to go", () => {
     const built = round([
