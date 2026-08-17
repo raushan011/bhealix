@@ -73,6 +73,11 @@ Built for phones first — reps use it standing in a clinic corridor — and equ
 
 **Admin tracking**
 - Every visit with its outcome, samples, notes and the photographs taken at it.
+- **The day in the field** at **Admin → Visits → Day view**: one day, rep by rep, *as it actually went* rather than as it was planned. The calls are listed in the order they really happened — a rep who took the third clinic first reads that way — with what is still outstanding at the bottom, so "is the round happening?" has an answer at four in the afternoon.
+  - **Time worked** from the first call to the last recorded action, split into **time inside clinics** and **travel & waiting**, with the average call length and the gap between each pair of calls. Measured to the last stamp rather than to *now*: a rep whose last check-out was at two must not be shown gaining hours all evening.
+  - **Samples given** as units and per product, orders taken, and the planned distance for the round.
+  - **Progress through the whole round**, and a completion rate judged only on what was *attempted* — three calls into a round of nine is three of three, not three of nine.
+  - **An unfinished day reads differently today than in the past.** Still out at four is an ordinary afternoon; still out last Tuesday is a round nobody finished, and it is flagged as such rather than scrolling past looking normal. A call checked into and never closed shows as "in the clinic now", and is left out of the timing average — with a line saying how many calls that average is actually built from.
 - **A field record for each representative** at **Admin → Employees → Field activity**, over 7, 30 or 90 days or everything on record: how many doctors they met, visits completed and missed, completion rate, samples handed out and order value.
   - **Every doctor they visited** — how many times, when they were last seen, the last outcome, the doctor's interest, samples given and orders taken.
   - **Every visit in full** — the remarks the rep wrote, what was discussed, what was handed over, the follow-up date, where they checked in on a map, and the photos still held.

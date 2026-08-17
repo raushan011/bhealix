@@ -144,6 +144,26 @@ export default async function VisitsPage({ searchParams }: {
   return <div className="space-y-5">
     <PageTitle title="Visits" subtitle="Every field visit, what was discussed and what was handed out" />
 
+    {/*
+      * The log and the day view are two questions, not two filters.
+      *
+      * This screen is a feed: every call ever recorded, newest first, narrowed
+      * by status, day and sample — which answers "what happened at Dr Mehta's
+      * in June". It cannot answer the one a desk asks at four in the afternoon,
+      * because that needs one day grouped by the person walking it, in the
+      * order things actually occurred, with what is still outstanding at the
+      * bottom. So that is its own screen rather than another chip here.
+      */}
+    <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
+      <span className="min-h-[38px] shrink-0 rounded-full border border-[var(--brand)] bg-[var(--brand)] px-4 text-xs font-semibold leading-[36px] text-[var(--on-brand)]">
+        Visit log
+      </span>
+      <a href="/admin/visits/day"
+        className="min-h-[38px] shrink-0 rounded-full border border-[var(--line-2)] bg-[var(--surface)] px-4 text-xs font-semibold leading-[36px] text-[var(--ink-2)]">
+        Day view
+      </a>
+    </div>
+
     {/* Plain anchors, like the date filter below and for the same reason: a
         client-side navigation changes the address here without repainting the
         list, so the tab moved while the visits under it did not. */}

@@ -134,7 +134,7 @@ Seed admin: `admin@bhealix.com` / `Bhealix@123` — **change before production**
 | Auth | `User` | `constants/access.ts` | `lib/auth/*` | `/api/auth` |
 | Doctors | `Doctor` | `lib/doctors/{fields,call-schedule,discovery}` | `lib/doctors/places.ts` | `/api/doctors`, `/api/google` |
 | Route plans | `RoutePlan` | `lib/routing.ts` | `lib/plans.ts` | `/api/plans` |
-| Visits | `Visit`, `VisitPhoto` | `lib/visits.ts` | — | `/api/visits` |
+| Visits | `Visit`, `VisitPhoto` | `lib/visits.ts`, `lib/rounds.ts` | — | `/api/visits` |
 | Samples | `SampleMovement` | `lib/samples/movements.ts` | `lib/samples/ledger.ts` | `/api/samples` |
 | Inventory | `StockMovement`, `Product` | `lib/inventory/movements.ts` | `lib/inventory/ledger.ts` | `/api/inventory`, `/api/products` |
 | Billing | `Invoice`, `Customer`, `PaymentProof`, `BillingSettings`, `Counter` | `lib/billing/{constants,gst,numbering,types,customers,attachments,follow-ups}` | `lib/billing/{invoices,compose}.ts` | `/api/invoices`, `/api/customers`, `/api/billing` |
@@ -169,7 +169,7 @@ src/
 │   │   │   ├── discover/            Google Places doctor search + Excel import/export
 │   │   │   ├── doctors/{page,new,[id]}
 │   │   │   ├── plans/{page,new,[id]}
-│   │   │   ├── visits/page.tsx
+│   │   │   ├── visits/{page,day}     the log, and one day rep-by-rep as it went
 │   │   │   ├── samples/page.tsx     per-rep sample stock matrix
 │   │   │   ├── products/page.tsx    catalogue + units-available box
 │   │   │   ├── inventory/page.tsx   warehouse ledger + stock levels
@@ -220,7 +220,7 @@ src/
 ├── lib/
 │   ├── api.ts                       ok/badRequest/fail/pageParams/OBJECT_ID
 │   ├── audit.ts                     AUDIT_ACTIONS + record()
-│   ├── env.ts  time.ts  maps.ts  routing.ts  plans.ts
+│   ├── env.ts  time.ts  maps.ts  routing.ts  plans.ts  rounds.ts
 │   ├── auth/        session.ts (JWT), guard.ts (requireSession/requireWorkspace/apiSession)
 │   │                grants.ts (the grant rules, pure), access.ts (reads them per request)
 │   │                path-header.ts (the header name the middleware and guard share)
@@ -1651,6 +1651,7 @@ the server knows more about than the request does belongs there too, not in `fie
 | Route ordering | `lib/routing.ts` (+ `routing.test.ts`), `lib/plans.ts` |
 | Call windows | `lib/doctors/call-schedule.ts`, `models/Doctor.ts`, `components/doctors/call-schedule-editor.tsx` |
 | Visit flow | `app/api/visits/[id]/route.ts`, `components/visits/visit-form.tsx`, `lib/visits.ts` |
+| A rep's day as it actually went | `lib/rounds.ts` (pure, + test), `app/admin/(doctor)/visits/day/page.tsx`, `components/visits/visit-day-picker.tsx` |
 | Visit photos | `models/VisitPhoto.ts`, `app/api/visits/[id]/photos/**`, `components/visits/visit-photos.tsx` |
 | Rep sample stock | `lib/samples/{movements,ledger}.ts`, `app/api/samples/**` |
 | Warehouse stock | `lib/inventory/{movements,ledger}.ts`, `app/api/inventory/**`, `app/admin/inventory/page.tsx` |
