@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { Brand, BrandMark } from "@/components/ui/brand";
 import { Button, Field, Notice } from "@/components/ui/kit";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Appearance } from "@/components/ui/appearance";
+import { landingPath } from "@/lib/auth/next-path";
 import { normaliseCode } from "@/lib/sales/coupons";
 import { passwordProblem, repCodeProblem, suggestRepCode } from "@/lib/sales/partners";
 
@@ -25,7 +25,6 @@ import { passwordProblem, repCodeProblem, suggestRepCode } from "@/lib/sales/par
  * than after it.
  */
 export default function PartnerRegisterPage() {
-  const router = useRouter();
   const [name, setName] = useState("");
   /** Left empty until they type over it, so the suggestion follows the name. */
   const [code, setCode] = useState("");
@@ -56,9 +55,9 @@ export default function PartnerRegisterPage() {
       const json = await response.json() as { error?: string; data?: { redirectTo?: string } };
       if (!response.ok) throw new Error(json.error ?? "Could not send your application");
 
+      // A full page load rather than the client router — see /login for why.
       setHandingOver(true);
-      router.replace(json.data?.redirectTo ?? "/partner");
-      router.refresh();
+      window.location.replace(landingPath(json.data?.redirectTo, "/partner"));
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Could not send your application");
       setBusy(false);

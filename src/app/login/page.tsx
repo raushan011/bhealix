@@ -2,16 +2,16 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import { Brand, BrandMark } from "@/components/ui/brand";
 import { Button, Field } from "@/components/ui/kit";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Appearance } from "@/components/ui/appearance";
+import { landingPath } from "@/lib/auth/next-path";
 
 function LoginForm() {
-  const router = useRouter();
   const next = useSearchParams().get("next");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -28,12 +28,16 @@ function LoginForm() {
       const json = await response.json() as { error?: string; data?: { redirectTo: string } };
       if (!response.ok) throw new Error(json.error ?? "Could not sign in");
 
-      // The panel is server-rendered, so there is a beat between here and the
-      // first paint. Cover it deliberately instead of leaving a dead form on
-      // screen, and leave `busy` set so nothing can be submitted twice.
+      /*
+       * A full page load, not the client router. The cookie was set by the
+       * response above, and the panel behind it is server-rendered against
+       * that cookie — a soft navigation can reuse a router tree cached from
+       * before it existed, and then sits on "Signing you in…" with nothing
+       * left to do. A hard load has no cache to disagree with. `busy` stays
+       * set so nothing can be submitted twice while the page turns over.
+       */
       setHandingOver(true);
-      router.replace(next ?? json.data?.redirectTo ?? "/");
-      router.refresh();
+      window.location.replace(landingPath(next, json.data?.redirectTo ?? "/"));
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Could not sign in");
       setBusy(false);

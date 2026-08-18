@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { jwtVerify, SignJWT } from "jose";
+import { encodeSecret, PARTNER_AUDIENCE as AUDIENCE, PARTNER_COOKIE as COOKIE, sessionCookieOptions, signSessionToken, verifySession } from "./token";
 import { mayHoldSession, mayTrade, refusalFor, repStatusOf, type RepStatus } from "@/lib/sales/partners";
 
 /**
@@ -25,11 +25,12 @@ import { mayHoldSession, mayTrade, refusalFor, repStatusOf, type RepStatus } fro
  * flag day.
  */
 
-export const PARTNER_COOKIE = "bhealix_partner";
-export const PARTNER_AUDIENCE = "partner";
+export const PARTNER_COOKIE = COOKIE;
+export const PARTNER_AUDIENCE = AUDIENCE;
 
-/**
- * A week, against the staff panel's twelve hours.
+/*
+ * A fortnight idle and ninety days at the outside, against the staff panel's
+ * three and thirty — see `lib/auth/token.ts` for the two clocks.
  *
  * Longer because the audience is different: a beautician checking on a Sunday
  * whether last week's orders have cleared, on their own phone, is not the same
@@ -38,7 +39,6 @@ export const PARTNER_AUDIENCE = "partner";
  * the rep and re-reads their standing, so a suspension takes effect on the next
  * tap rather than whenever the token happens to run out.
  */
-const SESSION_HOURS = 24 * 7;
 
 export type PartnerSession = {
   repId: string;
@@ -63,27 +63,16 @@ export type PartnerRep = {
 const secret = () => {
   const value = process.env.AUTH_SECRET;
   if (!value) throw new Error("AUTH_SECRET is not configured");
-  return new TextEncoder().encode(value);
+  return encodeSecret(value);
 };
 
 export async function createPartnerToken(session: PartnerSession) {
-  return new SignJWT({ repId: session.repId, name: session.name, code: session.code })
-    .setProtectedHeader({ alg: "HS256" })
-    .setAudience(PARTNER_AUDIENCE)
-    .setIssuedAt()
-    .setExpirationTime(`${SESSION_HOURS}h`)
-    .sign(secret());
+  return signSessionToken("partner", { repId: session.repId, name: session.name, code: session.code }, secret());
 }
 
-/** Writes the cookie. One place, so the flags cannot drift between login and registration. */
+/** Writes the cookie. One place, so the flags cannot drift between login, registration and refresh. */
 export async function setPartnerCookie(token: string) {
-  (await cookies()).set(PARTNER_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: SESSION_HOURS * 60 * 60
-  });
+  (await cookies()).set(PARTNER_COOKIE, token, sessionCookieOptions("partner", process.env.NODE_ENV === "production"));
 }
 
 export async function clearPartnerCookie() {
@@ -94,17 +83,14 @@ export async function clearPartnerCookie() {
 export async function getPartnerSession(): Promise<PartnerSession | null> {
   const token = (await cookies()).get(PARTNER_COOKIE)?.value;
   if (!token || !process.env.AUTH_SECRET) return null;
-  try {
-    const { payload } = await jwtVerify(token, secret(), { audience: PARTNER_AUDIENCE });
-    if (!payload.repId) return null;
-    return {
-      repId: String(payload.repId),
-      name: typeof payload.name === "string" ? payload.name : "",
-      code: typeof payload.code === "string" ? payload.code : ""
-    };
-  } catch {
-    return null;
-  }
+  const verified = await verifySession("partner", token, secret());
+  if (!verified?.payload.repId) return null;
+  const { payload } = verified;
+  return {
+    repId: String(payload.repId),
+    name: typeof payload.name === "string" ? payload.name : "",
+    code: typeof payload.code === "string" ? payload.code : ""
+  };
 }
 
 /**

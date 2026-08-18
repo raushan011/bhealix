@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { jwtVerify } from "jose";
 import { PATH_HEADER } from "@/lib/auth/path-header";
+import { encodeSecret, PARTNER_COOKIE, sessionCookieOptions, STAFF_COOKIE, verifySession, type SessionKind } from "@/lib/auth/token";
 
 /**
  * `/api/sales/shopify/webhook` is public because Shopify has no session with
@@ -47,12 +47,27 @@ const HEADERS: [string, string][] = [
  * entirely. Nobody can arrange for this middleware *not* to run, which is what
  * makes reading the header safe.
  */
-const pass = (request: NextRequest) => {
+const pass = (request: NextRequest, refreshed?: { kind: SessionKind; token: string }) => {
   const headers = new Headers(request.headers);
   headers.set(PATH_HEADER, request.nextUrl.pathname);
 
   const response = NextResponse.next({ request: { headers } });
   for (const [name, value] of HEADERS) response.headers.set(name, value);
+
+  /*
+   * The sliding session. A token old enough to be worth re-minting goes back
+   * out with the response, pushing the idle expiry forward — so somebody who
+   * uses the CRM every day is never asked to sign in again until the absolute
+   * limit, and somebody who leaves it alone for the idle period is. See
+   * `lib/auth/token.ts` for the two clocks.
+   */
+  if (refreshed) {
+    response.cookies.set(
+      refreshed.kind === "partner" ? PARTNER_COOKIE : STAFF_COOKIE,
+      refreshed.token,
+      sessionCookieOptions(refreshed.kind, request.nextUrl.protocol === "https:")
+    );
+  }
   return response;
 };
 
@@ -77,7 +92,7 @@ export async function middleware(request: NextRequest) {
   if (PUBLIC_API.includes(pathname)) return pass(request);
 
   const isApi = pathname.startsWith("/api/");
-  const token = request.cookies.get("bhealix_session")?.value;
+  const token = request.cookies.get(STAFF_COOKIE)?.value;
 
   const signedOut = () => isApi
     ? NextResponse.json({ error: "Please sign in again" }, { status: 401 })
@@ -85,13 +100,14 @@ export async function middleware(request: NextRequest) {
 
   if (!token || !secret) return signedOut();
 
-  try {
-    const { payload } = await jwtVerify(token, new TextEncoder().encode(secret));
-    // An affiliate token is not a staff session, whatever cookie carried it.
-    // The same refusal `getSession` makes, at the edge, so a partner token
-    // cannot even reach a staff route handler.
-    if (payload.aud === "partner") return signedOut();
+  // An affiliate token is not a staff session, whatever cookie carried it —
+  // `verifySession` refuses it at the edge, so a partner token cannot even
+  // reach a staff route handler.
+  const verified = await verifySession("staff", token, encodeSecret(secret));
+  if (!verified) return signedOut();
+  const { payload, refreshed } = verified;
 
+  {
     const role = String(payload.role);
     // The super administrator works at a desk like the other two. Left out, the
     // most senior account in the system would be bounced out of `/admin` into
@@ -107,9 +123,7 @@ export async function middleware(request: NextRequest) {
     if (pathname.startsWith("/admin") && !deskRole) return NextResponse.redirect(new URL("/employee", request.url));
     if (pathname.startsWith("/employee") && deskRole) return NextResponse.redirect(new URL("/admin", request.url));
 
-    return pass(request);
-  } catch {
-    return signedOut();
+    return pass(request, refreshed ? { kind: "staff", token: refreshed } : undefined);
   }
 }
 
@@ -123,19 +137,13 @@ export async function middleware(request: NextRequest) {
  * gets to be authoritative.
  */
 async function partnerGate(request: NextRequest, pathname: string, secret: string | undefined) {
-  const token = request.cookies.get("bhealix_partner")?.value;
+  const token = request.cookies.get(PARTNER_COOKIE)?.value;
   const isApi = pathname.startsWith("/api/");
   const isPublic = PUBLIC_PARTNER.includes(pathname);
 
-  let signedIn = false;
-  if (token && secret) {
-    try {
-      await jwtVerify(token, new TextEncoder().encode(secret), { audience: "partner" });
-      signedIn = true;
-    } catch {
-      signedIn = false;
-    }
-  }
+  const verified = token && secret ? await verifySession("partner", token, encodeSecret(secret)) : null;
+  const signedIn = Boolean(verified);
+  const refreshed = verified?.refreshed ? { kind: "partner" as const, token: verified.refreshed } : undefined;
 
   if (isPublic) {
     /*
@@ -154,7 +162,7 @@ async function partnerGate(request: NextRequest, pathname: string, secret: strin
     if (signedIn && !endedSession && (pathname === "/partner/login" || pathname === "/partner/register")) {
       return NextResponse.redirect(new URL("/partner", request.url));
     }
-    return pass(request);
+    return pass(request, refreshed);
   }
 
   if (!signedIn) {
@@ -163,7 +171,7 @@ async function partnerGate(request: NextRequest, pathname: string, secret: strin
       : NextResponse.redirect(new URL(`/partner/login?next=${encodeURIComponent(pathname)}`, request.url));
   }
 
-  return pass(request);
+  return pass(request, refreshed);
 }
 
 // /invoices and /payslips are printable documents reached by both panels, so

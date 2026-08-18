@@ -10,7 +10,7 @@ import type { Session } from "./session";
  * session token.
  *
  * The token is the tempting place to keep this — it is already opened on every
- * request and costs nothing. It is also wrong. A session lasts twelve hours, so
+ * request and costs nothing. It is also wrong. A session can live for weeks, so
  * a panel withdrawn at nine in the morning would go on working until nine at
  * night, and "I have taken that away from them" has to mean *now* or it is not
  * an access control, it is a suggestion.

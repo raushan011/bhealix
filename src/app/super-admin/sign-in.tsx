@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { Brand, BrandMark } from "@/components/ui/brand";
 import { Button, Field } from "@/components/ui/kit";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Appearance } from "@/components/ui/appearance";
+import { landingPath } from "@/lib/auth/next-path";
 
 /**
  * The form behind `/super-admin`.
@@ -18,7 +18,6 @@ import { Appearance } from "@/components/ui/appearance";
  * directly on the control panel instead of the chooser.
  */
 export function SuperAdminSignIn() {
-  const router = useRouter();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [handingOver, setHandingOver] = useState(false);
@@ -42,8 +41,8 @@ export function SuperAdminSignIn() {
       // first paint. Cover it deliberately rather than leaving a dead form on
       // screen, and leave `busy` set so nothing can be submitted twice.
       setHandingOver(true);
-      router.replace(json.data?.redirectTo ?? "/admin/control");
-      router.refresh();
+      // A full page load rather than the client router — see /login for why.
+      window.location.replace(landingPath(json.data?.redirectTo, "/admin/control"));
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Could not sign in");
       setBusy(false);

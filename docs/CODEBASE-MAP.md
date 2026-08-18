@@ -515,7 +515,7 @@ Four rules worth knowing before touching any of it:
    which is why grants shipped without anybody losing access. An array, empty or not, is a decision
    and is obeyed exactly. `default: undefined` on the schema field is load-bearing: Mongoose's usual
    `[]` default would convert every existing account to "decided, and decided to be nothing".
-2. **Read from the database, never from the token.** A session lasts twelve hours; a withdrawn panel
+2. **Read from the database, never from the token.** A session slides for up to thirty days; a withdrawn panel
    has to shut now, not tonight. The per-request memo makes the repeated asking free.
 3. **`control` is not grantable.** It comes with the `SUPERADMIN` role, so there is no sequence of
    clicks on the access screen ending with somebody letting themselves into the screen that hands out
@@ -925,7 +925,7 @@ Responses are `{ data: … }` on success and `{ error: "…" }` on failure.
 
 | Route | Method | Guard | Notes |
 |---|---|---|---|
-| `/api/auth/login` | POST | public | `{identifier, password}` — identifier matches `email` (lower-cased) **or** `employeeId`, and the account must be `active`. One message for both "no such account" and "wrong password", so the form never reveals which accounts exist. Sets the cookie `httpOnly, sameSite: lax, secure in production, path /, maxAge 12h` and stamps `lastLoginAt` |
+| `/api/auth/login` | POST | public | `{identifier, password}` — identifier matches `email` (lower-cased) **or** `employeeId`, and the account must be `active`. One message for both "no such account" and "wrong password", so the form never reveals which accounts exist. Sets the cookie `httpOnly, sameSite: lax, secure in production, path /, maxAge 3 days` and stamps `lastLoginAt`. The middleware re-mints the token on any request older than ten minutes, so the session slides — three days idle, thirty days absolute (`lib/auth/token.ts`) — and the login screen hands over with a full page load rather than the client router |
 | `/api/auth/logout` | POST | public | clears the cookie |
 | `/api/auth/me` | GET | session | current session |
 | `/api/auth/change-password` | POST | session | `{currentPassword, newPassword ≥8}` |

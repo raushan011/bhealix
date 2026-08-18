@@ -1,9 +1,8 @@
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { cookies } from "next/headers";
 import { connectDb } from "@/lib/db/mongoose";
 import { User } from "@/models/User";
-import { createSessionToken, SESSION_COOKIE } from "@/lib/auth/session";
+import { createSessionToken, setSessionCookie } from "@/lib/auth/session";
 import { landingFor, type Role } from "@/constants/access";
 import { WORKSPACE_HOME } from "@/lib/workspace";
 import { fail, ok } from "@/lib/api";
@@ -56,14 +55,7 @@ export async function POST(request: Request) {
       }, { status: 403 });
     }
 
-    const token = await createSessionToken({ userId: String(user._id), name: user.name, role });
-    (await cookies()).set(SESSION_COOKIE, token, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 12 * 60 * 60
-    });
+    await setSessionCookie(await createSessionToken({ userId: String(user._id), name: user.name, role }));
 
     user.lastLoginAt = new Date();
     await user.save();

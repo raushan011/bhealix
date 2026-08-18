@@ -1,51 +1,48 @@
 import { cookies } from "next/headers";
-import { jwtVerify, SignJWT } from "jose";
 import type { Role } from "@/constants/access";
+import { encodeSecret, sessionCookieOptions, signSessionToken, STAFF_COOKIE, verifySession } from "./token";
 
-export const SESSION_COOKIE = "bhealix_session";
+export const SESSION_COOKIE = STAFF_COOKIE;
 export type Session = { userId: string; name: string; role: Role };
 
 const secret = () => {
   const value = process.env.AUTH_SECRET;
   if (!value) throw new Error("AUTH_SECRET is not configured");
-  return new TextEncoder().encode(value);
+  return encodeSecret(value);
 };
 
+/**
+ * A fresh sign-in. The token slides from here — see `lib/auth/token.ts` for
+ * the two clocks it carries and how the middleware keeps it alive.
+ */
 export async function createSessionToken(session: Session) {
-  return new SignJWT({ userId: session.userId, name: session.name, role: session.role })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("12h")
-    .sign(secret());
+  return signSessionToken("staff", { userId: session.userId, name: session.name, role: session.role }, secret());
+}
+
+/** Writes the cookie. One place, so login and refresh cannot disagree about the flags. */
+export async function setSessionCookie(token: string) {
+  (await cookies()).set(SESSION_COOKIE, token, sessionCookieOptions("staff", process.env.NODE_ENV === "production"));
 }
 
 export async function getSession(): Promise<Session | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token || !process.env.AUTH_SECRET) return null;
-  try {
-    const { payload } = await jwtVerify(token, secret());
 
-    /*
-     * An affiliate's token is never a staff session, whatever cookie it arrives
-     * in.
-     *
-     * The two are already separated by cookie name, so this only matters if
-     * somebody copies one value into the other's slot — but the whole reason
-     * affiliates were kept out of `User` is that they are outsiders, and a
-     * guarantee that rests on a cookie name is a guarantee that rests on
-     * nothing. Both halves are checked, and the partner verifier requires this
-     * audience just as firmly as this one refuses it.
-     */
-    if (payload.aud === "partner") return null;
+  /*
+   * An affiliate's token is never a staff session, whatever cookie it arrives
+   * in — `verifySession` refuses the partner audience here just as firmly as
+   * the partner verifier requires it. Refreshing is the middleware's job; this
+   * only reads, because a page render may not write a cookie.
+   */
+  const verified = await verifySession("staff", token, secret());
+  if (!verified) return null;
+  const { payload } = verified;
 
-    // Tokens issued before `name` existed carry no name. Leave it empty so the
-    // caller can look it up — String(undefined) would render as "undefined".
-    return {
-      userId: String(payload.userId),
-      name: typeof payload.name === "string" ? payload.name : "",
-      role: payload.role as Role
-    };
-  } catch {
-    return null;
-  }
+  // Tokens issued before `name` existed carry no name. Leave it empty so the
+  // caller can look it up — String(undefined) would render as "undefined".
+  return {
+    userId: String(payload.userId),
+    name: typeof payload.name === "string" ? payload.name : "",
+    role: payload.role as Role
+  };
 }

@@ -2,12 +2,13 @@
 
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Brand, BrandMark } from "@/components/ui/brand";
 import { Button, Field, Notice } from "@/components/ui/kit";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Appearance } from "@/components/ui/appearance";
+import { landingPath } from "@/lib/auth/next-path";
 
 /**
  * Where an affiliate signs in. Deliberately a different door from `/login`: the
@@ -16,7 +17,6 @@ import { Appearance } from "@/components/ui/appearance";
  * that will eventually send somebody to the wrong one.
  */
 function PartnerLoginForm() {
-  const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next");
   /** Set when a guard turned somebody out mid-session, so the empty form is explained. */
@@ -49,9 +49,9 @@ function PartnerLoginForm() {
       const json = await response.json() as { error?: string; data?: { redirectTo: string } };
       if (!response.ok) throw new Error(json.error ?? "Could not sign in");
 
+      // A full page load rather than the client router — see /login for why.
       setHandingOver(true);
-      router.replace(next ?? json.data?.redirectTo ?? "/partner");
-      router.refresh();
+      window.location.replace(landingPath(next, json.data?.redirectTo ?? "/partner"));
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Could not sign in");
       setBusy(false);
