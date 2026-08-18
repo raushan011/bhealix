@@ -156,6 +156,12 @@ export function VisitPhotos({ visitId, initial, canAdd }: {
   const [viewing, setViewing] = useState<VisitPhoto | null>(null);
   const camera = useRef<HTMLInputElement>(null);
   const gallery = useRef<HTMLInputElement>(null);
+  /**
+   * The photo a retake is replacing. Held in a ref rather than state because it
+   * is read inside the file input's change handler, which fires after the
+   * camera closes — the tap that set it is long over by then.
+   */
+  const replacing = useRef<VisitPhoto | null>(null);
 
   const full = photos.length >= MAX_PHOTOS_PER_VISIT;
 
@@ -196,7 +202,7 @@ export function VisitPhotos({ visitId, initial, canAdd }: {
 
     setBusy(true); setError("");
     try {
-      const room = MAX_PHOTOS_PER_VISIT - photos.length;
+      const room = MAX_PHOTOS_PER_VISIT - photos.length + (replacing.current ? 1 : 0);
       const chosen = Array.from(files).slice(0, room);
 
       // Taken again if the rep has been standing here a while — a fix from
@@ -233,7 +239,20 @@ export function VisitPhotos({ visitId, initial, canAdd }: {
       const response = await fetch(`/api/visits/${visitId}/photos`, { method: "POST", body });
       const json = await response.json() as { error?: string; data?: { items: VisitPhoto[] } };
       if (!response.ok) throw new Error(json.error ?? "Could not upload that photo");
-      setPhotos(current => [...current, ...(json.data?.items ?? [])]);
+      const added = json.data?.items ?? [];
+
+      // A retake: the old photo goes only once the new one is safely up, so a
+      // failed upload never leaves the visit with fewer photos than it had.
+      const old = replacing.current;
+      replacing.current = null;
+      if (old) {
+        setStage("Removing the old photo…");
+        await fetch(`/api/visits/${visitId}/photos/${old._id}`, { method: "DELETE" });
+        setPhotos(current => [...current.filter(item => item._id !== old._id), ...added]);
+        setViewing(null);
+      } else {
+        setPhotos(current => [...current, ...added]);
+      }
 
       if (chosen.length < files.length) {
         setError(`Only ${room} more photo${room === 1 ? "" : "s"} could be added to this visit.`);
@@ -243,10 +262,23 @@ export function VisitPhotos({ visitId, initial, canAdd }: {
     } finally {
       setBusy(false);
       setStage("");
+      replacing.current = null;
       // Cleared so choosing the same file twice still fires a change event.
       if (camera.current) camera.current.value = "";
       if (gallery.current) gallery.current.value = "";
     }
+  }
+
+  /**
+   * Takes a photo again in place of this one. The camera has to open inside
+   * the tap, so the photo being replaced is noted first and dealt with once
+   * the new one has uploaded. Nothing else changes about the upload — the new
+   * photo is stamped with where the rep is now, like any other.
+   */
+  function retake(photo: VisitPhoto) {
+    if (!located) { setError("Your location has not been found yet, so a photo cannot be stamped."); setViewing(null); return; }
+    replacing.current = photo;
+    camera.current?.click();
   }
 
   async function remove(photo: VisitPhoto) {
@@ -348,7 +380,10 @@ export function VisitPhotos({ visitId, initial, canAdd }: {
         description={`Taken ${new Date(viewing.createdAt).toLocaleString("en-IN")} · removed in ${daysLeft(viewing.expiresAt)} days`}
         onClose={() => setViewing(null)}
         footer={canAdd
-          ? <Button tone="danger" className="w-full" busy={busy} onClick={() => remove(viewing)}><Trash2 size={15} />Remove this photo</Button>
+          ? <div className="grid grid-cols-2 gap-2">
+              <Button tone="secondary" busy={busy} disabled={!located} onClick={() => retake(viewing)}><Camera size={15} />Retake</Button>
+              <Button tone="danger" busy={busy} onClick={() => remove(viewing)}><Trash2 size={15} />Remove</Button>
+            </div>
           : undefined}>
         {/* Unoptimized: these are private, session-guarded bytes that expire in
             thirty days — running them through the image optimiser would cache

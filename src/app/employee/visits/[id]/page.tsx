@@ -10,13 +10,14 @@ import { VisitForm } from "@/components/visits/visit-form";
 import type { PhotoLocation } from "@/components/visits/visit-photos";
 import { stockFor } from "@/lib/samples/ledger";
 import { OBJECT_ID } from "@/lib/api";
+import { toDateInput } from "@/lib/time";
 import type { EditableWindow } from "@/components/doctors/call-schedule-editor";
 
 export const dynamic = "force-dynamic";
 
 type VisitDoc = {
   _id: unknown; employee: unknown; status: string; plannedStart?: string; plannedDate: Date;
-  outcome?: string; interest?: string; notes?: string; orderValue?: number;
+  outcome?: string; interest?: string; notes?: string; orderValue?: number; followUpDate?: Date;
   productsDiscussed?: string[]; samples?: Array<{ product: string; quantity: number }>;
   doctor?: {
     _id: unknown; name?: string; clinicName?: string; area?: string; city?: string; fullAddress?: string;
@@ -62,7 +63,8 @@ export default async function VisitPage({ params }: { params: Promise<{ id: stri
         notes: visit.notes ?? "",
         orderValue: visit.orderValue,
         productsDiscussed: visit.productsDiscussed ?? [],
-        samples: visit.samples ?? []
+        samples: visit.samples ?? [],
+        followUpDate: visit.followUpDate ? toDateInput(visit.followUpDate) : undefined
       }}
       doctor={{
         _id: String(visit.doctor?._id ?? ""),

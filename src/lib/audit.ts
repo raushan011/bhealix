@@ -16,6 +16,7 @@ export const AUDIT_ACTIONS = {
   "visit.checked-in": "Checked in at a clinic",
   "visit.completed": "Completed a visit",
   "visit.missed": "Marked a visit missed",
+  "visit.edited": "Corrected a visit",
   "visit.photo.added": "Attached a photo",
   "visit.photo.deleted": "Removed a photo",
 

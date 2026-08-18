@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Clock, MapPin, Navigation, Package, Phone, Plus, X } from "lucide-react";
+import { Check, Clock, MapPin, Navigation, Package, Pencil, Phone, Plus, X } from "lucide-react";
 import { Badge, Button, Card, Field, Notice } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import { CallScheduleEditor, type EditableWindow } from "@/components/doctors/call-schedule-editor";
+import { DoctorPicker, placeOf, type PickableDoctor } from "@/components/doctors/doctor-picker";
 import { VisitPhotos, type VisitPhoto } from "@/components/visits/visit-photos";
 import { summariseCallSchedule } from "@/lib/doctors/call-schedule";
 import { requestFix } from "@/lib/geo-fix";
@@ -15,7 +16,7 @@ import { INTEREST_LEVELS, VISIT_OUTCOMES } from "@/lib/visits";
 type VisitState = {
   _id: string; status: string; plannedStart?: string; outcome?: string; interest?: string;
   notes: string; orderValue?: number; productsDiscussed: string[];
-  samples: Array<{ product: string; quantity: number }>;
+  samples: Array<{ product: string; quantity: number }>; followUpDate?: string;
 };
 type DoctorState = {
   _id: string; name: string; clinicName?: string; area?: string; city?: string;
@@ -32,14 +33,28 @@ export function VisitForm({ visit, doctor, products, stock = {}, photos = [] }:
   const [samples, setSamples] = useState(visit.samples);
   const [orderValue, setOrderValue] = useState(visit.orderValue?.toString() ?? "");
   const [notes, setNotes] = useState(visit.notes);
-  const [followUp, setFollowUp] = useState("");
+  const [followUp, setFollowUp] = useState(visit.followUpDate ?? "");
   const [callSchedule, setCallSchedule] = useState(doctor.callSchedule);
   const [editingCallTime, setEditingCallTime] = useState(false);
+  /**
+   * The doctor the visit is recorded against, when the rep has changed it. Sent
+   * with the save rather than on its own, so a wrong pick can be undone before
+   * anything is written; `null` means the doctor the visit was opened with.
+   */
+  const [chosenDoctor, setChosenDoctor] = useState<PickableDoctor | null>(null);
+  const [pickingDoctor, setPickingDoctor] = useState(false);
+  /** A closed visit being corrected. The form is the same one that completed it. */
+  const [editing, setEditing] = useState(false);
+  const [saved, setSaved] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [locationNote, setLocationNote] = useState("");
 
   const completed = status === "Completed" || status === "Missed";
+  const shownDoctor = chosenDoctor
+    ? { ...chosenDoctor, phone: chosenDoctor.phones?.[0], coordinates: chosenDoctor.location?.coordinates }
+    : doctor;
+  const doctorChanged = chosenDoctor !== null && chosenDoctor._id !== doctor._id;
 
   async function send(body: Record<string, unknown>) {
     const response = await fetch(`/api/visits/${visit._id}`, {
@@ -73,24 +88,46 @@ export function VisitForm({ visit, doctor, products, stock = {}, photos = [] }:
     } finally { setBusy(false); }
   }
 
+  /** The details as the form holds them — what completing and correcting both send. */
+  const details = () => ({
+    outcome,
+    productsDiscussed: discussed,
+    samples: samples.filter(sample => sample.product && sample.quantity > 0),
+    interest: interest || undefined,
+    orderValue: orderValue ? Number(orderValue) : undefined,
+    notes,
+    followUpDate: followUp || undefined,
+    ...(doctorChanged && chosenDoctor ? { doctor: chosenDoctor._id } : {})
+  });
+
   async function complete() {
     if (!outcome) { setError("Choose what happened at this visit"); return; }
     setBusy(true); setError("");
     try {
-      await send({
-        action: "complete",
-        outcome,
-        productsDiscussed: discussed,
-        samples: samples.filter(sample => sample.product && sample.quantity > 0),
-        interest: interest || undefined,
-        orderValue: orderValue ? Number(orderValue) : undefined,
-        notes,
-        followUpDate: followUp || undefined
-      });
+      await send({ action: "complete", ...details() });
       setStatus("Completed");
       router.refresh();
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Could not save this visit");
+    } finally { setBusy(false); }
+  }
+
+  /**
+   * Saves a correction to a visit already closed. The visit ends up Completed
+   * whatever it was before — a Missed visit corrected with an outcome is one
+   * that happened after all.
+   */
+  async function saveEdit() {
+    if (!outcome) { setError("Choose what happened at this visit"); return; }
+    setBusy(true); setError(""); setSaved("");
+    try {
+      await send({ action: "edit", ...details() });
+      setStatus("Completed");
+      setEditing(false);
+      setSaved("Your changes were saved.");
+      router.refresh();
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : "Could not save your changes");
     } finally { setBusy(false); }
   }
 
@@ -118,8 +155,8 @@ export function VisitForm({ visit, doctor, products, stock = {}, photos = [] }:
     <Card className="p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="truncate text-lg font-semibold">{doctor.name}</h1>
-          <p className="mt-0.5 truncate text-sm text-[var(--muted)]">{[doctor.clinicName, doctor.area, doctor.city].filter(Boolean).join(" · ") || "—"}</p>
+          <h1 className="truncate text-lg font-semibold">{shownDoctor.name}</h1>
+          <p className="mt-0.5 truncate text-sm text-[var(--muted)]">{[shownDoctor.clinicName, shownDoctor.area, shownDoctor.city].filter(Boolean).join(" · ") || "—"}</p>
         </div>
         <Badge tone={status === "Completed" ? "success" : status === "Missed" ? "danger" : status === "In progress" ? "info" : "neutral"}>{status}</Badge>
       </div>
@@ -129,16 +166,33 @@ export function VisitForm({ visit, doctor, products, stock = {}, photos = [] }:
           <Clock size={14} />Planned for {toDisplayTime(visit.plannedStart)}
         </p>
       )}
-      {doctor.fullAddress && (
+      {shownDoctor.fullAddress && (
         <p className="mt-1.5 flex items-start gap-1.5 text-sm text-[var(--ink-2)]">
-          <MapPin size={14} className="mt-0.5 shrink-0 text-[var(--muted)]" />{doctor.fullAddress}
+          <MapPin size={14} className="mt-0.5 shrink-0 text-[var(--muted)]" />{shownDoctor.fullAddress}
         </p>
       )}
 
+      {/* The doctor can be corrected once the rep is at the clinic — the wrong
+          name picked from a list of similar ones, or the practice next door.
+          It is written with the save, so it can still be undone until then. */}
+      {status !== "Planned" && (!completed || editing) && (
+        <div className="mt-3 flex items-center justify-between gap-2 rounded-[10px] bg-[var(--surface-2)] px-3 py-2">
+          <p className="min-w-0 text-xs text-[var(--muted)]">
+            {doctorChanged
+              ? <>Changed from <span className="font-semibold text-[var(--ink-2)]">{doctor.name}</span> — saved with the visit.</>
+              : "Not the doctor you saw?"}
+          </p>
+          <div className="flex shrink-0 items-center gap-2">
+            {doctorChanged && <button type="button" onClick={() => setChosenDoctor(null)} className="text-xs font-semibold text-[var(--muted)] underline">Undo</button>}
+            <button type="button" onClick={() => setPickingDoctor(true)} className="text-xs font-semibold text-[var(--brand)]">Change doctor</button>
+          </div>
+        </div>
+      )}
+
       <div className="mt-3 flex gap-2">
-        {doctor.phone && <a href={`tel:${doctor.phone}`} className="tap flex flex-1 items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] text-sm font-semibold"><Phone size={15} />Call</a>}
-        {doctor.coordinates?.length === 2 && (
-          <a href={`https://www.google.com/maps/dir/?api=1&destination=${doctor.coordinates[1]},${doctor.coordinates[0]}`}
+        {shownDoctor.phone && <a href={`tel:${shownDoctor.phone}`} className="tap flex flex-1 items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] text-sm font-semibold"><Phone size={15} />Call</a>}
+        {shownDoctor.coordinates?.length === 2 && (
+          <a href={`https://www.google.com/maps/dir/?api=1&destination=${shownDoctor.coordinates[1]},${shownDoctor.coordinates[0]}`}
             target="_blank" rel="noreferrer" className="tap flex flex-1 items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] text-sm font-semibold">
             <Navigation size={15} />Directions
           </a>
@@ -169,9 +223,11 @@ export function VisitForm({ visit, doctor, products, stock = {}, photos = [] }:
         Before check-in there is nothing to photograph, so the card is hidden. */}
     {status !== "Planned" && <VisitPhotos visitId={visit._id} initial={photos} canAdd />}
 
-    {!completed && status !== "Planned" && <>
+    {saved && !editing && <Notice tone="success">{saved}</Notice>}
+
+    {((!completed && status !== "Planned") || editing) && <>
       <Card className="space-y-4 p-4">
-        <h2 className="text-[15px] font-semibold">What happened?</h2>
+        <h2 className="text-[15px] font-semibold">{editing ? "Correct what happened" : "What happened?"}</h2>
 
         <div>
           <p className="mb-2 text-[13px] font-medium text-[var(--ink-2)]">Outcome</p>
@@ -258,19 +314,56 @@ export function VisitForm({ visit, doctor, products, stock = {}, photos = [] }:
 
       {error && <Notice tone="error">{error}</Notice>}
 
-      <div className="flex gap-2">
-        <Button onClick={complete} busy={busy} className="flex-1"><Check size={16} />Complete visit</Button>
-        <Button tone="danger" onClick={markMissed} disabled={busy}>Missed</Button>
-      </div>
+      {editing ? (
+        <div className="flex gap-2">
+          <Button onClick={saveEdit} busy={busy} className="flex-1"><Check size={16} />Save changes</Button>
+          <Button tone="secondary" onClick={() => { setEditing(false); setChosenDoctor(null); setError(""); }} disabled={busy}>Cancel</Button>
+        </div>
+      ) : (
+        <div className="flex gap-2">
+          <Button onClick={complete} busy={busy} className="flex-1"><Check size={16} />Complete visit</Button>
+          <Button tone="danger" onClick={markMissed} disabled={busy}>Missed</Button>
+        </div>
+      )}
     </>}
 
-    {completed && (
+    {completed && !editing && (
       <Card className="p-6 text-center">
         <span className="mx-auto grid size-12 place-items-center rounded-full bg-[var(--ok-bg)] text-[var(--ok-ink)]"><Check size={24} /></span>
         <p className="mt-3 font-semibold">Visit {status.toLowerCase()}</p>
         <p className="mt-1 text-sm text-[var(--muted)]">Your administrator can see this in the visit report.</p>
-        <div className="mt-4 flex justify-center"><Button tone="secondary" onClick={() => router.push("/employee")}>Back to today</Button></div>
+        {status === "Completed" && (
+          <dl className="mx-auto mt-3 max-w-sm space-y-1 text-left text-sm">
+            {outcome && <div className="flex justify-between gap-3"><dt className="text-[var(--muted)]">Outcome</dt><dd className="font-medium">{outcome}</dd></div>}
+            {interest && <div className="flex justify-between gap-3"><dt className="text-[var(--muted)]">Interest</dt><dd className="font-medium">{interest}</dd></div>}
+            {discussed.length > 0 && <div className="flex justify-between gap-3"><dt className="text-[var(--muted)]">Discussed</dt><dd className="text-right font-medium">{discussed.join(", ")}</dd></div>}
+            {samples.length > 0 && <div className="flex justify-between gap-3"><dt className="text-[var(--muted)]">Samples</dt><dd className="text-right font-medium">{samples.map(sample => `${sample.product} × ${sample.quantity}`).join(", ")}</dd></div>}
+            {orderValue && <div className="flex justify-between gap-3"><dt className="text-[var(--muted)]">Order</dt><dd className="font-medium">₹{Number(orderValue).toLocaleString("en-IN")}</dd></div>}
+            {followUp && <div className="flex justify-between gap-3"><dt className="text-[var(--muted)]">Follow-up</dt><dd className="font-medium">{followUp}</dd></div>}
+            {notes && <div className="flex justify-between gap-3"><dt className="text-[var(--muted)]">Notes</dt><dd className="text-right font-medium">{notes}</dd></div>}
+          </dl>
+        )}
+        <div className="mt-4 flex justify-center gap-2">
+          <Button tone="secondary" onClick={() => router.push("/employee")}>Back to today</Button>
+          {/* A rep who ticked the wrong outcome, left off a sample or wants to
+              add to the note can put it right themselves; the photos above
+              can be retaken at any time. */}
+          <Button onClick={() => { setEditing(true); setSaved(""); setError(""); }}><Pencil size={15} />Edit visit</Button>
+        </div>
       </Card>
+    )}
+
+    {pickingDoctor && (
+      <Modal title="Change the doctor" description="Who did you actually see?" onClose={() => setPickingDoctor(false)}>
+        <div className="space-y-3">
+          <DoctorPicker requireLocation={false} placeholder="Search by name, clinic or area"
+            onSelect={picked => { setChosenDoctor(picked._id === doctor._id ? null : picked); setPickingDoctor(false); }} />
+          <p className="text-xs text-[var(--muted)]">
+            Currently recorded against <span className="font-semibold">{doctor.name}</span> · {placeOf(doctor)}.
+            The photos and samples on this visit move with it.
+          </p>
+        </div>
+      </Modal>
     )}
 
     {editingCallTime && (

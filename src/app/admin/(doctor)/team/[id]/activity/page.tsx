@@ -348,7 +348,8 @@ function describe(event: AuditRow) {
   switch (event.action) {
     case "doctor.created": return [name, meta.city].filter(Boolean).join(" · ");
     case "doctor.call-schedule.updated": return name;
-    case "visit.completed": {
+    case "visit.completed":
+    case "visit.edited": {
       const parts = [meta.outcome, meta.interest].filter(Boolean) as string[];
       if (meta.samples) parts.push(`${meta.samples} samples`);
       if (meta.orderValue) parts.push(`₹${Number(meta.orderValue).toLocaleString("en-IN")}`);
