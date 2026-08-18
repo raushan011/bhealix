@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { DELIVERY_STATES, type DeliveryState } from "./constants";
 import { REMARK_CHANNELS, whatsappNumber } from "./leads";
-import type { MappedOrder } from "./shopify";
+import type { MappedOrder, ShopifyFulfillment } from "./shopify";
 
 /**
  * Ringing every customer the shop has ever had.
@@ -81,6 +81,44 @@ export function fulfilmentStateOf(status: string | null | undefined): Fulfilment
     case "partial": return "Partial";
     default: return "Unfulfilled";
   }
+}
+
+/**
+ * What the shop itself knows about the parcel, reduced to our delivery states.
+ *
+ * Shopify's `shipment_status` is written back by the shipping app, so for most
+ * orders it says the same thing Shiprocket would — and it is there for every
+ * order, however old, where the Shiprocket feed is only ever pulled for a
+ * recent window. Used when Shiprocket has not spoken; a courier's own report,
+ * when there is one, still wins.
+ *
+ * A cancelled fulfilment is skipped, and the newest live one is read, because
+ * an order re-shipped after a failed attempt has two and the second is the one
+ * that matters.
+ */
+export function deliveryFromShopify(fulfillments: ShopifyFulfillment[] | undefined | null):
+  { state: DeliveryState; status: string; courier?: string; awb?: string; at?: Date } | null {
+  const live = (fulfillments ?? [])
+    .filter(entry => (entry.status ?? "").toLowerCase() !== "cancelled" && entry.shipment_status)
+    .sort((a, b) => new Date(b.updated_at ?? b.created_at ?? 0).getTime() - new Date(a.updated_at ?? a.created_at ?? 0).getTime());
+  const latest = live[0];
+  if (!latest?.shipment_status) return null;
+
+  const status = latest.shipment_status.toLowerCase();
+  const state: DeliveryState | null =
+    status === "delivered" ? "Delivered"
+    : status === "attempted_delivery" || status === "failure" ? "Undelivered"
+    : ["in_transit", "out_for_delivery", "confirmed", "ready_for_pickup", "label_printed", "label_purchased"].includes(status) ? "In transit"
+    : null;
+  if (!state) return null;
+
+  return {
+    state,
+    status: latest.shipment_status,
+    courier: latest.tracking_company ?? undefined,
+    awb: latest.tracking_number ?? undefined,
+    at: latest.updated_at ? new Date(latest.updated_at) : undefined
+  };
 }
 
 /** One Shopify order, as the retargeting row stores it. */

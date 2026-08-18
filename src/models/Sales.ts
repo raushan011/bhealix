@@ -460,7 +460,14 @@ const SalesShopOrderSchema = new Schema({
     courier: String,
     awb: String,
     deliveredAt: Date,
-    checkedAt: Date
+    checkedAt: Date,
+    /**
+     * Who said so. Shopify's own fulfilment status is read for every order,
+     * however old; the courier's feed only for a recent window — and where
+     * both have spoken, the courier's word is kept and the shop's is not
+     * written over it.
+     */
+    source: { type: String, enum: ["Shopify", "Shiprocket"] }
   },
 
   /** The calling desk's half of the row. */

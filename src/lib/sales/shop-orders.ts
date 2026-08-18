@@ -1,7 +1,7 @@
 import { SalesOrder, SalesShopOrder } from "@/models/Sales";
 import { attributeOrder } from "./coupons";
 import { deliveryStateFrom } from "./delivery";
-import { shopOrderFrom } from "./retarget";
+import { deliveryFromShopify, shopOrderFrom } from "./retarget";
 import type { ShipmentUpdate } from "./shiprocket";
 import { matchKey, matchKeysFor } from "./shiprocket";
 import { codesOn, mapOrder, mergeCustomer, type ShopifyOrder } from "./shopify";
@@ -34,8 +34,8 @@ export async function recordShopOrders(
 
   const ids = orders.map(order => String(order.id));
   const existing = new Map(
-    (await SalesShopOrder.find({ shopifyOrderId: { $in: ids } }).select("shopifyOrderId customer").lean() as unknown as
-      { shopifyOrderId: string; customer?: Record<string, string | undefined> }[])
+    (await SalesShopOrder.find({ shopifyOrderId: { $in: ids } }).select("shopifyOrderId customer delivery.source").lean() as unknown as
+      { shopifyOrderId: string; customer?: Record<string, string | undefined>; delivery?: { source?: string } }[])
       .map(row => [row.shopifyOrderId, row])
   );
 
@@ -78,14 +78,26 @@ export async function recordShopOrders(
     };
 
     // The attributed record already knows what the courier said; copy it so
-    // the two screens never disagree about the same parcel.
-    if (linked?.delivery?.state) {
+    // the two screens never disagree about the same parcel. Failing that, the
+    // shop's own word on the parcel — but never over a courier report already
+    // on the row, which is the more direct source.
+    const shopify = deliveryFromShopify(raw.fulfillments);
+    if (linked?.delivery?.state && linked.delivery.state !== "Awaiting") {
       set["delivery.state"] = linked.delivery.state;
       set["delivery.status"] = linked.shipment?.status;
       set["delivery.courier"] = linked.shipment?.courier;
       set["delivery.awb"] = linked.shipment?.awb;
       set["delivery.deliveredAt"] = linked.shipment?.deliveredAt;
       set["delivery.checkedAt"] = linked.shipment?.checkedAt;
+      set["delivery.source"] = "Shiprocket";
+    } else if (shopify && before?.delivery?.source !== "Shiprocket") {
+      set["delivery.state"] = shopify.state;
+      set["delivery.status"] = shopify.status;
+      set["delivery.courier"] = shopify.courier;
+      set["delivery.awb"] = shopify.awb;
+      set["delivery.deliveredAt"] = shopify.state === "Delivered" ? shopify.at : undefined;
+      set["delivery.checkedAt"] = now;
+      set["delivery.source"] = "Shopify";
     }
 
     return {
@@ -152,7 +164,8 @@ export async function applyShipmentsToShopOrders(updates: ShipmentUpdate[], from
           "delivery.courier": update.courier,
           "delivery.awb": update.awb,
           "delivery.deliveredAt": update.deliveredAt,
-          "delivery.checkedAt": new Date()
+          "delivery.checkedAt": new Date(),
+          "delivery.source": "Shiprocket"
         } }
       }
     });

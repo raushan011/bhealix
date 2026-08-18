@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { customerKeyOf, fulfilmentStateOf, shopOrderFilter, shopOrderSort } from "./retarget";
+import { customerKeyOf, deliveryFromShopify, fulfilmentStateOf, shopOrderFilter, shopOrderSort } from "./retarget";
 
 /**
  * The calling list's cutting tools. Tested because every filter reaches a
@@ -75,5 +75,28 @@ describe("shopOrderSort", () => {
     expect(shopOrderSort(null)).toEqual({ placedAt: -1, _id: -1 });
     expect(shopOrderSort("nonsense")).toEqual({ placedAt: -1, _id: -1 });
     expect(shopOrderSort("followUp")).toEqual({ "retarget.nextFollowUpAt": 1, placedAt: -1 });
+  });
+});
+
+describe("deliveryFromShopify", () => {
+  it("reads the courier's word as the shop heard it", () => {
+    expect(deliveryFromShopify([{ shipment_status: "delivered", tracking_company: "Delhivery", tracking_number: "AWB1", updated_at: "2026-08-12T10:00:00Z" }]))
+      .toMatchObject({ state: "Delivered", courier: "Delhivery", awb: "AWB1" });
+    expect(deliveryFromShopify([{ shipment_status: "in_transit" }])?.state).toBe("In transit");
+    expect(deliveryFromShopify([{ shipment_status: "attempted_delivery" }])?.state).toBe("Undelivered");
+  });
+
+  it("says nothing when the shop has nothing to say", () => {
+    expect(deliveryFromShopify(undefined)).toBeNull();
+    expect(deliveryFromShopify([{ status: "success", shipment_status: null }])).toBeNull();
+    expect(deliveryFromShopify([{ status: "cancelled", shipment_status: "delivered" }])).toBeNull();
+  });
+
+  it("reads the newest live fulfilment when a parcel was sent twice", () => {
+    const state = deliveryFromShopify([
+      { shipment_status: "failure", updated_at: "2026-08-01T10:00:00Z" },
+      { shipment_status: "delivered", updated_at: "2026-08-09T10:00:00Z" }
+    ])?.state;
+    expect(state).toBe("Delivered");
   });
 });

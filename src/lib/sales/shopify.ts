@@ -123,6 +123,22 @@ export type ShopifyOrder = {
   discount_applications?: ShopifyDiscountApplication[];
   line_items?: ShopifyLineItem[];
   refunds?: ShopifyRefund[];
+  /**
+   * The parcels, with the courier's last word on each as the shop heard it —
+   * `shipment_status` is "delivered", "in_transit", "attempted_delivery" and so
+   * on, written back by whatever shipping app fulfilled the order. The only
+   * delivery fact available for an order Shiprocket was never asked about.
+   */
+  fulfillments?: ShopifyFulfillment[];
+};
+
+export type ShopifyFulfillment = {
+  status?: string | null;
+  shipment_status?: string | null;
+  tracking_company?: string | null;
+  tracking_number?: string | null;
+  created_at?: string;
+  updated_at?: string;
 };
 
 // ------------------------------------------------------------------- fetching
