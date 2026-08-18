@@ -152,7 +152,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
      * directory and inventory. Left to `manageEmployees` alone, an HR user
      * could set their own row to Administrator and take all of it.
      */
-    if (value.role !== undefined && value.role !== target.role && auth.session.role !== "ADMIN") {
+    if (value.role !== undefined && value.role !== target.role && !can.assignRoles(auth.session.role)) {
       return badRequest("Only an administrator can change somebody's role", 403);
     }
 

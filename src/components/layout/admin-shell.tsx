@@ -64,7 +64,8 @@ const NAV = [
   { href: "/admin/control", label: "Overview", icon: LayoutDashboard, roles: ["SUPERADMIN"], group: "", workspace: "control" },
   { href: "/admin/control/invoices", label: "Invoice vault", icon: FileArchive, roles: ["SUPERADMIN"], group: "Accounts", workspace: "control" },
   { href: "/admin/control/connections", label: "Connections", icon: Plug, roles: ["SUPERADMIN"], group: "Accounts", workspace: "control" },
-  { href: "/admin/control/access", label: "Panel access", icon: KeyRound, roles: ["SUPERADMIN"], group: "Control", workspace: "control" }
+  { href: "/admin/control/access", label: "Panel access", icon: KeyRound, roles: ["SUPERADMIN"], group: "Control", workspace: "control" },
+  { href: "/admin/control/users", label: "Users", icon: Users, roles: ["SUPERADMIN"], group: "Control", workspace: "control" }
 ] as const;
 
 /**

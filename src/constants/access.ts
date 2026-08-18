@@ -85,6 +85,13 @@ export const can = {
   manageDoctors: (role: Role) => admin(role),
   manageEmployees: (role: Role) => admin(role) || role === "HR",
   /**
+   * Deciding who somebody *is* — their role — as opposed to keeping their
+   * employment record. HR keeps the record; a role is authority over billing,
+   * the doctor directory and inventory, so it is the administrator's, and the
+   * super administrator's above them.
+   */
+  assignRoles: (role: Role) => admin(role),
+  /**
    * Building a plan for somebody else, and assigning it. A rep plans their own
    * day under `planOwnRoute` — that is a different thing and needs no authority
    * over anyone.
