@@ -108,7 +108,10 @@ export async function GET(request: Request) {
     const sort: Record<string, 1 | -1> = params.get("sort") === "oldest" ? { placedAt: 1 } : { placedAt: -1 };
 
     const [items, total, summary, couriers] = await Promise.all([
-      SalesOrder.find(where).sort(sort).skip(skip).limit(limit).populate("rep", "name code").lean(),
+      SalesOrder.find(where).sort(sort).skip(skip).limit(limit)
+        .populate("rep", "name code phone payMethod upiId bankName bankAccountName bankAccountNo bankIfsc")
+        .populate("commission.payment.paidBy", "name")
+        .lean(),
       SalesOrder.countDocuments(where),
       // The summary covers the whole filtered set, not the page on screen —
       // the same contract the invoice list has.
@@ -128,7 +131,8 @@ export async function GET(request: Request) {
       page,
       pages: Math.max(1, Math.ceil(total / limit)),
       summary: { revenue: Math.round(summary[0]?.revenue ?? 0), commission: Math.round(summary[0]?.commission ?? 0) },
-      couriers: (couriers as string[]).sort()
+      couriers: (couriers as string[]).sort(),
+      mayPay: can.paySalesCommission(auth.session.role)
     });
   } catch (error) {
     return fail(error);

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { Types } from "mongoose";
 import { connectDb } from "@/lib/db/mongoose";
-import { SalesOrder, SalesPayoutLine, SalesRep } from "@/models/Sales";
+import { SalesOrder, SalesRep } from "@/models/Sales";
 import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
@@ -46,13 +46,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     if (!rep) return badRequest("No such partner", 404);
 
     const repId = new Types.ObjectId(id);
-    const [summary, orders, orderCount, payoutLines] = await Promise.all([
+    const [summary, orders, orderCount, paidOrders] = await Promise.all([
       repSummary(id),
-      SalesOrder.find({ rep: repId }).sort({ placedAt: -1 }).limit(200).lean(),
+      SalesOrder.find({ rep: repId }).sort({ placedAt: -1 }).limit(200)
+        .populate("commission.payment.paidBy", "name").lean(),
       // The list above is capped at 200; deleting somebody has to warn about all
       // of them, so the true count is asked for separately.
       SalesOrder.countDocuments({ rep: repId }),
-      SalesPayoutLine.countDocuments({ rep: repId })
+      SalesOrder.countDocuments({ rep: repId, "commission.status": "Paid" })
     ]);
 
     const { passwordHash, ...safe } = rep;
@@ -61,7 +62,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       summary,
       orders,
       /** What a permanent delete would touch — read by the confirmation screen. */
-      attached: { orders: orderCount, payoutLines }
+      attached: { orders: orderCount, paidOrders },
+      mayPay: can.paySalesCommission(auth.session.role)
     });
   } catch (error) {
     return fail(error);
@@ -135,19 +137,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
  *
  * **What a permanent delete must never do is quietly damage the books**, and
  * that is what the snapshotting below is for. A deleted partner leaves behind
- * orders that reference them and payout lines that paid them:
- *
- *   - **Payout lines already survive**, by design. Each one copies the
- *     partner's name, code and payment details onto itself when the run is
- *     generated (§4.5), precisely so an advice can be read years later without
- *     the record it was made from. Nothing to do.
- *   - **Orders do not**, so their partner is written onto them here before the
- *     record goes. Without it, a year of revenue would read as having been
- *     brought in by nobody, and the coupon column would be the only clue left.
+ * the orders that reference them — including the ones whose commission has
+ * been paid — so their name and code are written onto every order before the
+ * record goes. Without it, a year of revenue would read as having been brought
+ * in by nobody, a payment already made would no longer say who it went to, and
+ * the coupon column would be the only clue left.
  *
  * The commission figures on those orders are untouched. What was earned was
- * earned, and a payout run that has already paid it is evidence of a payment
- * that really happened — deleting the person does not unmake either.
+ * earned, and a payment already recorded is evidence of money that really
+ * moved — deleting the person does not unmake either.
  */
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -163,9 +161,9 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     const rep = await SalesRep.findById(id);
     if (!rep) return badRequest("No such partner", 404);
 
-    const [orders, payoutLines] = await Promise.all([
+    const [orders, paidOrders] = await Promise.all([
       SalesOrder.countDocuments({ rep: rep._id }),
-      SalesPayoutLine.countDocuments({ rep: rep._id })
+      SalesOrder.countDocuments({ rep: rep._id, "commission.status": "Paid" })
     ]);
 
     if (!permanent && orders) {
@@ -215,13 +213,13 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       await record({
         actor: auth.session.userId, action: "sales.rep.deleted",
         entityType: "SalesRep", entityId: id,
-        metadata: { code: rep.code, name: rep.name, orders, payoutLines, permanent: true }
+        metadata: { code: rep.code, name: rep.name, orders, paidOrders, permanent: true }
       });
 
       return ok({
-        deleted: true, orders, payoutLines,
+        deleted: true, orders, paidOrders,
         message: orders
-          ? `${rep.name} has been deleted. Their ${orders} order${orders === 1 ? "" : "s"} ${orders === 1 ? "keeps" : "keep"} their name and coupon code so the revenue still reads correctly, and any payout advice already issued is unchanged.`
+          ? `${rep.name} has been deleted. Their ${orders} order${orders === 1 ? "" : "s"} ${orders === 1 ? "keeps" : "keep"} their name and coupon code so the revenue still reads correctly, and any commission already paid is unchanged.`
           : `${rep.name} has been deleted.`
       });
     }

@@ -6,20 +6,17 @@ import { Badge, Button, Card, Field, Notice, PageTitle, Spinner } from "@/compon
 import { PasswordInput } from "@/components/ui/password-input";
 import { AutomationPanel } from "@/components/sales/automation-panel";
 import { COMMISSION_BASES, CUSTOMER_DISCOUNT_TYPES } from "@/lib/sales/constants";
-import { weekdayName } from "@/lib/sales/payouts";
 import type { CommissionRule } from "@/lib/sales/commission";
 import type { SalesSettingsRecord } from "@/lib/sales/types";
 
-const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6];
-
 /**
- * Credentials, commission rates and the payout cadence.
+ * Credentials, commission rates and how far back the sync reaches.
  *
  * The two secrets are never sent back to the browser — the form shows whether
  * one is stored and lets it be replaced, which is everything anybody needs and
  * rather less than a page that echoes a Shopify admin token into its own HTML.
  *
- * Saving a changed rate re-prices every commission no run has claimed, and says
+ * Saving a changed rate re-prices every commission not yet paid, and says
  * how many. A rate change that only took effect on the next sync is the kind of
  * thing discovered a week later, in somebody's payout.
  */
@@ -43,8 +40,6 @@ export default function SalesSettingsPage() {
   const [shiprocketEmail, setShiprocketEmail] = useState("");
   const [shiprocketPassword, setShiprocketPassword] = useState("");
   const [rules, setRules] = useState<CommissionRule[]>([]);
-  const [holdDays, setHoldDays] = useState(7);
-  const [payoutWeekday, setPayoutWeekday] = useState(1);
   const [backfillDays, setBackfillDays] = useState(90);
 
   const load = useCallback(async () => {
@@ -62,8 +57,6 @@ export default function SalesSettingsPage() {
       setShopifyClientId(data.shopifyClientId ?? "");
       setShiprocketEmail(data.shiprocketEmail ?? "");
       setRules(data.rules ?? []);
-      setHoldDays(data.holdDays ?? 7);
-      setPayoutWeekday(data.payoutWeekday ?? 1);
       setBackfillDays(data.backfillDays ?? 90);
     }
     setLoading(false);
@@ -121,7 +114,7 @@ export default function SalesSettingsPage() {
           shopifyAccessToken: shopifyAccessToken || undefined,
           shiprocketEmail,
           shiprocketPassword: shiprocketPassword || undefined,
-          rules, holdDays, payoutWeekday, backfillDays
+          rules, backfillDays
         })
       });
       const json = await response.json() as { error?: string; data?: { recalculated: number } };
@@ -145,7 +138,7 @@ export default function SalesSettingsPage() {
     setNotice({
       tone: "success",
       text: result.recalculated
-        ? `Saved. ${result.recalculated} commission${result.recalculated === 1 ? " was" : "s were"} re-priced — anything already on a payout run keeps the figure that run committed to.`
+        ? `Saved. ${result.recalculated} commission${result.recalculated === 1 ? " was" : "s were"} re-priced — anything already paid keeps the figure it was paid at.`
         : "Saved."
     });
     load();
@@ -419,25 +412,16 @@ export default function SalesSettingsPage() {
     </Card>
 
     <Card className="space-y-4 p-5">
-      <h2 className="text-base font-semibold">Payouts</h2>
+      <h2 className="text-base font-semibold">Sync</h2>
       <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="Hold after delivery" hint="Days before a delivered order's commission may be paid.">
-          <input className="input" type="number" min={0} max={90} value={holdDays}
-            onChange={event => setHoldDays(Number(event.target.value))} />
-        </Field>
-        <Field label="Payout day" hint="Only a reminder — a run is always prepared by hand.">
-          <select className="select" value={payoutWeekday} onChange={event => setPayoutWeekday(Number(event.target.value))}>
-            {WEEKDAYS.map(day => <option key={day} value={day}>{weekdayName(day)}</option>)}
-          </select>
-        </Field>
         <Field label="First sync reaches back" hint="Days, when nothing has been pulled before.">
           <input className="input" type="number" min={1} max={730} value={backfillDays}
             onChange={event => setBackfillDays(Number(event.target.value))} />
         </Field>
       </div>
       <Notice tone="info">
-        A delivered order becomes payable {holdDays} days later, which is the window a customer has to send it back.
-        Shortening it pays reps sooner and makes a return more likely to land after the money has gone.
+        Commission is owed the moment a parcel is delivered. It is paid one order at a time from the Payouts screen,
+        where each delivered order carries a Pay button — there is no hold and no batch to prepare.
       </Notice>
     </Card>
 

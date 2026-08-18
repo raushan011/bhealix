@@ -19,14 +19,15 @@ type Payload = {
   summary: RepSummary | null;
   orders: SalesOrderRecord[];
   /** What a permanent delete would touch. Counted server-side, not from the capped order list. */
-  attached?: { orders: number; payoutLines: number };
+  attached?: { orders: number; paidOrders: number };
+  mayPay?: boolean;
 };
 
 /**
  * One rep: their codes, their orders and every rupee they have earned, split by
  * where it stands.
  *
- * The five earnings figures are the answer to the question a rep actually asks —
+ * The four earnings figures are the answer to the question a rep actually asks —
  * "how much am I getting and when" — so they are shown together rather than
  * rolled into one total that hides a parcel still in transit.
  */
@@ -86,7 +87,7 @@ export default function SalesRepPage({ params }: { params: Promise<{ id: string 
   const { rep, summary, orders } = data;
   const earned = summary?.earned;
   const status = repStatusOf(rep);
-  const attached = data.attached ?? { orders: orders.length, payoutLines: 0 };
+  const attached = data.attached ?? { orders: orders.length, paidOrders: 0 };
   const unset = (rep.coupons ?? []).filter(coupon => couponSetupOf(coupon) !== "Live" && coupon.active);
 
   return <div className="space-y-5">
@@ -155,9 +156,9 @@ export default function SalesRepPage({ params }: { params: Promise<{ id: string 
     {/*
       * Everything on record, unabbreviated.
       *
-      * The bank account is shown in full here, where a payout advice shows only
-      * its last four. The two audiences are different: an advice is a document
-      * that gets forwarded and printed, and this is the screen belonging to the
+      * The bank account is shown in full here, where the payments list shows
+      * only its last four. The two audiences are different: a list is glanced
+      * at and left open, and this is the screen belonging to the
       * person who has to check the number before releasing money to it. A
       * masked account number they cannot verify is worse than useless.
       */}
@@ -227,17 +228,16 @@ export default function SalesRepPage({ params }: { params: Promise<{ id: string 
       <Stat label="Revenue" value={formatRupees(summary?.revenue ?? 0)} />
     </Card>
 
-    <Card className="grid grid-cols-2 gap-5 p-5 lg:grid-cols-5">
+    <Card className="grid grid-cols-2 gap-5 p-5 lg:grid-cols-4">
       <Stat label="Awaiting delivery" value={formatRupees(earned?.Pending ?? 0)} />
-      <Stat label="Maturing" value={formatRupees(earned?.Maturing ?? 0)} />
-      <Stat label="Payable" value={formatRupees(earned?.Payable ?? 0)} tone="text-[var(--ok-ink)]" />
-      <Stat label="On a run" value={formatRupees(earned?.["In payout"] ?? 0)} />
+      <Stat label="To pay now" value={formatRupees(earned?.Payable ?? 0)} tone={earned?.Payable ? "text-[var(--ok-ink)]" : undefined} />
       <Stat label="Paid" value={formatRupees(earned?.Paid ?? 0)} />
+      <Stat label="Earned nothing" value={formatRupees(earned?.Void ?? 0)} />
     </Card>
 
     <div>
       <h2 className="mb-2 text-base font-semibold">Orders</h2>
-      <OrderList orders={orders} mayOverride showRep={false} onChanged={load} />
+      <OrderList orders={orders} mayOverride mayPay={data.mayPay ?? false} showRep={false} onChanged={load} />
     </div>
 
     {/*
@@ -248,7 +248,7 @@ export default function SalesRepPage({ params }: { params: Promise<{ id: string 
       <p className="text-xs font-semibold uppercase tracking-wider text-[var(--danger-ink)]">Delete this partner</p>
       <p className="mt-2 text-sm text-[var(--ink-2)]">
         Removes the record altogether. Their {attached.orders} order{attached.orders === 1 ? "" : "s"} keep their name and
-        coupon code so the revenue still reads correctly, and any payout advice already issued is unchanged.
+        coupon code so the revenue still reads correctly, and any commission already paid is unchanged.
       </p>
       <div className="mt-3">
         <Button tone="danger" onClick={() => setDeleting(true)}><Trash2 size={16} />Delete permanently</Button>
@@ -374,7 +374,7 @@ function ResetPassword({ rep, onClose, onDone }: {
  */
 function DeletePartner({ rep, attached, onClose, onDeleted }: {
   rep: SalesRepRecord;
-  attached: { orders: number; payoutLines: number };
+  attached: { orders: number; paidOrders: number };
   onClose: () => void;
   onDeleted: () => void;
 }) {
@@ -408,7 +408,7 @@ function DeletePartner({ rep, attached, onClose, onDeleted }: {
         <p>
           <strong>What stays:</strong> their {attached.orders} order{attached.orders === 1 ? "" : "s"}, which keep their
           name and coupon code so the revenue still reads correctly
-          {attached.payoutLines > 0 && <> — and {attached.payoutLines} payout advice{attached.payoutLines === 1 ? "" : "s"}, which already carry their details and are unchanged</>}.
+          {attached.paidOrders > 0 && <> — including {attached.paidOrders} whose commission has been paid, which stay on the record as paid</>}.
         </p>
       </div>
 

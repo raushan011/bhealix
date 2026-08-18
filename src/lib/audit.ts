@@ -46,7 +46,7 @@ export const AUDIT_ACTIONS = {
    * The affiliate scheme. A coupon code decides whose commission an order
    * becomes, and a delivery override decides whether it pays at all — both are
    * ways to direct money at a person without raising an invoice, so both leave
-   * a line. The payout run's own lifecycle follows payroll's for the same reason.
+   * a line. So does paying a commission, which is money leaving the company.
    */
   "sales.rep.created": "Added a sales rep",
   "sales.rep.updated": "Updated a sales rep",
@@ -90,12 +90,8 @@ export const AUDIT_ACTIONS = {
   "sales.orders.processed": "Booked orders with the courier",
   "sales.synced": "Pulled orders and delivery status",
   "sales.settings.updated": "Changed the affiliate settings",
-  "sales.payout.generated": "Prepared an affiliate payout run",
-  "sales.payout.adjusted": "Adjusted a rep's payout line",
-  "sales.payout.approved": "Approved an affiliate payout run",
-  "sales.payout.reopened": "Reopened an affiliate payout run",
-  "sales.payout.paid": "Marked an affiliate payout paid",
-  "sales.payout.deleted": "Deleted a draft affiliate payout run",
+  "sales.commission.paid": "Paid a partner's commission on an order",
+  "sales.commission.unpaid": "Took back a commission payment marked in error",
 
   /**
    * Lead prospecting. Searching Google is billed and saving writes a batch, so

@@ -1,17 +1,15 @@
 import { Schema, model, models } from "mongoose";
 import {
   COMMISSION_BASES, COMMISSION_STATUSES, COURIER_RULES, CUSTOMER_DISCOUNT_TYPES, DEFAULT_BACKFILL_DAYS,
-  DEFAULT_HOLD_DAYS, DELIVERY_STATES, ORDER_SOURCES, PAYOUT_MODES, PAYOUT_STATUSES
+  DELIVERY_STATES, ORDER_SOURCES, PAYOUT_MODES
 } from "@/lib/sales/constants";
 import { DEFAULT_RULES } from "@/lib/sales/commission";
 import { LEAD_SOURCES, LEAD_STATUSES, REMARK_CHANNELS } from "@/lib/sales/leads";
 import { COUPON_SETUP_STATES, REP_STATUSES } from "@/lib/sales/partners";
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
 /**
  * The affiliate side of the business: the people who sell on commission, the
- * orders their coupons brought in, and the runs that pay them.
+ * orders their coupons brought in, and what each order paid them.
  *
  * Deliberately a separate world from `User` and `Invoice`. A sales affiliate is
  * not an employee — there is no attendance, no payslip and no salary structure
@@ -84,8 +82,8 @@ const SalesRepSchema = new Schema({
    * a salary through payroll, work the doctor round from `/employee`, and have
    * nothing to do with coupons. A **sales partner** is an outsider who sells
    * online with a discount code and takes a share of what arrives: no employee
-   * id, no attendance, no payslip, their own portal at `/partner`, and paid by a
-   * commission run rather than a payroll month.
+   * id, no attendance, no payslip, their own portal at `/partner`, and paid a
+   * commission per delivered order rather than a salary per month.
    *
    * Somebody could of course be both, in the way an employee could also be a
    * customer. They would then have two records, because they are two
@@ -122,7 +120,7 @@ const SalesRepSchema = new Schema({
   selfRegistered: { type: Boolean, default: false },
   lastLoginAt: Date,
 
-  /** Where the money goes. Copied onto a payout line when a run is generated. */
+  /** Where the money goes — shown beside every Pay button, so nobody has to look it up. */
   payMethod: { type: String, enum: PAYOUT_MODES, default: "UPI" },
   upiId: String,
   bankName: String,
@@ -226,10 +224,8 @@ const SalesOrderSchema = new Schema({
    * behind. It is filled in only on the way out.
    *
    * A deleted partner would otherwise leave this order pointing at nothing, and
-   * a year of revenue would read as having been brought in by nobody. The payout
-   * advices next door already solve this for money that has been paid, by
-   * copying the partner onto the line when the run is generated (§4.5); an
-   * order needs the same protection for the same reason.
+   * a year of revenue would read as having been brought in by nobody — and a
+   * commission already paid would no longer say who it was paid to.
    */
   repSnapshot: {
     name: String,
@@ -335,19 +331,36 @@ const SalesOrderSchema = new Schema({
     base: { type: Number, default: 0 },
     amount: { type: Number, default: 0 },
     status: { type: String, enum: COMMISSION_STATUSES, default: "Pending", index: true },
-    maturesAt: { type: Date, index: true },
     /** No line carried an allocation from the coupon, so the whole order was used. */
     wholeOrderFallback: { type: Boolean, default: false },
     /** Why nothing is owed, in a sentence fit for the screen. */
     reason: String,
     /**
-     * Promised, then the parcel came back. Nothing is reversed automatically —
+     * Paid, then the parcel came back. Nothing is reversed automatically —
      * this is a flag for somebody to act on, because money already sent is
-     * recovered by agreement and not by a job editing an approved run.
+     * recovered by agreement and not by a job editing a record.
      */
     needsReversal: { type: Boolean, default: false },
-    payout: { type: Schema.Types.ObjectId, ref: "SalesPayout", index: true },
-    computedAt: Date
+    computedAt: Date,
+
+    /**
+     * How this one commission was actually paid.
+     *
+     * Present only once an administrator has pressed Pay and said so — the money
+     * moves outside this system, by UPI or bank transfer, and this is the record
+     * that it did. `paidAt` is when the button was pressed; `paymentDate` is the
+     * day the money left, which is usually the same day and occasionally is not.
+     * The partner sees every field but `paidBy`.
+     */
+    payment: {
+      paidAt: Date,
+      paidBy: { type: Schema.Types.ObjectId, ref: "User" },
+      paymentDate: String,
+      mode: { type: String, enum: PAYOUT_MODES },
+      /** A UTR, a UPI transaction id — whatever the partner can find on their side. */
+      reference: String,
+      note: String
+    }
   },
 
   syncedAt: Date,
@@ -355,9 +368,10 @@ const SalesOrderSchema = new Schema({
 }, { timestamps: true });
 
 // The two questions every screen asks: this rep's orders newest first, and
-// what is payable right now.
+// what is payable right now — and, on the payments screen, what was paid when.
 SalesOrderSchema.index({ rep: 1, placedAt: -1 });
-SalesOrderSchema.index({ "commission.status": 1, "commission.maturesAt": 1 });
+SalesOrderSchema.index({ "commission.status": 1, "delivery.at": -1 });
+SalesOrderSchema.index({ "commission.status": 1, "commission.payment.paidAt": -1 });
 SalesOrderSchema.index({ "delivery.state": 1, placedAt: -1 });
 /**
  * The processing screen's own question: what has not been sent to the courier
@@ -376,109 +390,6 @@ SalesOrderSchema.index({ "shipment.awb": 1, placedAt: -1 });
 SalesOrderSchema.index({ "shipment.courier": 1 }, { sparse: true });
 
 export const SalesOrder = models.SalesOrder ?? model("SalesOrder", SalesOrderSchema);
-
-// ------------------------------------------------------------------- payouts
-
-/**
- * One week's payout for every rep at once.
- *
- * The same shape and the same state machine as a payroll run, for the same
- * reasons: a period is settled once, as a unit; a draft may be regenerated
- * while orders are still being delivered; and preparing a payment is a
- * different authority from releasing it. Paid is terminal — the money has left.
- */
-const SalesPayoutSchema = new Schema({
-  payoutNo: { type: String, required: true, unique: true, index: true },
-  financialYear: { type: String, required: true, index: true },
-  from: { type: String, required: true, match: ISO_DATE },
-  to: { type: String, required: true, match: ISO_DATE, index: true },
-  status: { type: String, enum: PAYOUT_STATUSES, default: "Draft", index: true },
-
-  /** Frozen onto the run, so changing the policy cannot restate a past week. */
-  holdDays: { type: Number, default: DEFAULT_HOLD_DAYS },
-
-  totals: {
-    reps: { type: Number, default: 0 },
-    orders: { type: Number, default: 0 },
-    gross: { type: Number, default: 0 },
-    net: { type: Number, default: 0 }
-  },
-
-  generatedBy: { type: Schema.Types.ObjectId, ref: "User" },
-  generatedAt: Date,
-  approvedBy: { type: Schema.Types.ObjectId, ref: "User" },
-  approvedAt: Date,
-  paidBy: { type: Schema.Types.ObjectId, ref: "User" },
-  paidAt: Date,
-  paymentDate: String,
-  paymentMode: { type: String, enum: PAYOUT_MODES },
-  reference: String,
-  note: String
-}, { timestamps: true });
-
-/*
- * Payout runs are read newest-period-first, and the latest one is asked for by
- * itself on three separate screens — the overview, the list, and the check that
- * decides which period a new run should cover. All four are the same index.
- */
-SalesPayoutSchema.index({ to: -1, createdAt: -1 });
-
-export const SalesPayout = models.SalesPayout ?? model("SalesPayout", SalesPayoutSchema);
-
-const AdjustmentSchema = new Schema({
-  name: { type: String, required: true, trim: true, maxlength: 80 },
-  /** Signed. A recovery is a negative line with a reason on it, never a quietly smaller total. */
-  amount: { type: Number, required: true, default: 0 }
-}, { _id: false });
-
-/**
- * The orders carried, copied onto the line rather than joined at read time.
- *
- * A payout advice is evidence (§4.5). A rep asking in November what the ₹1,800
- * paid in August was made of is owed the four orders and the figure each one
- * earned, exactly as they stood — not a fresh query that a later refund or a
- * changed rate would answer differently.
- */
-const PaidOrderSchema = new Schema({
-  order: { type: Schema.Types.ObjectId, ref: "SalesOrder", required: true },
-  name: String,
-  placedAt: Date,
-  deliveredAt: Date,
-  base: { type: Number, default: 0 },
-  rate: { type: Number, default: 0 },
-  amount: { type: Number, default: 0 }
-}, { _id: false });
-
-const SalesPayoutLineSchema = new Schema({
-  run: { type: Schema.Types.ObjectId, ref: "SalesPayout", required: true, index: true },
-  rep: { type: Schema.Types.ObjectId, ref: "SalesRep", required: true, index: true },
-
-  /** Who they were and where the money went, as it stood on the day. */
-  snapshot: {
-    name: String,
-    code: String,
-    phone: String,
-    payMethod: { type: String, enum: PAYOUT_MODES },
-    upiId: String,
-    bankName: String,
-    /** Only the last four are ever shown on an advice, so only those are kept. */
-    bankAccountLastFour: String,
-    panNumber: String
-  },
-
-  orders: { type: [PaidOrderSchema], default: [] },
-  orderCount: { type: Number, default: 0 },
-  gross: { type: Number, default: 0 },
-  adjustments: { type: [AdjustmentSchema], default: [] },
-  net: { type: Number, default: 0 },
-  note: String
-}, { timestamps: true });
-
-// One line per rep per run, whatever route created it.
-SalesPayoutLineSchema.index({ run: 1, rep: 1 }, { unique: true });
-SalesPayoutLineSchema.index({ rep: 1, createdAt: -1 });
-
-export const SalesPayoutLine = models.SalesPayoutLine ?? model("SalesPayoutLine", SalesPayoutLineSchema);
 
 // -------------------------------------------------------------- coupon catalogue
 
@@ -528,7 +439,8 @@ export const SalesCoupon = models.SalesCoupon ?? model("SalesCoupon", SalesCoupo
  * What each pull did, kept so the automation can be seen working.
  *
  * Without this, "it syncs every night" is a claim rather than a fact, and the
- * first anybody learns that it stopped is a payout run that comes back empty.
+ * first anybody learns that it stopped is a partner asking why nothing has been
+ * delivered for a fortnight.
  * A row per pass, with the same figures the operator sees when they press the
  * button by hand.
  *
@@ -809,10 +721,6 @@ const SalesSettingsSchema = new Schema({
   },
 
   rules: { type: [RuleSchema], default: () => DEFAULT_RULES },
-  /** Days a delivered order is held before its commission may be paid. */
-  holdDays: { type: Number, min: 0, max: 90, default: DEFAULT_HOLD_DAYS },
-  /** The day of the week payouts are ordinarily made, for the dashboard to propose. */
-  payoutWeekday: { type: Number, min: 0, max: 6, default: 1 },
   /** How far back a first sync reaches when nothing has ever been pulled. */
   backfillDays: { type: Number, min: 1, max: 730, default: DEFAULT_BACKFILL_DAYS },
   currency: { type: String, default: "INR" }

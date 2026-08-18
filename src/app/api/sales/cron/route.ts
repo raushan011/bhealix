@@ -6,17 +6,12 @@ import { IntegrationError } from "@/lib/sales/http";
 import { recalculateAll, recordedSync, syncAll } from "@/lib/sales/sync";
 
 /**
- * The nightly pass: pull what is new, then re-price everything still open.
+ * The nightly pass: pull what is new, then re-price everything not yet paid.
  *
- * The re-pricing is the part that cannot be left to a person. A commission
- * becomes payable because a week went by — nothing happens to the order, the
- * seventh day simply arrives — so without something running on a clock, the
- * dashboard would keep reporting yesterday's answer until somebody pressed Sync.
- *
- * (The payout run itself does not depend on this. It matches on the maturity
- * date rather than the stored status, so a week that matured overnight is swept
- * in whether or not this ever ran. This keeps the *screens* honest; the run is
- * correct regardless.)
+ * The pull is what makes a delivery show up as money owed without anybody
+ * pressing Sync — the courier reports overnight, and the partner sees "owed to
+ * you" in the morning. The re-pricing behind it catches whatever the pull did
+ * not touch: a rule edited during the day, an order the courier's feed missed.
  *
  * Two ways in, because there are two callers. A scheduler presents
  * `CRON_SECRET` as a bearer token — the shape Vercel Cron sends — and an
@@ -43,8 +38,8 @@ export async function GET(request: Request) {
       const recalculated = await recalculateAll();
       return ok({ ...report, commissionsRecalculated: recalculated, scheduled });
     } catch (error) {
-      // A failed pull must not stop maturity: a rep whose parcel was delivered
-      // last week is owed their money whether or not Shopify answered today.
+      // A failed pull must not stop the re-pricing: a rule changed yesterday
+      // should reach every open order whether or not Shopify answered today.
       const recalculated = await recalculateAll();
       if (error instanceof IntegrationError) {
         return badRequest(`${error.message} Commissions were still re-priced (${recalculated}).`, 502);

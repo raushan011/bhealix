@@ -70,7 +70,7 @@ export default function PartnerHome() {
         <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">While you wait</p>
         <ul className="mt-3 space-y-2.5 text-sm text-[var(--ink-2)]">
           <li className="flex gap-2.5"><Tag size={16} className="mt-0.5 shrink-0 text-[var(--muted)]" />Your coupon will start with <strong>{profile.code}</strong> — the rest says which offer it is for.</li>
-          <li className="flex gap-2.5"><Clock size={16} className="mt-0.5 shrink-0 text-[var(--muted)]" />Commission clears {data.holdDays} days after a parcel is delivered, once the return window has closed.</li>
+          <li className="flex gap-2.5"><Clock size={16} className="mt-0.5 shrink-0 text-[var(--muted)]" />Commission is owed the moment a parcel is delivered, and paid to you order by order.</li>
           <li className="flex gap-2.5"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-[var(--muted)]" />Add where you would like to be paid on your <Link href="/partner/profile" className="font-semibold text-[var(--brand)] hover:underline">profile</Link>.</li>
         </ul>
       </Card>
@@ -87,17 +87,18 @@ export default function PartnerHome() {
 
     {refusal && <Notice tone="warning">{refusal}</Notice>}
 
-    {/* Payable first and coloured, because it is the figure being looked for. */}
-    <Card className="grid grid-cols-2 gap-5 p-5">
-      <Stat label="Ready to be paid" value={formatRupees(summary.earned.Payable)} tone="text-[var(--ok-ink)]" />
-      <Stat label="Already paid" value={formatRupees(summary.earned.Paid)} />
-      <Stat label="Clearing" value={formatRupees(summary.earned.Maturing)} />
+    {/* Owed first and coloured, because it is the figure being looked for. */}
+    <Card className="grid grid-cols-3 gap-4 p-5">
+      <Stat label="Owed to you" value={formatRupees(summary.earned.Payable)}
+        tone={summary.earned.Payable ? "text-[var(--ok-ink)]" : undefined} />
+      <Stat label="Paid to you" value={formatRupees(summary.earned.Paid)} />
       <Stat label="Still on its way" value={formatRupees(summary.earned.Pending)} />
     </Card>
 
-    {summary.earned["In payout"] > 0 && (
+    {summary.earned.Payable > 0 && (
       <Notice tone="success">
-        {formatRupees(summary.earned["In payout"])} is on the current payment run. The amount is fixed and will not change.
+        {formatRupees(summary.earned.Payable)} is owed to you on delivered orders and will be paid to you order by order.{" "}
+        <Link href="/partner/payouts" className="font-semibold underline">See which orders</Link>.
       </Notice>
     )}
 

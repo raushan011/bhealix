@@ -103,7 +103,6 @@ export function commissionTone(status: string): "success" | "info" | "warn" | "d
   switch (status) {
     case "Paid": return "success";
     case "Payable": return "info";
-    case "Maturing": case "In payout": return "warn";
     case "Void": return "danger";
     default: return "neutral";
   }

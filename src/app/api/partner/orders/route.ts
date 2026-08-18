@@ -4,6 +4,7 @@ import { SalesOrder } from "@/models/Sales";
 import { apiPartner } from "@/lib/auth/partner";
 import { fail, ok, pageParams } from "@/lib/api";
 import { COMMISSION_STATUSES, DELIVERY_STATES } from "@/lib/sales/constants";
+import { commissionForPartner } from "@/lib/sales/commission-payment";
 import { normaliseCode } from "@/lib/sales/coupons";
 import { trackingHeadline } from "@/lib/sales/tracking";
 
@@ -82,7 +83,7 @@ export async function GET(request: Request) {
     ]);
 
     return ok({
-      items: orders.map(order => ({ ...order, headline: trackingHeadline(order as never) })),
+      items: orders.map(order => ({ ...commissionForPartner(order as { commission?: { payment?: { paidBy?: unknown } } }), headline: trackingHeadline(order as never) })),
       total,
       page,
       pages: Math.max(1, Math.ceil(total / limit)),

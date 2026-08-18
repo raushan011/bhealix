@@ -35,9 +35,7 @@ type Grouped = {
   returned: number;
   revenue: number;
   Pending: number;
-  Maturing: number;
   Payable: number;
-  "In payout": number;
   Paid: number;
   Void: number;
 };
@@ -51,9 +49,7 @@ const GROUP = {
   // affiliate scheme brought in, not what anybody was paid out of it.
   revenue: { $sum: "$totals.paid" },
   Pending: earnedWhen("Pending"),
-  Maturing: earnedWhen("Maturing"),
   Payable: earnedWhen("Payable"),
-  "In payout": earnedWhen("In payout"),
   Paid: earnedWhen("Paid"),
   Void: earnedWhen("Void")
 } as const;

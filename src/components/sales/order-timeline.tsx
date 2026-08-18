@@ -7,7 +7,7 @@ import type { TrackStep } from "@/lib/sales/tracking";
  *
  * A vertical rail rather than a horizontal stepper because the audience is on a
  * phone: six steps across a 360px screen leaves room for icons and nothing else,
- * and the detail lines — the courier, the date the commission clears — are the
+ * and the detail lines — the courier, the day the commission was paid — are the
  * half worth reading.
  *
  * The rail behind a finished step is coloured and the rail after it is not, so

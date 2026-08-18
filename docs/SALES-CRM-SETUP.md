@@ -150,8 +150,8 @@ Customer pays                1,499
 Commission, 30% of 1,499    ₹449.70 → ₹450
 ```
 
-Below that: **hold after delivery** (7 days) and **payout day** (Monday). Both are editable, and
-changing a rate re-prices every commission not already on a payout run — it will tell you how many.
+Changing a rate re-prices every commission not already paid — it will tell you how many. There is
+no hold period and no payout day to set: commission is owed the moment a parcel is delivered.
 
 ### Two percentages that are not the same number
 
@@ -176,7 +176,7 @@ should be.
 There are two ways in, and they end at the same record.
 
 **You add them: Partners → Add partner.** Give the name and a code — `RAUSHAN`. Add how they are paid
-(UPI ID or bank details); this is copied onto their payout advice. Coupons are entered by hand here,
+(UPI ID or bank details); this is shown beside every Pay button. Coupons are entered by hand here,
 which means they must already exist in Shopify — this route reads codes, it does not create them.
 
 **They add themselves: `/partner/register`.** Send them the link. They give their name, email, phone
@@ -304,7 +304,7 @@ out rather than handed a short file with no explanation.
 
 ### What it does not touch
 
-Booking a parcel decides nothing about money. Delivery state, commission, maturity and payouts all
+Booking a parcel decides nothing about money. Delivery state, commission and payment all
 follow the courier's own reports exactly as they did before — pressing Process does not pay anybody,
 and it never marks an order delivered. That is also why HR can do it: sending a parcel is not the
 same authority as issuing a coupon.
@@ -315,39 +315,34 @@ parcels, two freights and one customer, and nothing downstream would notice.
 ## The life of one commission
 
 ```
-order arrives with RAUSHAN30      →  Pending    (nothing owed yet)
-Shiprocket says DELIVERED         →  Maturing   (owed, clears in 7 days)
-7 days pass                       →  Payable    (swept into the next run)
-payout run generated              →  In payout  (figure frozen)
-run marked paid                   →  Paid
+order arrives with RAUSHAN30      →  Pending    (nothing owed yet; the amount is shown)
+Shiprocket says DELIVERED         →  Payable    (owed now — a Pay button appears)
+administrator pays and marks it   →  Paid       (figure frozen; date, mode and reference recorded)
 ```
 
 RTO, returned, cancelled, lost, or refunded in full at any point → **Void**, and nothing is owed.
 
 ## Paying people
 
-**Payouts → Prepare a payout.** It proposes the period since the last run.
+There is no run to prepare. **Payouts** lists every delivered order that has not been paid, grouped
+by partner with their UPI id or account beside the total, and a **Pay** button on each order.
 
-- **Work it out** writes nothing and shows exactly who would be paid what.
-- **Generate run** creates it and claims those commissions.
-- An administrator **approves**, then **marks it paid** with a date and reference.
+- Send the money yourself — UPI, bank transfer, however you pay them.
+- Press **Pay** on the order, say the day, the mode and the reference (UTR or UPI id), and **Mark as
+  paid**. The same button is on the Orders screen and on the partner's own record.
+- The order moves to the **Paid** list below with those details, and the partner sees the same line
+  under **Payments** in their portal a moment later.
 
-Preparing and approving are deliberately different permissions — HR can prepare, only an
-administrator releases. Once a run is **paid it cannot be reopened**; a correction is a named
-negative adjustment on a later run, so the partner can see why their figure moved.
+Only an administrator can mark a commission paid; HR can see what is owed. A payment marked on the
+wrong order can be taken back with **Undo** on the Paid list — that is for mistakes and bounced
+transfers, not for a parcel that came back after it was paid.
 
-Anything that matured but was missed by an earlier run is swept into the next one, so nothing gets
-stranded.
+## Paying on delivery, and the hole it leaves
 
-## The seven-day hold, and the hole it leaves
-
-The hold exists because a delivered parcel can still come back. Seven days covers most of it, not all
-of it. If a return lands after a commission has been paid, the order appears under **Needs reversal**
-on the dashboard and nothing is deducted automatically — money already sent is recovered by
-agreement, and a background job editing an approved payout is not that. Add it as a negative
-adjustment on the next run.
-
-Shortening the hold pays partners sooner and makes this more likely. Lengthening it does the reverse.
+A delivered parcel can still come back. If a return lands after a commission has been paid, the order
+appears under **Needs reversal** on the dashboard and on the Payouts screen, and nothing is deducted
+automatically — money already sent is recovered by agreement with the partner, and a background job
+editing the record of a payment is not that.
 
 ---
 
@@ -358,7 +353,7 @@ Three things keep this current without anybody uploading anything:
 | | When | What |
 |---|---|---|
 | **Live updates** | Seconds | Shopify tells the CRM the moment an order is placed, changed or cancelled. Subscribed automatically when you connect. |
-| **Nightly pass** | 01:30 daily | Pulls anything a live update missed, asks Shiprocket about every parcel still moving, and clears commissions whose hold has elapsed. |
+| **Nightly pass** | 01:30 daily | Pulls anything a live update missed, asks Shiprocket about every parcel still moving, and re-prices every commission not yet paid. |
 | **Full resync** | On demand | Ignores the last run and reaches back over the whole backfill window. For repairs. |
 
 **Sales settings → Automation** lists the last twenty passes with what each one did, so the schedule
@@ -374,13 +369,12 @@ manual upload is only ever needed for orders neither can see.
 `vercel.json` already schedules `GET /api/sales/cron` for 01:30 daily. Set **`CRON_SECRET`** in your
 Vercel environment variables to any long random string and Vercel will present it automatically.
 
-That pass syncs and then re-prices everything still open — which matters because a commission becomes
-payable by the passage of time, not because anything happened to the order.
+That pass syncs and then re-prices everything not yet paid, so a delivery the courier reported
+overnight is showing as owed — to you and to the partner — by the morning.
 
 If you host somewhere else, call the same URL from any scheduler with
-`Authorization: Bearer <CRON_SECRET>`. If you skip it entirely, nothing breaks: payout runs match on
-the maturity date rather than on stored status, so they stay correct — the dashboard just shows
-figures as of the last manual sync.
+`Authorization: Bearer <CRON_SECRET>`. If you skip it entirely, nothing breaks, but deliveries are
+only read in when somebody presses Sync, so what is owed will be as current as the last press.
 
 ## When deliveries do not appear
 
@@ -437,9 +431,9 @@ they applied, when they were approved, whether they signed themselves up, and wh
 in. Their coupon codes are listed with whether each one actually exists in Shopify, and every order
 and rupee follows underneath.
 
-The bank account is shown in full here, unlike on a payout advice where only the last four digits
-appear. Different readers: an advice is a document that gets forwarded and printed, and this screen
-belongs to the person who has to check the number before releasing money to it.
+The bank account is shown in full here and in the Pay dialog, and only by its last four digits on
+the Payouts list. Different readers: a list is glanced at and left open, and these are the screens
+belonging to the person who has to check the number before releasing money to it.
 
 ### Their password, and why you cannot see it
 
@@ -472,10 +466,10 @@ too.
 | | |
 |---|---|
 | **What goes** | the record, their login, and their coupon codes |
-| **What stays** | their orders, which keep their name and coupon code so the revenue still reads correctly, and every payout advice already issued, which already carries their details |
+| **What stays** | their orders, which keep their name and coupon code so the revenue still reads correctly — including every one whose commission has been paid, which stays on the record as paid |
 
-Nothing about the money changes. What was earned was earned, and an advice for a payment that really
-happened is evidence of it — deleting the person does not unmake either. Orders belonging to a
+Nothing about the money changes. What was earned was earned, and a payment that really happened is
+evidence of it — deleting the person does not unmake either. Orders belonging to a
 deleted partner show their name with *(deleted)* beside it rather than going blank.
 
 > **Their codes are not switched off in Shopify by a delete.** Suspend them first if you want the
@@ -518,9 +512,9 @@ Two ways to clear one, both on that row:
 | Delete a partner permanently | ✓ | | |
 | Create their own coupon code | ✓ | | ✓ once approved |
 | Hold the Shopify/Shiprocket credentials and rates | ✓ | | |
-| Prepare a payout run | ✓ | ✓ | |
-| Approve it, mark it paid, delete a draft | ✓ | | |
-| Change where their payout is sent | ✓ | | own only |
+| See what is owed and what has been paid | ✓ | ✓ | own only |
+| Pay a commission and mark it paid | ✓ | | |
+| Change where their payment is sent | ✓ | | own only |
 
 Medical representatives and field sales staff cannot reach any of it — the affiliate operation is a
 different business from the field one, and `SALES` as a staff role has nothing to do with it.

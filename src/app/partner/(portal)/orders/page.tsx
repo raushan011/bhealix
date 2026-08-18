@@ -23,7 +23,7 @@ type Payload = {
  * Each row leads with the sentence from `trackingHeadline` rather than with a
  * pair of status badges. The badges are there too, on the right, for somebody
  * scanning — but the first thing read is plain English, because the reader is
- * not a member of staff who has learned what "Maturing" means.
+ * not a member of staff who has learned what "Payable" means.
  */
 export default function PartnerOrdersPage() {
   const [data, setData] = useState<Payload | null>(null);

@@ -1,5 +1,5 @@
 import type { CommissionRule } from "./commission";
-import type { CommissionStatus, CourierRule, DeliveryState, OrderSource, PayoutMode, PayoutStatus } from "./constants";
+import type { CommissionStatus, CourierRule, DeliveryState, OrderSource, PayoutMode } from "./constants";
 import type { Parcel, PickupLocation } from "./fulfilment";
 import type { LeadSource, LeadStatus, RemarkChannel } from "./leads";
 import type { CouponSetupState, RepStatus } from "./partners";
@@ -119,6 +119,22 @@ export type SalesOrderItem = {
   refunded: number;
 };
 
+/**
+ * How one order's commission was paid, as every screen shows it.
+ *
+ * The admin sees who pressed the button; the partner sees everything else — the
+ * day, the mode, the reference — because that is what they need to find the
+ * money on their own side.
+ */
+export type CommissionPayment = {
+  paidAt?: string;
+  paidBy?: { _id: Id; name?: string } | Id;
+  paymentDate?: string;
+  mode?: PayoutMode;
+  reference?: string;
+  note?: string;
+};
+
 export type SalesOrderRecord = {
   _id: Id;
   source: OrderSource;
@@ -131,7 +147,11 @@ export type SalesOrderRecord = {
     address1?: string; address2?: string; city?: string; state?: string; pinCode?: string; country?: string;
   };
   couponCode?: string;
-  rep?: { _id: Id; name: string; code: string } | Id | null;
+  /** Populated with enough to pay them from the row, where the reader may pay. */
+  rep?: {
+    _id: Id; name: string; code: string; phone?: string;
+    payMethod?: PayoutMode; upiId?: string; bankName?: string; bankAccountName?: string; bankAccountNo?: string; bankIfsc?: string;
+  } | Id | null;
   /** Who the partner was, written on only when their record was deleted. */
   repSnapshot?: { name?: string; code?: string; deletedAt?: string };
   ruleSuffix?: string;
@@ -173,11 +193,10 @@ export type SalesOrderRecord = {
     base: number;
     amount: number;
     status: CommissionStatus;
-    maturesAt?: string;
     wholeOrderFallback?: boolean;
     reason?: string;
     needsReversal?: boolean;
-    payout?: Id;
+    payment?: CommissionPayment;
   };
   syncedAt?: string;
 };
@@ -275,7 +294,6 @@ export type PartnerOverview = {
   refusal: string | null;
   summary: Omit<RepSummary, "rep">;
   rules: PartnerRule[];
-  holdDays: number;
   maxCoupons: number;
 };
 
@@ -284,40 +302,6 @@ export type PartnerOrderRecord = Omit<SalesOrderRecord, "rep" | "discountCodes" 
   headline: string;
   discountCodes?: string[];
   fullyRefunded?: boolean;
-};
-
-export type PayoutLineRecord = {
-  _id: Id;
-  run: Id;
-  rep: { _id: Id; name: string; code: string } | Id;
-  snapshot: {
-    name?: string; code?: string; phone?: string;
-    payMethod?: PayoutMode; upiId?: string; bankName?: string; bankAccountLastFour?: string; panNumber?: string;
-  };
-  orders: { order: Id; name?: string; placedAt?: string; deliveredAt?: string; base: number; rate: number; amount: number }[];
-  orderCount: number;
-  gross: number;
-  adjustments: { name: string; amount: number }[];
-  net: number;
-  note?: string;
-};
-
-export type PayoutRecord = {
-  _id: Id;
-  payoutNo: string;
-  financialYear: string;
-  from: string;
-  to: string;
-  status: PayoutStatus;
-  holdDays: number;
-  totals: { reps: number; orders: number; gross: number; net: number };
-  generatedAt?: string;
-  approvedAt?: string;
-  paidAt?: string;
-  paymentDate?: string;
-  paymentMode?: PayoutMode;
-  reference?: string;
-  note?: string;
 };
 
 export type SalesSettingsRecord = {
@@ -345,8 +329,6 @@ export type SalesSettingsRecord = {
   lastShipmentSyncError?: string;
 
   rules: CommissionRule[];
-  holdDays: number;
-  payoutWeekday: number;
   backfillDays: number;
   currency: string;
 };
@@ -378,7 +360,7 @@ export const formatRupees = (value: number | null | undefined) =>
 
 /** An empty tally of every commission status, for summing into. */
 export const emptyEarnings = (): Record<CommissionStatus, number> =>
-  ({ Pending: 0, Maturing: 0, Payable: 0, "In payout": 0, Paid: 0, Void: 0 });
+  ({ Pending: 0, Payable: 0, Paid: 0, Void: 0 });
 
 /** A blank sync report, for a pass to fill in as it goes. */
 export const emptyReport = (): SyncReport => ({

@@ -6,7 +6,7 @@ import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
 import { recalculateCommission } from "@/lib/sales/commission";
 import { deliveryStateFrom } from "@/lib/sales/delivery";
 import { IntegrationError } from "@/lib/sales/http";
-import { holdDaysOf, loadCredentials, rulesOf, shiprocketToken } from "@/lib/sales/settings";
+import { loadCredentials, rulesOf, shiprocketToken } from "@/lib/sales/settings";
 import { trackByAwb } from "@/lib/sales/shiprocket";
 
 export const runtime = "nodejs";
@@ -62,7 +62,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         order.delivery.reported = reported;
         if (before !== reported) order.delivery.at = new Date();
 
-        recalculateCommission(order, rulesOf(settings), { holdDays: holdDaysOf(settings) });
+        recalculateCommission(order, rulesOf(settings));
         await order.save();
       }
 

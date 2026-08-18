@@ -43,7 +43,7 @@ operation:
 8. **Payroll** — effective-dated salaries, monthly runs, statutory deductions, payslips.
 9. **Reporting** — per-rep field activity and an audit trail of everything a rep changed.
 10. **Affiliate sales** — coupon-attributed Shopify orders, Shiprocket delivery status, automatic
-    commission and weekly payout runs.
+    commission, paid one delivered order at a time.
 
 Two panels, one app: `/admin` (desktop, for ADMIN + HR) and `/employee` (mobile PWA, for MR + SALES).
 
@@ -56,7 +56,7 @@ The desk holds operations that barely touch, and a signed-in desk role is asked 
 |---|---|---|---|
 | Who sells | Employed medical representatives | Outside affiliates on commission | — |
 | Where | Clinics, in person | The Shopify storefront | — |
-| Paid by | Payroll | Weekly commission payout runs | — |
+| Paid by | Payroll | Commission per delivered order, paid by hand and marked paid | — |
 | Domains | 1–9 above | 10 above | 11 above |
 | Reached by | A grant | A grant | The `SUPERADMIN` role, never a grant |
 
@@ -140,7 +140,7 @@ Seed admin: `admin@bhealix.com` / `Bhealix@123` — **change before production**
 | Billing | `Invoice`, `Customer`, `PaymentProof`, `BillingSettings`, `Counter` | `lib/billing/{constants,gst,numbering,types,customers,attachments,follow-ups}` | `lib/billing/{invoices,compose}.ts` | `/api/invoices`, `/api/customers`, `/api/billing` |
 | HR | `LeaveRequest`, `Attendance`, `Holiday` | `lib/hr/{leave,attendance}` | `lib/hr/records.ts` | `/api/hr/{leave,attendance,holidays,overview}` |
 | Payroll | `SalaryStructure`, `PayrollRun`, `Payslip`, `PayrollSettings` | `lib/hr/payroll.ts` | `lib/hr/payroll-run.ts` | `/api/hr/{payroll,payslips,salary}` |
-| Affiliate sales | `SalesRep`, `SalesOrder`, `SalesPayout`, `SalesPayoutLine`, `SalesLead`, `SalesSettings` | `lib/sales/{constants,coupons,commission,delivery,payouts,leads,fulfilment,types}` | `lib/sales/{settings,shopify,shiprocket,sync,booking,address,payout-run,reporting,secrets,http,reps}` | `/api/sales/*` |
+| Affiliate sales | `SalesRep`, `SalesOrder`, `SalesLead`, `SalesSettings` | `lib/sales/{constants,coupons,commission,delivery,leads,fulfilment,types}` | `lib/sales/{settings,shopify,shiprocket,sync,booking,address,commission-payment,reporting,secrets,http,reps}` | `/api/sales/*` |
 | Vendor invoices | `VendorInvoice`, `FinancePeriod`, `FinanceConnection` | `lib/finance/{sources,period,files,archive,zip,statement,types}` | `lib/finance/{documents,pull,connections,file-fetched}.ts`, `lib/finance/connectors/*` | `/api/finance/*` |
 | Panel access | `User.workspaces` | `lib/workspace.ts`, `lib/auth/grants.ts` | `lib/auth/access.ts` | `/api/control/access` |
 | Audit | `AuditEvent` | — | `lib/audit.ts` | — (written inline) |
@@ -184,7 +184,7 @@ src/
 │   │   │   ├── reps/{page,[id]}
 │   │   │   ├── orders/page.tsx      what the coupons brought in
 │   │   │   ├── orders/process/      the picking list (page guards can.processOrders)
-│   │   │   ├── payouts/{page,[id]}
+│   │   │   ├── payouts/page.tsx     what is owed, with a Pay button per order; what has been paid
 │   │   │   └── settings/{page,layout}   layout guards can.manageSales
 │   │   └── control/                 Super admin (layout.tsx = requireWorkspace("control"))
 │   │       ├── page.tsx             this month and last, and who holds which panel
@@ -236,10 +236,10 @@ src/
 │   ├── hr/          leave, attendance, payroll, payroll-run, records
 │   ├── inventory/   movements, ledger
 │   ├── samples/     movements, ledger
-│   ├── sales/       constants, coupons, commission, delivery, payouts, leads,
+│   ├── sales/       constants, coupons, commission, delivery, leads,
 │   │                fulfilment, types                                            (pure)
 │   │                secrets, http, shopify, shiprocket, settings, sync, booking,
-│   │                address, payout-run, reporting, reps                     (server)
+│   │                address, commission-payment, reporting, reps             (server)
 │   └── workspace.ts Which panel a path belongs to, and which can be granted
 ├── models/                          One file per bounded context — see §6
 └── (tests co-located as *.test.ts next to what they test)
@@ -364,32 +364,26 @@ failures on purpose** — a rep in a clinic corridor must never lose a completed
 its audit line went wrong. Documents show only their latest state; the trail is how you learn a call
 time was corrected three times.
 
-### 4.13a A commission a payout run has claimed is never recomputed
+### 4.13a A commission that has been paid is never recomputed
 
 `SalesOrder.commission` is a cache of `lib/sales/commission.ts`, and **`recalculateCommission` is the
 only thing that writes it** — the same rule `recalculate()` has for an invoice (§4.4). Anything that
 changes a delivery state, a refund or a commission rate calls it and saves.
 
-What it will *not* do is restate a commission whose status is `In payout` or `Paid`. That run is a
-document somebody approved, and recomputing what it contains underneath it would make the approval
-meaningless. Instead the order is flagged `commission.needsReversal` and surfaced on the dashboard,
-because money already sent is recovered by agreement — as a named negative adjustment on a later
-run — and never by a background job editing a settled one.
+What it will *not* do is restate a commission whose status is `Paid`. That is the record of money
+that left the company, and recomputing what it was underneath it would make the record meaningless.
+Instead the order is flagged `commission.needsReversal` and surfaced on the dashboard and the Payouts
+screen, because money already sent is recovered by agreement with the partner and never by a
+background job editing a settled record.
 
-Releasing is the run's own business: deleting or reopening a draft hands its commissions back
-(`releaseRun`) and re-prices them on the way out, so a parcel that went RTO while the draft sat there
-comes back as `Void` rather than as payable money.
+### 4.13b Delivered is owed; paying is a conditional write
 
-### 4.13b Maturity is answered by the clock, not by whether a job ran
-
-A commission becomes payable because seven days went by. Nothing happens to the order; the seventh
-day simply arrives. So `payout-run.ts::matured()` matches on **`maturesAt <= end` with a status of
-`Maturing` *or* `Payable`**, rather than on rows already stored as `Payable`.
-
-Written the other way, a commission that matured overnight would be invisible to the payout until
-something happened to recompute it, and a rep would silently wait a week for money they were already
-owed. `GET /api/sales/cron` re-prices everything open on a schedule so the *screens* agree too, but
-the run is correct whether or not it ever ran.
+There is no hold and no batch. `commissionState` returns `Payable` the moment the delivery state is
+`Delivered`, and `lib/sales/commission-payment.ts::payCommission` marks it `Paid` with a single
+`updateOne` conditioned on `status: "Payable"` — so two administrators pressing Pay on the same order
+cannot both succeed. `unpayCommission` is the undo for a payment marked in error: it clears the
+payment and re-prices the order, so a parcel that came back in the meantime lands as `Void` rather
+than as money owed twice. Only `can.paySalesCommission` (administrators) may do either.
 
 ### 4.13 Every schema is registered in one place
 

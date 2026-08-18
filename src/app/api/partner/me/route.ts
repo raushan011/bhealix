@@ -5,7 +5,7 @@ import { normaliseCode } from "@/lib/sales/coupons";
 import { couponSetupOf, MAX_COUPONS_PER_REP, refusalFor, repStatusOf } from "@/lib/sales/partners";
 import { customerDiscountSummary, ruleIsProvisionable } from "@/lib/sales/provision";
 import { ownSummary } from "@/lib/sales/reporting";
-import { holdDaysOf, loadSettings, rulesOf } from "@/lib/sales/settings";
+import { loadSettings, rulesOf } from "@/lib/sales/settings";
 
 /**
  * Everything the affiliate portal's home screen needs, in one request.
@@ -80,8 +80,6 @@ export async function GET() {
       refusal: refusalFor(status, active),
       summary,
       rules,
-      /** How long a delivered order is held before it can be paid — the most-asked question here. */
-      holdDays: holdDaysOf(settings),
       maxCoupons: MAX_COUPONS_PER_REP
     });
   } catch (error) {

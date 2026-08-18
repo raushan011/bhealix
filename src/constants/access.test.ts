@@ -115,10 +115,11 @@ describe("access", () => {
     expect(can.viewPayroll("HR")).toBe(true);
   });
 
-  it("separates preparing an affiliate payout from releasing it, as payroll does", () => {
-    expect(can.runSalesPayout("HR")).toBe(true);
-    expect(can.approveSalesPayout("HR")).toBe(false);
-    expect(can.approveSalesPayout("ADMIN")).toBe(true);
+  it("lets HR see what partners are owed without letting them say it has been paid", () => {
+    expect(can.viewSales("HR")).toBe(true);
+    expect(can.paySalesCommission("HR")).toBe(false);
+    expect(can.paySalesCommission("ADMIN")).toBe(true);
+    expect(can.paySalesCommission("SUPERADMIN")).toBe(true);
   });
 
   it("keeps coupons and delivery corrections with the administrator", () => {
@@ -142,8 +143,7 @@ describe("access", () => {
       expect(can.viewSales(role)).toBe(false);
       expect(can.manageSales(role)).toBe(false);
       expect(can.processOrders(role)).toBe(false);
-      expect(can.runSalesPayout(role)).toBe(false);
-      expect(can.approveSalesPayout(role)).toBe(false);
+      expect(can.paySalesCommission(role)).toBe(false);
     }
   });
 

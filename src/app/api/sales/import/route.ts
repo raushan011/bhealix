@@ -9,7 +9,7 @@ import { recalculateCommission } from "@/lib/sales/commission";
 import { normaliseCode, parseCoupon } from "@/lib/sales/coupons";
 import { toTable } from "@/lib/sales/csv";
 import { mapHeaders, missingFields, readImport, type ImportedOrder } from "@/lib/sales/import";
-import { holdDaysOf, loadSettings, rulesOf } from "@/lib/sales/settings";
+import { loadSettings, rulesOf } from "@/lib/sales/settings";
 
 /**
  * Importing orders from a checkout export.
@@ -91,7 +91,6 @@ export async function POST(request: Request) {
 
     const settings = await loadSettings();
     const rules = rulesOf(settings);
-    const holdDays = holdDaysOf(settings);
 
     let created = 0, updated = 0;
     for (const order of known) {
@@ -139,7 +138,7 @@ export async function POST(request: Request) {
       document.delivery.reported = order.delivery;
       if (order.delivery === "Delivered" && !document.shipment.deliveredAt) document.shipment.deliveredAt = order.placedAt;
 
-      recalculateCommission(document, rules, { holdDays });
+      recalculateCommission(document, rules);
       await document.save();
       if (existing) updated++; else created++;
     }

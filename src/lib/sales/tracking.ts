@@ -13,7 +13,7 @@ import { VOID_STATES, type CommissionStatus, type DeliveryState } from "./consta
  * one named does.
  *
  * Nothing new is stored. Every step is read off fields the sync already
- * maintains, so this can never disagree with what the payout run will pay — it
+ * maintains, so this can never disagree with what the administrator pays — it
  * is the same facts, arranged for a different reader.
  *
  * Pure and tested, like the commission arithmetic it narrates.
@@ -54,8 +54,8 @@ export type TrackableOrder = {
   commission: {
     status: CommissionStatus;
     amount: number;
-    maturesAt?: string | Date | null;
     reason?: string;
+    payment?: { paidAt?: string | Date | null; paymentDate?: string | null; mode?: string | null; reference?: string | null } | null;
   };
 };
 
@@ -100,9 +100,7 @@ export function trackingHeadline(order: TrackableOrder): string {
 
   switch (order.commission.status) {
     case "Paid": return "Paid to you.";
-    case "In payout": return "On the current payout run — the amount is fixed and the money is on its way.";
-    case "Payable": return "Cleared and payable. It will be on the next payout run.";
-    case "Maturing": return "Delivered. Your commission clears once the return window closes.";
+    case "Payable": return "Delivered. Your commission is ready and waiting to be paid.";
     case "Void": return order.commission.reason || "This order earns nothing.";
     default: break;
   }
@@ -116,7 +114,7 @@ export function trackingHeadline(order: TrackableOrder): string {
 /**
  * The whole journey, from the order being placed to the money reaching the rep.
  *
- * Always six steps, whatever happened. A parcel that came back does not get a
+ * Always five steps, whatever happened. A parcel that came back does not get a
  * shorter list — it gets the same list with the remaining steps marked as never
  * coming, which is the honest picture and the one that stops somebody waiting
  * for a payment that was never going to arrive.
@@ -172,39 +170,31 @@ export function trackOrder(order: TrackableOrder): TrackStep[] {
     detail: state === "Undelivered" ? "A delivery attempt failed. The courier usually tries again." : undefined
   });
 
-  // 5. The hold. A delivered parcel is not yet money: the return window has to
-  //    close first, and the date it closes is the single most-asked question in
-  //    this portal.
-  const cleared = commission === "Payable" || commission === "In payout" || commission === "Paid";
-  steps.push({
-    key: "cleared",
-    label: cleared ? "Commission cleared" : commission === "Void" ? "Earns nothing" : "Clearing",
-    state: cleared ? "done" : commission === "Void" || dead ? "failed" : commission === "Maturing" ? "current" : "waiting",
-    at: cleared ? undefined : iso(order.commission.maturesAt),
-    detail: commission === "Maturing" && order.commission.maturesAt
-      ? "The return window closes on this date, and the amount becomes payable."
-      : commission === "Void"
-        ? order.commission.reason || "The parcel did not stay with the customer."
-        : commission === "Pending"
-          ? "Clears once the parcel is delivered and the return window has passed."
-          : undefined
-  });
-
-  // 6. The money. `In payout` is deliberately its own resting place rather than
-  //    a kind of "nearly paid": once a run has claimed a commission the figure
-  //    is frozen and the run is what honours it.
+  // 5. The money. Delivered is owed, and owed is paid by hand one order at a
+  //    time — so between delivery and payment the step sits at "current" with
+  //    the amount, and once paid it carries the day, the mode and the reference
+  //    the partner can find on their own side.
+  const payment = order.commission.payment;
   steps.push({
     key: "paid-out",
-    label: commission === "Paid" ? "Paid to you" : "Payout",
+    label: commission === "Paid" ? "Paid to you"
+      : commission === "Void" || dead ? "Earns nothing"
+      : commission === "Payable" ? "Ready to be paid"
+      : "Commission",
     state: commission === "Paid" ? "done"
       : commission === "Void" || dead ? "failed"
-      : commission === "In payout" ? "current"
+      : commission === "Payable" ? "current"
       : "waiting",
-    detail: commission === "In payout"
-      ? "On a payout run. The amount is fixed and will not change."
-      : commission === "Payable"
-        ? "Waiting for the next payout run."
-        : undefined
+    at: commission === "Paid" ? iso(payment?.paidAt) : undefined,
+    detail: commission === "Paid"
+      ? [payment?.mode, payment?.reference ? `ref ${payment.reference}` : undefined].filter(Boolean).join(" · ") || undefined
+      : commission === "Void"
+        ? order.commission.reason || "The parcel did not stay with the customer."
+        : commission === "Payable"
+          ? "Delivered. The company pays this by UPI or bank transfer and marks it here when it has."
+          : commission === "Pending"
+            ? "Earned when the parcel is delivered."
+            : undefined
   });
 
   return steps;

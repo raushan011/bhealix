@@ -1,22 +1,21 @@
-import { z } from "zod";
 import { connectDb } from "@/lib/db/mongoose";
-import { SalesPayout } from "@/models/Sales";
+import { SalesOrder } from "@/models/Sales";
 import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
-import { badRequest, fail, ok, pageParams } from "@/lib/api";
-import { record } from "@/lib/audit";
-import { todayIso } from "@/lib/time";
-import { previewPayout, savePayoutRun } from "@/lib/sales/payout-run";
-import { proposePeriod } from "@/lib/sales/payouts";
-import { backfillDaysOf, loadSettings } from "@/lib/sales/settings";
+import { fail, ok, pageParams } from "@/lib/api";
 
-const ISO = /^\d{4}-\d{2}-\d{2}$/;
-
-const schema = z.object({
-  action: z.enum(["preview", "generate"]),
-  from: z.string().regex(ISO).optional(),
-  to: z.string().regex(ISO).optional()
-});
+/**
+ * The payments desk: every delivered order waiting to be paid, and every one
+ * that has been.
+ *
+ * Two lists rather than one filtered list, because they are read differently.
+ * What is owed is worked through top to bottom, oldest delivery first, with the
+ * partner's UPI id beside each amount so the transfer can be made from the same
+ * screen. What has been paid is a ledger, newest first, and is where somebody
+ * goes to answer "did we pay her for #1042" — so it carries the reference and
+ * the day the money left.
+ */
+const REP_FIELDS = "name code active phone payMethod upiId bankName bankAccountName bankAccountNo bankIfsc";
 
 export async function GET(request: Request) {
   try {
@@ -25,68 +24,47 @@ export async function GET(request: Request) {
     await connectDb();
 
     const { page, limit, skip } = pageParams(request.url);
-    const [runs, total, last, settings] = await Promise.all([
-      SalesPayout.find({}).sort({ to: -1, createdAt: -1 }).skip(skip).limit(limit).lean(),
-      SalesPayout.countDocuments({}),
-      SalesPayout.findOne({}).sort({ to: -1 }).select("to").lean() as Promise<{ to?: string } | null>,
-      loadSettings()
+
+    const [owed, paid, paidTotal, totals] = await Promise.all([
+      // Everything owed, unpaginated: this is a to-do list and it has to be
+      // possible to see the bottom of it. It is bounded by how many parcels the
+      // couriers deliver between one payment session and the next.
+      SalesOrder.find({ "commission.status": "Payable", rep: { $ne: null } })
+        .sort({ "delivery.at": 1, placedAt: 1 })
+        .limit(500)
+        .populate("rep", REP_FIELDS)
+        .lean(),
+      SalesOrder.find({ "commission.status": "Paid" })
+        .sort({ "commission.payment.paidAt": -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("rep", "name code active")
+        .populate("commission.payment.paidBy", "name")
+        .lean(),
+      SalesOrder.countDocuments({ "commission.status": "Paid" }),
+      SalesOrder.aggregate<{ _id: string; count: number; amount: number }>([
+        { $match: { rep: { $ne: null } } },
+        { $group: { _id: "$commission.status", count: { $sum: 1 }, amount: { $sum: "$commission.amount" } } }
+      ])
     ]);
 
+    const by = (status: string) => totals.find(row => row._id === status) ?? { count: 0, amount: 0 };
+    const needsAttention = await SalesOrder.countDocuments({ "commission.needsReversal": true });
+
     return ok({
-      items: runs,
-      total,
+      owed,
+      paid,
+      paidTotal,
       page,
-      pages: Math.max(1, Math.ceil(total / limit)),
-      /** What the next run would cover, so the screen can offer it. */
-      proposed: proposePeriod(last?.to, todayIso(), backfillDaysOf(settings)),
-      mayRun: can.runSalesPayout(auth.session.role),
-      mayApprove: can.approveSalesPayout(auth.session.role)
+      pages: Math.max(1, Math.ceil(paidTotal / limit)),
+      totals: {
+        owed: { count: by("Payable").count, amount: Math.round(by("Payable").amount) },
+        paid: { count: by("Paid").count, amount: Math.round(by("Paid").amount) },
+        pending: { count: by("Pending").count, amount: Math.round(by("Pending").amount) },
+        needsAttention
+      },
+      mayPay: can.paySalesCommission(auth.session.role)
     });
-  } catch (error) {
-    return fail(error);
-  }
-}
-
-/**
- * `preview` writes nothing; `generate` creates the run and claims its
- * commissions. The same split payroll uses, and for the same reason — somebody
- * should be able to look at a week's figures before committing to them.
- */
-export async function POST(request: Request) {
-  try {
-    const auth = await apiSession(can.runSalesPayout);
-    if ("response" in auth) return auth.response;
-    await connectDb();
-
-    const input = schema.parse(await request.json());
-    const settings = await loadSettings();
-    const last = await SalesPayout.findOne({}).sort({ to: -1 }).select("to").lean() as { to?: string } | null;
-    const fallback = proposePeriod(last?.to, todayIso(), backfillDaysOf(settings));
-    const period = { from: input.from ?? fallback.from, to: input.to ?? fallback.to };
-
-    if (period.from > period.to) return badRequest("A payout period cannot end before it begins.");
-    if (period.to > todayIso()) return badRequest("A payout period cannot close in the future — commissions have not matured yet.");
-
-    if (input.action === "preview") {
-      const preview = await previewPayout(period);
-      return ok({ period, ...preview, holdDays: settings.holdDays ?? 7 });
-    }
-
-    const open = await SalesPayout.findOne({ status: "Draft" }).select("payoutNo").lean() as { payoutNo?: string } | null;
-    if (open) {
-      return badRequest(`Payout run ${open.payoutNo} is still a draft. Approve or delete it before starting another, or the same commissions will be split across two runs.`, 409);
-    }
-
-    const run = await savePayoutRun(period, auth.session.userId);
-    await record({
-      actor: auth.session.userId,
-      action: "sales.payout.generated",
-      entityType: "SalesPayout",
-      entityId: String(run._id),
-      metadata: { payoutNo: run.payoutNo, period, totals: run.totals }
-    });
-
-    return ok({ _id: run._id, payoutNo: run.payoutNo, totals: run.totals }, 201);
   } catch (error) {
     return fail(error);
   }

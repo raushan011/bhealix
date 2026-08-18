@@ -2,19 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, BadgePercent, Plug, TrendingUp, Users } from "lucide-react";
+import { AlertTriangle, BadgePercent, Plug, TrendingUp, Users, Wallet } from "lucide-react";
 import { Badge, Card, EmptyState, LinkButton, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
 import { SyncButton } from "@/components/sales/sync-button";
-import { formatDate } from "@/lib/time";
-import { periodLabel } from "@/lib/sales/payouts";
 import { formatRupees, type RepSummary, type SyncReport } from "@/lib/sales/types";
 import type { SalesOverview } from "@/lib/sales/reporting";
 
 type Overview = SalesOverview & {
-  lastPayout?: { _id?: string; to?: string; payoutNo?: string; status?: string } | null;
-  nextPayoutDate: string;
-  proposedPeriod: { from: string; to: string };
-  holdDays: number;
+  /** Delivered and not yet paid, over the whole history — not only the window. */
+  owed: { count: number; amount: number };
+  mayPay: boolean;
   connected: {
     shopify: boolean;
     shiprocket: boolean;
@@ -111,22 +108,34 @@ export default function SalesOverviewPage() {
     </Card>
 
     <Card className="grid grid-cols-2 gap-5 p-5 lg:grid-cols-4">
-      <Stat label="Payable now" value={formatRupees(data.earned.Payable)} tone="text-[var(--ok-ink)]" />
-      <Stat label="Still maturing" value={formatRupees(data.earned.Maturing)} />
+      <Stat label="To pay now" value={formatRupees(data.owed.amount)} tone={data.owed.count ? "text-[var(--ok-ink)]" : undefined} />
       <Stat label="Awaiting delivery" value={formatRupees(data.earned.Pending)} />
       <Stat label="Paid out" value={formatRupees(data.earned.Paid)} />
+      <Stat label="Earned nothing" value={formatRupees(data.earned.Void)} />
     </Card>
 
+    {/*
+      * The one thing this screen asks anybody to do. Commission is owed the
+      * moment a parcel is delivered and paid by hand, one order at a time, so
+      * the question is never "when is the next run" — it is "how many delivered
+      * orders have not been paid yet".
+      */}
     <Card className="flex flex-wrap items-center justify-between gap-4 p-5">
       <div className="min-w-0">
-        <p className="text-sm font-semibold">Next payout run</p>
+        <p className="text-sm font-semibold">
+          {data.owed.count
+            ? `${data.owed.count} delivered order${data.owed.count === 1 ? "" : "s"} waiting to be paid`
+            : "Nothing waiting to be paid"}
+        </p>
         <p className="mt-0.5 text-xs text-[var(--muted)]">
-          {formatDate(data.nextPayoutDate)} · would cover {periodLabel(data.proposedPeriod)} ·
-          {" "}commissions clear {data.holdDays} days after delivery
-          {data.lastPayout?.payoutNo ? ` · last run ${data.lastPayout.payoutNo}` : " · nothing has been paid yet"}
+          {data.owed.count
+            ? `${formatRupees(data.owed.amount)} owed to partners · pay each one by UPI or bank transfer, then mark it paid`
+            : "Every delivered order has been paid. Commission becomes payable the moment a parcel is delivered."}
         </p>
       </div>
-      <LinkButton href="/admin/sales/payouts">Prepare a payout</LinkButton>
+      <LinkButton href="/admin/sales/payouts" tone={data.owed.count ? "primary" : "secondary"}>
+        <Wallet size={16} />{data.owed.count ? (data.mayPay ? "Pay partners" : "See what is owed") : "Payment history"}
+      </LinkButton>
     </Card>
 
     <div>

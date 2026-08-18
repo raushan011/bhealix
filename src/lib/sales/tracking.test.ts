@@ -24,7 +24,7 @@ const stateOf = (steps: ReturnType<typeof trackOrder>, key: string) =>
 describe("trackOrder", () => {
   it("always tells the whole story, however it ended", () => {
     const steps = trackOrder(order());
-    expect(steps.map(step => step.key)).toEqual(["placed", "paid", "shipped", "delivered", "cleared", "paid-out"]);
+    expect(steps.map(step => step.key)).toEqual(["placed", "paid", "shipped", "delivered", "paid-out"]);
   });
 
   it("puts a fresh order at the dispatch step", () => {
@@ -42,23 +42,27 @@ describe("trackOrder", () => {
     expect(steps.find(step => step.key === "shipped")?.detail).toContain("Delhivery");
   });
 
-  it("walks a delivered order through to the money", () => {
+  it("walks a delivered order through to the money, which is owed the moment it lands", () => {
     const steps = trackOrder(order({
       delivery: { state: "Delivered", at: "2026-08-05T10:00:00.000Z" },
-      commission: { status: "Maturing", amount: 720, maturesAt: "2026-08-12T10:00:00.000Z" }
+      commission: { status: "Payable", amount: 720 }
     }));
     expect(stateOf(steps, "delivered")).toBe("done");
-    expect(stateOf(steps, "cleared")).toBe("current");
-    expect(stateOf(steps, "paid-out")).toBe("waiting");
+    expect(stateOf(steps, "paid-out")).toBe("current");
+    expect(steps.find(step => step.key === "paid-out")?.label).toBe("Ready to be paid");
   });
 
-  it("marks everything behind a paid order as done", () => {
+  it("marks everything behind a paid order as done, and says how it was paid", () => {
     const steps = trackOrder(order({
       delivery: { state: "Delivered" },
-      commission: { status: "Paid", amount: 720 }
+      commission: { status: "Paid", amount: 720, payment: { paidAt: "2026-08-06T10:00:00.000Z", mode: "UPI", reference: "UTR123" } }
     }));
     expect(steps.every(step => step.state === "done")).toBe(true);
     expect(trackingProgress(steps)).toBe(100);
+    const paid = steps.find(step => step.key === "paid-out");
+    expect(paid?.at).toBe("2026-08-06T10:00:00.000Z");
+    expect(paid?.detail).toContain("UPI");
+    expect(paid?.detail).toContain("UTR123");
   });
 
   /*
@@ -71,7 +75,6 @@ describe("trackOrder", () => {
       commission: { status: "Void", amount: 0, reason: "The parcel was returned to sender." }
     }));
     expect(stateOf(steps, "delivered")).toBe("failed");
-    expect(stateOf(steps, "cleared")).toBe("failed");
     expect(stateOf(steps, "paid-out")).toBe("failed");
     expect(steps.some(step => step.state === "waiting")).toBe(false);
   });
@@ -95,15 +98,6 @@ describe("trackOrder", () => {
   it("treats a refunded order as one where the money did arrive", () => {
     const steps = trackOrder(order({ financialStatus: "partially_refunded" }));
     expect(stateOf(steps, "paid")).toBe("done");
-  });
-
-  it("holds the commission open while a run has it", () => {
-    const steps = trackOrder(order({
-      delivery: { state: "Delivered" },
-      commission: { status: "In payout", amount: 720 }
-    }));
-    expect(stateOf(steps, "cleared")).toBe("done");
-    expect(stateOf(steps, "paid-out")).toBe("current");
   });
 });
 
@@ -134,6 +128,6 @@ describe("trackingHeadline", () => {
 
 describe("trackingProgress", () => {
   it("counts only what is behind us", () => {
-    expect(trackingProgress(trackOrder(order()))).toBe(33);
+    expect(trackingProgress(trackOrder(order()))).toBe(40);
   });
 });

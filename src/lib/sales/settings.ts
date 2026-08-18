@@ -1,6 +1,6 @@
 import { SalesSettings } from "@/models/Sales";
 import type { CommissionRule } from "./commission";
-import { DEFAULT_BACKFILL_DAYS, DEFAULT_HOLD_DAYS } from "./constants";
+import { DEFAULT_BACKFILL_DAYS } from "./constants";
 import { decryptSecret, encryptSecret } from "./secrets";
 import { login as shiprocketLogin, type ShiprocketConfig } from "./shiprocket";
 import { normaliseDomain, type ShopifyConfig } from "./shopify";
@@ -33,8 +33,6 @@ type SettingsDoc = {
   lastShipmentSyncAt?: Date;
   lastShipmentSyncError?: string;
   rules?: CommissionRule[];
-  holdDays?: number;
-  payoutWeekday?: number;
   backfillDays?: number;
   currency?: string;
 };
@@ -67,7 +65,6 @@ export async function loadCredentials(): Promise<SettingsDoc> {
   };
 }
 
-export const holdDaysOf = (settings: SettingsDoc) => settings.holdDays ?? DEFAULT_HOLD_DAYS;
 export const backfillDaysOf = (settings: SettingsDoc) => settings.backfillDays ?? DEFAULT_BACKFILL_DAYS;
 export const rulesOf = (settings: SettingsDoc): CommissionRule[] => settings.rules ?? [];
 

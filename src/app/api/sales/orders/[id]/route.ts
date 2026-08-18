@@ -7,7 +7,7 @@ import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
 import { record } from "@/lib/audit";
 import { recalculateCommission } from "@/lib/sales/commission";
 import { DELIVERY_STATES } from "@/lib/sales/constants";
-import { holdDaysOf, loadSettings, rulesOf } from "@/lib/sales/settings";
+import { loadSettings, rulesOf } from "@/lib/sales/settings";
 
 const patchSchema = z.object({
   /** `null` clears the override and hands the decision back to the courier's feed. */
@@ -24,7 +24,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     if (!OBJECT_ID.test(id)) return badRequest("Not a valid order id");
     await connectDb();
 
-    const order = await SalesOrder.findById(id).populate("rep", "name code phone").lean();
+    const order = await SalesOrder.findById(id)
+      .populate("rep", "name code phone payMethod upiId bankName bankAccountName bankAccountNo bankIfsc")
+      .populate("commission.payment.paidBy", "name")
+      .lean();
     if (!order) return badRequest("No such order", 404);
     return ok(order);
   } catch (error) {
@@ -41,8 +44,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
  * an order pays out, so it is the administrator's alone and it leaves a line in
  * the audit trail naming who moved it and why.
  *
- * A commission a payout run has already claimed keeps its figure — the override
- * flags it for reversal rather than rewriting an approved run underneath it.
+ * A commission that has already been paid keeps its figure — the override
+ * flags it for reversal rather than rewriting the record of a payment.
  */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -74,7 +77,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (input.notes !== undefined) order.notes = input.notes;
 
     const settings = await loadSettings();
-    recalculateCommission(order, rulesOf(settings), { holdDays: holdDaysOf(settings) });
+    recalculateCommission(order, rulesOf(settings));
     if (order.delivery.state !== before) order.delivery.at = new Date();
     await order.save();
 

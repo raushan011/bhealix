@@ -48,26 +48,22 @@ export const VOID_STATES: readonly DeliveryState[] = ["RTO", "Returned", "Cancel
 /**
  * The life of one order's commission.
  *
- * `Pending`   — the parcel is still out. Nothing is owed yet.
- * `Maturing`  — delivered, inside the return window. Owed, but not yet payable.
- * `Payable`   — the window has passed and no payout run has claimed it.
- * `In payout` — sitting on a draft or approved run. The figure is frozen.
- * `Paid`      — the run that carried it has been paid.
- * `Void`      — RTO, returned, cancelled, lost or refunded. Never payable.
+ * `Pending` — the parcel is still out. Nothing is owed yet.
+ * `Payable` — delivered. Owed, and waiting for somebody to pay it.
+ * `Paid`    — an administrator has paid it and marked it so.
+ * `Void`    — RTO, returned, cancelled, lost or refunded. Never payable.
+ *
+ * There is deliberately no batch in this list. Commissions used to be gathered
+ * into a weekly payout run and paid together; they are now paid one order at a
+ * time, by hand, the moment the parcel is delivered — which is how the operation
+ * actually settles with its partners, and what the partner sees on their own
+ * screen: this order, this much, paid on this day.
  */
-export const COMMISSION_STATUSES = ["Pending", "Maturing", "Payable", "In payout", "Paid", "Void"] as const;
+export const COMMISSION_STATUSES = ["Pending", "Payable", "Paid", "Void"] as const;
 export type CommissionStatus = (typeof COMMISSION_STATUSES)[number];
 
-/** Once a run has claimed a commission, its figure is the run's to honour. */
-export const COMMITTED_STATUSES: readonly CommissionStatus[] = ["In payout", "Paid"];
-
-/**
- * A payout run's life, borrowed wholesale from payroll next door and for the
- * same reason: preparing a payment and releasing it are different authorities,
- * and a run that has been paid can never be reopened because the money has gone.
- */
-export const PAYOUT_STATUSES = ["Draft", "Approved", "Paid"] as const;
-export type PayoutStatus = (typeof PAYOUT_STATUSES)[number];
+/** Once a commission has been paid, its figure is a matter of record. */
+export const COMMITTED_STATUSES: readonly CommissionStatus[] = ["Paid"];
 
 /** How a payout actually leaves the company. */
 export const PAYOUT_MODES = ["Bank transfer", "UPI", "Cash", "Cheque", "Other"] as const;
@@ -144,9 +140,6 @@ export const DEFAULT_PARCEL = { weight: 0.5, length: 20, breadth: 15, height: 8 
  * one lands, so two hundred orders is a progress bar rather than a gamble.
  */
 export const PROCESS_BATCH = 5;
-
-/** The default hold before a delivered order's commission may be paid, in days. */
-export const DEFAULT_HOLD_DAYS = 7;
 
 /** How far back a first sync reaches when nothing has ever been pulled. */
 export const DEFAULT_BACKFILL_DAYS = 90;

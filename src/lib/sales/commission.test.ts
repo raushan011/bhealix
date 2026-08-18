@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { toDateInput } from "@/lib/time";
 import { attributeOrder, couponFor, isRepCode, normaliseCode, parseCoupon } from "./coupons";
 import {
   DEFAULT_RULES, commissionState, computeCommission, customerDiscountSummary, needsReversal, netOf,
@@ -134,28 +133,23 @@ describe("computeCommission", () => {
 });
 
 describe("commissionState", () => {
-  const delivered = new Date("2026-08-01T10:00:00");
-  const base = { amount: 450, holdDays: 7, deliveredAt: delivered } as const;
+  const base = { amount: 450 } as const;
 
   it("owes nothing while the parcel is still out", () => {
-    const state = commissionState({ ...base, delivery: "In transit", now: new Date("2026-08-02T10:00:00") });
+    const state = commissionState({ ...base, delivery: "In transit" });
     expect(state.status).toBe("Pending");
+    expect(state.reason).toMatch(/delivered/);
   });
 
-  it("holds a delivered order for seven days", () => {
-    const state = commissionState({ ...base, delivery: "Delivered", now: new Date("2026-08-05T10:00:00") });
-    expect(state.status).toBe("Maturing");
-    expect(toDateInput(state.maturesAt!)).toBe("2026-08-08");
-  });
-
-  it("becomes payable the moment the hold elapses", () => {
-    expect(commissionState({ ...base, delivery: "Delivered", now: new Date("2026-08-08T10:00:00") }).status).toBe("Payable");
-    expect(commissionState({ ...base, delivery: "Delivered", now: new Date("2026-08-08T09:59:59") }).status).toBe("Maturing");
+  it("is payable the moment the parcel is delivered — there is no hold", () => {
+    const state = commissionState({ ...base, delivery: "Delivered" });
+    expect(state.status).toBe("Payable");
+    expect(state.reason).toBeUndefined();
   });
 
   it("pays nothing on a parcel that came back", () => {
     for (const delivery of ["RTO", "Returned", "Cancelled", "Lost"] as const) {
-      const state = commissionState({ ...base, delivery, now: new Date("2026-09-01T10:00:00") });
+      const state = commissionState({ ...base, delivery });
       expect(state.status).toBe("Void");
       expect(state.reason).toBeTruthy();
     }
@@ -169,34 +163,27 @@ describe("commissionState", () => {
   it("pays nothing where nothing was received", () => {
     expect(commissionState({ ...base, amount: 0, delivery: "Delivered" }).status).toBe("Void");
   });
-
-  it("starts the clock at the moment we learned, when the courier gives no date", () => {
-    const now = new Date("2026-08-10T10:00:00");
-    const state = commissionState({ amount: 450, holdDays: 7, delivery: "Delivered", deliveredAt: null, now });
-    expect(state.status).toBe("Maturing");
-    expect(toDateInput(state.maturesAt!)).toBe("2026-08-17");
-  });
 });
 
 describe("nextStatus", () => {
-  it("leaves a commission a payout run has claimed exactly as it is", () => {
-    expect(nextStatus("In payout", "Payable")).toBe("In payout");
+  it("leaves a commission that has been paid exactly as it is", () => {
     expect(nextStatus("Paid", "Void")).toBe("Paid");
+    expect(nextStatus("Paid", "Payable")).toBe("Paid");
   });
 
-  it("moves anything a run has not claimed", () => {
-    expect(nextStatus("Maturing", "Payable")).toBe("Payable");
+  it("moves anything that has not been paid", () => {
+    expect(nextStatus("Payable", "Void")).toBe("Void");
+    expect(nextStatus("Pending", "Payable")).toBe("Payable");
     expect(nextStatus(undefined, "Pending")).toBe("Pending");
   });
 });
 
 describe("needsReversal", () => {
-  it("flags money already promised on a parcel that has since come back", () => {
+  it("flags money already paid on a parcel that has since come back", () => {
     expect(needsReversal("Paid", "Void")).toBe(true);
-    expect(needsReversal("In payout", "Void")).toBe(true);
   });
 
-  it("says nothing about a commission nobody has committed to yet", () => {
+  it("says nothing about a commission nobody has paid yet", () => {
     expect(needsReversal("Payable", "Void")).toBe(false);
     expect(needsReversal("Paid", "Payable")).toBe(false);
   });
@@ -212,16 +199,15 @@ describe("recalculateCommission", () => {
   const order = (over: Partial<CommissionOrderLike> = {}): CommissionOrderLike => ({
     ruleSuffix: "30",
     items: [line({ couponDiscount: 800 })],
-    shipment: { deliveredAt: new Date("2026-08-01T10:00:00") },
     delivery: { reported: "Delivered" },
     commission: {},
     ...over
   });
 
   const rules = [KIT30, SINGLE10];
-  const later = { now: new Date("2026-08-20T10:00:00"), holdDays: 7 };
+  const later = { now: new Date("2026-08-20T10:00:00") };
 
-  it("prices a delivered order and makes it payable once the hold has passed", () => {
+  it("prices a delivered order and makes it payable straight away", () => {
     const result = recalculateCommission(order(), rules, later);
     expect(result.commission.amount).toBe(450);
     expect(result.commission.base).toBe(1499);
@@ -250,7 +236,7 @@ describe("recalculateCommission", () => {
     expect(result.commission.amount).toBe(0);
   });
 
-  it("leaves a commission a payout run has claimed exactly as the run priced it", () => {
+  it("leaves a commission that has been paid exactly as it was paid", () => {
     const claimed = order({ commission: { status: "Paid", amount: 450, base: 1499, rate: 30 } });
     // The rate has since been cut, and the parcel has since come back.
     const result = recalculateCommission(
@@ -263,16 +249,15 @@ describe("recalculateCommission", () => {
     expect(result.commission.needsReversal).toBe(true);
   });
 
-  it("restates a commission no run has claimed when the rule changes", () => {
+  it("restates a commission that has not been paid when the rule changes", () => {
     const result = recalculateCommission(order({ commission: { status: "Payable", amount: 450 } }), [{ ...KIT30, rate: 20 }], later);
     expect(result.commission.amount).toBe(300);
     expect(result.commission.needsReversal).toBe(false);
   });
 
-  it("holds a delivered order that is still inside the window", () => {
-    const result = recalculateCommission(order(), rules, { now: new Date("2026-08-03T10:00:00"), holdDays: 7 });
-    expect(result.commission.status).toBe("Maturing");
-    expect(toDateInput(result.commission.maturesAt!)).toBe("2026-08-08");
+  it("stamps when it last looked", () => {
+    const result = recalculateCommission(order(), rules, later);
+    expect(result.commission.computedAt).toEqual(later.now);
   });
 });
 

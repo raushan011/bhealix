@@ -1,12 +1,11 @@
 import { SalesCoupon, SalesOrder, SalesRep, SalesSettings, SalesSyncRun } from "@/models/Sales";
 import { noteCodesSeen, refreshFromShopify } from "./catalogue";
-import { toDateInput, todayIso } from "@/lib/time";
+import { shiftDay, toDateInput, todayIso } from "@/lib/time";
 import { recalculateCommission } from "./commission";
 import { attributeOrder, normaliseCode, parseCoupon } from "./coupons";
 import { deliveryStateFrom } from "./delivery";
 import { IntegrationError } from "./http";
-import { addIsoDays } from "./payouts";
-import { backfillDaysOf, holdDaysOf, loadCredentials, rulesOf, shiprocketToken, shopifyConfig } from "./settings";
+import { backfillDaysOf, loadCredentials, rulesOf, shiprocketToken, shopifyConfig } from "./settings";
 import { codesOn, fetchOrders, mapOrder, mergeCustomer, type MappedOrder, type ShopifyOrder } from "./shopify";
 import type { CommissionRule } from "./commission";
 import { fetchShipments, matchKey, matchKeysFor } from "./shiprocket";
@@ -81,7 +80,6 @@ export async function saveShopifyOrder(
   match: { code: string; repId: string },
   coupons: Map<string, { repId: string; suffix: string }>,
   rules: CommissionRule[],
-  holdDays: number,
   known?: OrderDocument
 ): Promise<"created" | "updated"> {
   const mapped = mapOrder(raw, match.code);
@@ -108,7 +106,7 @@ export async function saveShopifyOrder(
     syncedAt: new Date()
   });
 
-  recalculateCommission(order, rules, { holdDays });
+  recalculateCommission(order, rules);
   await order.save();
   return existing ? "updated" : "created";
 }
@@ -151,7 +149,6 @@ export async function syncOrders(options: { since?: Date } = {}): Promise<SyncRe
   // Built once, not per order: attribution is the inner loop of the whole sync.
   const byCode = new Map([...coupons].map(([code, value]) => [code, value.repId]));
   const rules = rulesOf(settings);
-  const holdDays = holdDaysOf(settings);
   const unknown = new Set<string>();
 
   /*
@@ -188,7 +185,7 @@ export async function syncOrders(options: { since?: Date } = {}): Promise<SyncRe
     }
 
     report.ordersAttributed++;
-    const outcome = await saveShopifyOrder(raw, match, coupons, rules, holdDays, existing.get(String(raw.id)));
+    const outcome = await saveShopifyOrder(raw, match, coupons, rules, existing.get(String(raw.id)));
     if (outcome === "created") report.ordersCreated++; else report.ordersUpdated++;
     report.commissionsRecalculated++;
   }
@@ -238,9 +235,9 @@ export async function syncShipments(options: { from?: string; to?: string } = {}
   // The earlier of the two, so both the recent window and a stubborn old parcel
   // are covered — clamped at two years, because an order unsettled for longer
   // than that is a data problem, not a delivery.
-  const floor = addIsoDays(today, -backfillDaysOf(settings));
+  const floor = shiftDay(today, -backfillDaysOf(settings));
   const oldestIso = oldest?.placedAt ? isoOf(oldest.placedAt) : floor;
-  const from = options.from ?? maxIso(addIsoDays(today, -730), minIso(floor, oldestIso));
+  const from = options.from ?? maxIso(shiftDay(today, -730), minIso(floor, oldestIso));
   const to = options.to ?? today;
   report.from = from;
   report.to = to;
@@ -255,13 +252,12 @@ export async function syncShipments(options: { from?: string; to?: string } = {}
 
   const byKey = new Map(updates.map(update => [matchKey(update.channelOrderId), update]));
   const rules = rulesOf(settings);
-  const holdDays = holdDaysOf(settings);
 
   // Only our own orders are walked, and only the ones that could still change.
   // Most of what Shiprocket returns belongs to orders no affiliate brought in.
   const orders = await SalesOrder.find({
     placedAt: { $gte: new Date(`${from}T00:00:00`) },
-    $or: [{ "delivery.state": { $in: ["Awaiting", "In transit", "Undelivered"] } }, { "commission.status": { $in: ["Pending", "Maturing"] } }]
+    $or: [{ "delivery.state": { $in: ["Awaiting", "In transit", "Undelivered"] } }, { "commission.status": "Pending" }]
   });
 
   for (const order of orders) {
@@ -297,13 +293,13 @@ export async function syncShipments(options: { from?: string; to?: string } = {}
     order.set("shipment.status", update.status);
     order.set("shipment.statusCode", update.statusCode);
     // Once a delivery date is known it is never unlearned — a later status
-    // that omits it must not restart the seven-day clock.
+    // that omits it must not blank the day the partner was told it arrived.
     order.set("shipment.deliveredAt", update.deliveredAt ?? order.shipment?.deliveredAt);
     order.set("shipment.checkedAt", new Date());
     order.delivery.reported = reported;
     if (changed) order.delivery.at = new Date();
 
-    recalculateCommission(order, rules, { holdDays });
+    recalculateCommission(order, rules);
     await order.save();
     report.commissionsRecalculated++;
   }
@@ -315,20 +311,21 @@ export async function syncShipments(options: { from?: string; to?: string } = {}
 // ------------------------------------------------------------------- the rest
 
 /**
- * Re-prices every order no payout run has claimed.
+ * Re-prices every order that has not been paid.
  *
- * Run after a rate or a hold period changes, and on a schedule — a commission
- * whose window elapses overnight has to become payable without anybody touching
- * it, and nothing else in the system would notice the day turning.
+ * Run after a rate changes, and on a schedule, so a rule edited on Tuesday is
+ * reflected on every open order by Wednesday morning whether or not anybody
+ * pressed Sync. It matches on "not paid" rather than on a list of open
+ * statuses, so an order left under a status this code no longer produces is
+ * swept back into one it does.
  */
 export async function recalculateAll(): Promise<number> {
   const settings = await loadCredentials();
   const rules = rulesOf(settings);
-  const holdDays = holdDaysOf(settings);
 
-  const orders = await SalesOrder.find({ "commission.status": { $nin: ["In payout", "Paid"] } });
+  const orders = await SalesOrder.find({ "commission.status": { $ne: "Paid" } });
   for (const order of orders) {
-    recalculateCommission(order, rules, { holdDays });
+    recalculateCommission(order, rules);
     await order.save();
   }
   return orders.length;

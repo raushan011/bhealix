@@ -1,35 +1,37 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Wallet } from "lucide-react";
+import Link from "next/link";
+import { CheckCircle2, Clock, Wallet } from "lucide-react";
 import { Badge, Card, EmptyState, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
 import { formatDate } from "@/lib/time";
-import { formatRupees } from "@/lib/sales/types";
+import { formatRupees, type CommissionPayment } from "@/lib/sales/types";
 
 type Line = {
   _id: string;
-  run?: { payoutNo?: string; from?: string; to?: string; status?: string; paidAt?: string; paymentDate?: string; paymentMode?: string; reference?: string } | null;
-  orders: { order: string; name?: string; placedAt?: string; base: number; rate: number; amount: number }[];
-  orderCount: number;
-  gross: number;
-  adjustments: { name: string; amount: number }[];
-  net: number;
-  note?: string;
+  name?: string;
+  placedAt?: string;
+  couponCode?: string;
+  items?: { title: string; quantity: number }[];
+  shipment?: { deliveredAt?: string };
+  delivery?: { at?: string; state?: string };
+  commission: { amount: number; rate?: number; base?: number; status: string; payment?: CommissionPayment; needsReversal?: boolean };
 };
 
-type Payload = { lines: Line[]; totals: { paid: number; onTheWay: number } };
+type Payload = {
+  owed: Line[];
+  paid: Line[];
+  totals: { owed: { count: number; amount: number }; paid: { count: number; amount: number }; pending: { count: number; amount: number } };
+};
 
 /**
- * What the rep has been paid, and what each payment was made of.
+ * What the rep is owed and what they have been paid, order by order.
  *
- * Every line lists the orders behind it as they stood on the day the run was
- * generated — which is the point of the whole screen. "₹1,800 paid in August" is
- * a figure to be suspicious of; "₹1,800, being these four orders at these
- * rates" is a receipt.
- *
- * Draft runs never appear. The server declines to send them, and the reason is
- * worth repeating here: a draft can still change, and a number that goes down
- * after a rep has seen it costs more trust than the early sight was worth.
+ * Every line is one order, because that is how they are paid: a parcel is
+ * delivered, the commission on it is owed, the company sends it and marks it
+ * paid, and the line moves from the top list to the bottom one with the day and
+ * the reference on it. "₹1,800 in August" is a figure to be suspicious of;
+ * "#1042, ₹450, paid 12 Aug by UPI, ref 4217…" is a receipt.
  */
 export default function PartnerPayoutsPage() {
   const [data, setData] = useState<Payload | null>(null);
@@ -47,80 +49,78 @@ export default function PartnerPayoutsPage() {
   if (!data) return <Notice tone="error">Could not load your payments.</Notice>;
 
   return <div className="space-y-5">
-    <PageTitle title="Payments" subtitle="What you have been paid, and what each payment was made of" />
+    <PageTitle title="Payments" subtitle="Each delivered order is paid on its own, and listed here when it is" />
 
-    <Card className="grid grid-cols-2 gap-5 p-5">
-      <Stat label="Paid to you" value={formatRupees(data.totals.paid)} />
-      <Stat label="Approved, on its way" value={formatRupees(data.totals.onTheWay)}
-        tone={data.totals.onTheWay ? "text-[var(--ok-ink)]" : undefined} />
+    <Card className="grid grid-cols-3 gap-4 p-5">
+      <Stat label="Owed to you" value={formatRupees(data.totals.owed.amount)}
+        tone={data.totals.owed.count ? "text-[var(--ok-ink)]" : undefined} />
+      <Stat label="Paid to you" value={formatRupees(data.totals.paid.amount)} />
+      <Stat label="Still on its way" value={formatRupees(data.totals.pending.amount)} />
     </Card>
 
-    {data.lines.length ? (
-      <div className="space-y-4">
-        {data.lines.map(line => {
-          const paid = line.run?.status === "Paid";
-          return <Card key={line._id} className="p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-semibold">{line.run?.payoutNo ?? "Payment"}</p>
-                  <Badge tone={paid ? "success" : "info"}>{paid ? "Paid" : "Approved"}</Badge>
-                </div>
-                <p className="mt-0.5 text-xs text-[var(--muted)]">
-                  {line.run?.from && line.run?.to ? `${formatDate(line.run.from)} – ${formatDate(line.run.to)}` : ""}
-                  {` · ${line.orderCount} order${line.orderCount === 1 ? "" : "s"}`}
-                </p>
-                {paid && (
-                  <p className="mt-0.5 text-xs text-[var(--muted)]">
-                    {[
-                      line.run?.paymentDate ? `Paid ${formatDate(line.run.paymentDate)}` : line.run?.paidAt ? `Paid ${formatDate(line.run.paidAt)}` : null,
-                      line.run?.paymentMode,
-                      line.run?.reference
-                    ].filter(Boolean).join(" · ")}
-                  </p>
-                )}
-              </div>
-              <p className="shrink-0 text-lg font-semibold tabular-nums">{formatRupees(line.net)}</p>
-            </div>
+    <section className="space-y-2">
+      <h2 className="text-base font-semibold">Owed to you</h2>
+      {data.owed.length ? (
+        <Card className="divide-y divide-[var(--line)]">
+          {data.owed.map(line => <OrderLine key={line._id} line={line} />)}
+        </Card>
+      ) : (
+        <Card className="flex items-start gap-3 p-4 text-sm text-[var(--muted)]">
+          <Clock size={16} className="mt-0.5 shrink-0" />
+          <span>
+            Nothing is waiting to be paid right now. Commission is owed the moment a parcel is delivered —
+            {data.totals.pending.count > 0
+              ? ` ${data.totals.pending.count} of your order${data.totals.pending.count === 1 ? " is" : "s are"} still on the way.`
+              : " your next delivered order will appear here."}
+          </span>
+        </Card>
+      )}
+    </section>
 
-            {line.orders.length > 0 && (
-              <ul className="mt-4 space-y-1.5 border-t border-[var(--line)] pt-3">
-                {line.orders.map(order => (
-                  <li key={order.order} className="flex justify-between gap-3 text-xs">
-                    <span className="min-w-0 truncate text-[var(--muted)]">
-                      {order.name ?? "Order"}{order.placedAt ? ` · ${formatDate(order.placedAt)}` : ""} · {order.rate}% of {formatRupees(order.base)}
-                    </span>
-                    <span className="shrink-0 tabular-nums text-[var(--ink-2)]">{formatRupees(order.amount)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {/*
-              * Adjustments are shown in full, including the negative ones. A
-              * recovery netted quietly off the total is the fastest way to make
-              * somebody distrust every other figure on the page.
-              */}
-            {line.adjustments.length > 0 && (
-              <ul className="mt-3 space-y-1 border-t border-[var(--line)] pt-3">
-                {line.adjustments.map((adjustment, at) => (
-                  <li key={`${adjustment.name}-${at}`} className="flex justify-between gap-3 text-xs">
-                    <span className="min-w-0 wrap-break-word text-[var(--muted)]">{adjustment.name}</span>
-                    <span className={`shrink-0 tabular-nums ${adjustment.amount < 0 ? "text-[var(--danger-ink)]" : "text-[var(--ink-2)]"}`}>
-                      {adjustment.amount < 0 ? "−" : "+"}{formatRupees(Math.abs(adjustment.amount))}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {line.note && <p className="mt-3 text-xs text-[var(--muted)]">{line.note}</p>}
-          </Card>;
-        })}
-      </div>
-    ) : (
-      <EmptyState icon={Wallet} title="No payments yet"
-        description="Payments appear here once a run covering your orders has been approved. Until then, what you have earned is shown on the home screen." />
-    )}
+    <section className="space-y-2">
+      <h2 className="text-base font-semibold">Paid</h2>
+      {data.paid.length ? (
+        <Card className="divide-y divide-[var(--line)]">
+          {data.paid.map(line => <OrderLine key={line._id} line={line} paid />)}
+        </Card>
+      ) : (
+        <EmptyState icon={Wallet} title="No payments yet"
+          description="When the company pays you for a delivered order, it appears here with the date and the reference." />
+      )}
+    </section>
   </div>;
+}
+
+function OrderLine({ line, paid = false }: { line: Line; paid?: boolean }) {
+  const payment = line.commission.payment;
+  const delivered = line.shipment?.deliveredAt ?? line.delivery?.at;
+  return <Link href={`/partner/orders/${line._id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-[var(--surface-2)]">
+    <div className="min-w-0 flex-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-sm font-semibold">{line.name ?? "Order"}</p>
+        {paid
+          ? <Badge tone="success">Paid</Badge>
+          : <Badge tone="info">Delivered · owed</Badge>}
+        {line.commission.needsReversal && <Badge tone="danger">Came back after payment</Badge>}
+      </div>
+      <p className="mt-0.5 text-xs text-[var(--muted)]">
+        {(line.items ?? []).map(item => `${item.title}${item.quantity > 1 ? ` ×${item.quantity}` : ""}`).join(", ")}
+        {line.commission.rate ? ` · ${line.commission.rate}% of ${formatRupees(line.commission.base ?? 0)}` : ""}
+      </p>
+      <p className="mt-0.5 text-xs text-[var(--muted)]">
+        {paid && payment
+          ? [
+              payment.paymentDate ? `Paid ${formatDate(payment.paymentDate)}` : payment.paidAt ? `Paid ${formatDate(payment.paidAt)}` : "Paid",
+              payment.mode,
+              payment.reference ? `ref ${payment.reference}` : null,
+              payment.note
+            ].filter(Boolean).join(" · ")
+          : delivered ? `Delivered ${formatDate(delivered)}` : line.placedAt ? `Placed ${formatDate(line.placedAt)}` : ""}
+      </p>
+    </div>
+    <div className="flex shrink-0 items-center gap-2">
+      <p className="text-sm font-semibold tabular-nums">{formatRupees(line.commission.amount)}</p>
+      {paid && <CheckCircle2 size={16} className="text-[var(--ok-ink)]" />}
+    </div>
+  </Link>;
 }

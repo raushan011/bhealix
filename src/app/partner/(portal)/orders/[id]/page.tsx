@@ -15,7 +15,6 @@ type Payload = {
   steps: TrackStep[];
   headline: string;
   progress: number;
-  holdDays: number;
 };
 
 /**
@@ -88,9 +87,19 @@ export default function PartnerOrderPage({ params }: { params: Promise<{ id: str
           ? <>{order.commission.rate}% of {formatRupees(order.commission.base)} — the part of this order your code applied to.</>
           : order.commission.reason || "Nothing is owed on this order."}
       </p>
-      {order.commission.status === "Maturing" && order.commission.maturesAt && (
+      {order.commission.status === "Payable" && (
         <p className="mt-1 text-sm text-[var(--ink-2)]">
-          It becomes payable on {formatDate(order.commission.maturesAt)}, {data.holdDays} days after delivery.
+          Delivered, so this is owed to you now. The company pays it by UPI or bank transfer and it will show as paid here.
+        </p>
+      )}
+      {order.commission.status === "Paid" && order.commission.payment && (
+        <p className="mt-1 text-sm text-[var(--ok-ink)]">
+          {[
+            order.commission.payment.paymentDate ? `Paid ${formatDate(order.commission.payment.paymentDate)}` : "Paid",
+            order.commission.payment.mode,
+            order.commission.payment.reference ? `ref ${order.commission.payment.reference}` : null,
+            order.commission.payment.note
+          ].filter(Boolean).join(" · ")}
         </p>
       )}
       {refunded && (

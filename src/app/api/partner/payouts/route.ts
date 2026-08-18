@@ -1,24 +1,23 @@
 import { Types } from "mongoose";
 import { connectDb } from "@/lib/db/mongoose";
-import { SalesPayout, SalesPayoutLine } from "@/models/Sales";
+import { SalesOrder } from "@/models/Sales";
 import { apiPartner } from "@/lib/auth/partner";
 import { fail, ok } from "@/lib/api";
+import { commissionForPartner } from "@/lib/sales/commission-payment";
+
+const FIELDS = "name placedAt couponCode items shipment.deliveredAt delivery.at delivery.state commission";
 
 /**
- * What this rep has actually been paid, and what is on its way.
+ * What this rep is owed and what they have been paid, order by order.
  *
- * **Draft runs are not shown, on purpose.** A draft is working material: it can
- * be regenerated, an order on it can be voided by a return that arrives
- * tomorrow, and the figure on it is nobody's promise yet. Showing a rep a number
- * that later goes down is the fastest way to lose their trust in every other
- * number in this portal. They see a run once it has been approved — at which
- * point the amount is frozen and the company has committed to it.
+ * Two lists, the same two the administrator works from — so when a partner asks
+ * "have you paid me for #1042", both sides are looking at the same line. Owed
+ * is every delivered order not yet paid; paid is every one that has been, with
+ * the day, the mode and the reference the money went out under, which is what
+ * they need to find it in their own bank app.
  *
- * The lines carry the orders they were built from, copied onto the line when the
- * run was generated rather than joined now. That is what lets somebody ask in
- * November what the ₹1,800 paid in August was made of and get the four orders
- * exactly as they stood, rather than a fresh query that a later refund would
- * answer differently.
+ * Nothing here is a promise about a parcel still in transit. Those are on the
+ * orders screen, and they are worth nothing until the courier says delivered.
  */
 export async function GET() {
   try {
@@ -26,22 +25,31 @@ export async function GET() {
     if ("response" in auth) return auth.response;
     await connectDb();
 
-    const lines = await SalesPayoutLine.find({ rep: new Types.ObjectId(String(auth.rep._id)) })
-      .sort({ createdAt: -1 })
-      .limit(60)
-      .populate({ path: "run", model: SalesPayout, select: "payoutNo from to status paidAt paymentDate paymentMode reference approvedAt" })
-      .lean() as { run?: { status?: string } | null }[];
+    const rep = new Types.ObjectId(String(auth.rep._id));
 
-    const released = lines.filter(line => line.run && line.run.status !== "Draft");
+    const [owed, paid, totals] = await Promise.all([
+      SalesOrder.find({ rep, "commission.status": "Payable" })
+        .select(FIELDS).sort({ "delivery.at": 1, placedAt: 1 }).limit(200).lean(),
+      SalesOrder.find({ rep, "commission.status": "Paid" })
+        .select(FIELDS).sort({ "commission.payment.paidAt": -1 }).limit(200).lean(),
+      SalesOrder.aggregate<{ _id: string; count: number; amount: number }>([
+        { $match: { rep } },
+        { $group: { _id: "$commission.status", count: { $sum: 1 }, amount: { $sum: "$commission.amount" } } }
+      ])
+    ]);
 
-    const paid = released
-      .filter(line => line.run?.status === "Paid")
-      .reduce((running, line) => running + Number((line as { net?: number }).net ?? 0), 0);
-    const onTheWay = released
-      .filter(line => line.run?.status === "Approved")
-      .reduce((running, line) => running + Number((line as { net?: number }).net ?? 0), 0);
+    const by = (status: string) => totals.find(row => row._id === status) ?? { count: 0, amount: 0 };
+    const strip = (order: (typeof owed)[number]) => commissionForPartner(order as { commission?: { payment?: { paidBy?: unknown } } });
 
-    return ok({ lines: released, totals: { paid: Math.round(paid), onTheWay: Math.round(onTheWay) } });
+    return ok({
+      owed: owed.map(strip),
+      paid: paid.map(strip),
+      totals: {
+        owed: { count: by("Payable").count, amount: Math.round(by("Payable").amount) },
+        paid: { count: by("Paid").count, amount: Math.round(by("Paid").amount) },
+        pending: { count: by("Pending").count, amount: Math.round(by("Pending").amount) }
+      }
+    });
   } catch (error) {
     return fail(error);
   }

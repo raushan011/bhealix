@@ -52,7 +52,7 @@ export const WORKSPACE_LABEL: Record<Workspace, string> = {
  */
 export const WORKSPACE_BLURB: Record<Workspace, string> = {
   doctor: "Doctor discovery, call planning, field visits, billing, and the employees who do it — including field sales executives.",
-  sales: "Outside partners selling with their own coupon codes: sign-ups, Shopify orders, delivery status and commission payouts.",
+  sales: "Outside partners selling with their own coupon codes: sign-ups, Shopify orders, delivery status and paying each delivered order's commission.",
   control: "Who may enter which CRM, and the vendor invoice vault — every bill Shiprocket, Razorpay, Shopify and Meta sent this company, by month, ready for the accountant."
 };
 

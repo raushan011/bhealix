@@ -16,6 +16,7 @@ type Response = {
   page: number;
   pages: number;
   summary: { revenue: number; commission: number };
+  mayPay?: boolean;
 };
 
 function OrdersScreen() {
@@ -84,7 +85,7 @@ function OrdersScreen() {
 
     {filters.attention && (
       <Notice tone="warning">
-        Showing only orders whose commission was promised or paid and whose parcel then came back. Nothing has been
+        Showing only orders whose commission was paid and whose parcel then came back. Nothing has been
         reversed automatically — these need a decision.
       </Notice>
     )}
@@ -141,7 +142,7 @@ function OrdersScreen() {
         <Stat label="Commission" value={formatRupees(data.summary.commission)} />
       </Card>
 
-      <OrderList orders={data.items} mayOverride onChanged={load} />
+      <OrderList orders={data.items} mayOverride mayPay={data.mayPay ?? false} onChanged={load} />
 
       {data.pages > 1 && (
         <div className="flex items-center justify-between text-sm">

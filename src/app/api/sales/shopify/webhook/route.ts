@@ -1,7 +1,7 @@
 import { connectDb } from "@/lib/db/mongoose";
 import { fail } from "@/lib/api";
 import { attributeOrder } from "@/lib/sales/coupons";
-import { holdDaysOf, loadCredentials, rulesOf } from "@/lib/sales/settings";
+import { loadCredentials, rulesOf } from "@/lib/sales/settings";
 import { codesOn, type ShopifyOrder } from "@/lib/sales/shopify";
 import { couponIndex, saveShopifyOrder } from "@/lib/sales/sync";
 import { verifyWebhook } from "@/lib/sales/webhooks";
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
 
     if (!match) return Response.json({ ok: true, attributed: false, topic });
 
-    const outcome = await saveShopifyOrder(order, match, coupons, rulesOf(settings), holdDaysOf(settings));
+    const outcome = await saveShopifyOrder(order, match, coupons, rulesOf(settings));
     return Response.json({ ok: true, attributed: true, topic, outcome });
   } catch (error) {
     // A 500 has Shopify retry, which is what we want for a transient database

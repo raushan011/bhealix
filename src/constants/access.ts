@@ -179,17 +179,17 @@ export const can = {
    * telephone is the desk that should be able to send it.
    */
   processOrders: (role: Role) => admin(role) || role === "HR",
-  /** Preparing a week's payout: gathering what has matured and setting it out per rep. */
-  runSalesPayout: (role: Role) => admin(role) || role === "HR",
   /**
-   * Approving a payout run and releasing the money.
+   * Paying a partner's commission on a delivered order, and marking it paid.
    *
-   * Split from preparing it for exactly the reason payroll is (see
-   * `approvePayroll`): this is a real payment to real people, and one person who
-   * can both assemble the figures and release them is the same hole in a
-   * different set of books.
+   * There is no batch and no second signature: the money moves by UPI or bank
+   * transfer outside this system, one order at a time, and the person who sends
+   * it is the person who records that they did. That is a real payment to a
+   * real person outside the company, so it stays with the administrator — the
+   * desk that watches deliveries can see what is owed without being able to
+   * say it has been settled.
    */
-  approveSalesPayout: (role: Role) => admin(role),
+  paySalesCommission: (role: Role) => admin(role),
 
   // -------------------------------------------------------------- super admin
   /**

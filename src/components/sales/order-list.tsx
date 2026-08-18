@@ -1,30 +1,37 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, PackageSearch, SlidersHorizontal } from "lucide-react";
+import { AlertTriangle, PackageSearch, SlidersHorizontal, Wallet } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Field, Notice } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
+import { PayCommission, paymentSummary, UnpayButton } from "@/components/sales/pay-commission";
 import { formatDate } from "@/lib/time";
 import { commissionTone, deliveryTone } from "@/lib/sales/delivery";
 import { DELIVERY_STATES, type DeliveryState } from "@/lib/sales/constants";
 import { formatRupees, type SalesOrderRecord } from "@/lib/sales/types";
 
 /**
- * Attributed orders, and the one control that can change what they pay.
+ * Attributed orders, and the two controls that can change what they pay.
  *
  * Each row carries two badges because they answer different questions: the
  * delivery state is what the courier says happened, and the commission status is
  * what that means for money. They are usually consistent and it is precisely the
- * cases where they are not — delivered but still maturing, delivered but voided
- * by a refund — that somebody is looking for.
+ * cases where they are not — delivered but voided by a refund, paid and then
+ * returned — that somebody is looking for.
+ *
+ * A delivered order that has not been paid carries a Pay button, because that
+ * is the whole of what happens next to it; a paid one says when and how.
  */
-export function OrderList({ orders, mayOverride, onChanged, showRep = true }: {
+export function OrderList({ orders, mayOverride, mayPay = false, onChanged, showRep = true }: {
   orders: SalesOrderRecord[];
   mayOverride: boolean;
+  mayPay?: boolean;
   onChanged?: () => void;
   showRep?: boolean;
 }) {
   const [editing, setEditing] = useState<SalesOrderRecord | null>(null);
+  const [paying, setPaying] = useState<SalesOrderRecord | null>(null);
+  const [problem, setProblem] = useState("");
 
   if (!orders.length) {
     return <EmptyState icon={PackageSearch} title="No orders here"
@@ -32,6 +39,7 @@ export function OrderList({ orders, mayOverride, onChanged, showRep = true }: {
   }
 
   return <>
+    {problem && <Notice tone="error">{problem}</Notice>}
     <Card className="divide-y divide-[var(--line)]">
       {orders.map(order => {
         const rep = typeof order.rep === "object" && order.rep ? order.rep : null;
@@ -88,15 +96,25 @@ export function OrderList({ orders, mayOverride, onChanged, showRep = true }: {
             <p className="text-xs text-[var(--muted)]">
               {order.commission.rate}% of {formatRupees(order.commission.base)}
             </p>
-            {order.commission.status === "Maturing" && order.commission.maturesAt && (
-              <p className="text-xs text-[var(--muted)]">clears {formatDate(order.commission.maturesAt)}</p>
+            {order.commission.status === "Paid" && (
+              <p className="text-xs text-[var(--ok-ink)]">{paymentSummary(order.commission.payment)}</p>
             )}
-            {mayOverride && (
-              <button onClick={() => setEditing(order)}
-                className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-[var(--brand)] hover:underline">
-                <SlidersHorizontal size={12} />Correct
-              </button>
-            )}
+            <div className="mt-1 flex items-center justify-end gap-3">
+              {mayPay && order.commission.status === "Payable" && (
+                <Button className="min-h-[32px] px-3 text-xs" onClick={() => setPaying(order)}>
+                  <Wallet size={13} />Pay
+                </Button>
+              )}
+              {mayPay && order.commission.status === "Paid" && (
+                <UnpayButton orderId={order._id} onDone={() => onChanged?.()} onError={setProblem} />
+              )}
+              {mayOverride && (
+                <button onClick={() => setEditing(order)}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-[var(--brand)] hover:underline">
+                  <SlidersHorizontal size={12} />Correct
+                </button>
+              )}
+            </div>
           </div>
         </div>;
       })}
@@ -104,6 +122,8 @@ export function OrderList({ orders, mayOverride, onChanged, showRep = true }: {
 
     {editing && <OverrideDelivery order={editing} onClose={() => setEditing(null)}
       onSaved={() => { setEditing(null); onChanged?.(); }} />}
+    {paying && <PayCommission order={paying} onClose={() => setPaying(null)}
+      onPaid={() => { setPaying(null); onChanged?.(); }} />}
   </>;
 }
 
@@ -162,11 +182,10 @@ function OverrideDelivery({ order, onClose, onSaved }: {
           placeholder="Customer confirmed the kit arrived; Shiprocket never updated the status." />
       </Field>
 
-      {order.commission.status === "Paid" || order.commission.status === "In payout" ? (
+      {order.commission.status === "Paid" ? (
         <Notice tone="warning">
-          This commission has already been {order.commission.status === "Paid" ? "paid" : "put on a payout run"}, so the
-          figure will not change. If the correction voids it, the order is flagged for reversal and the money is recovered
-          by agreement — an approved run is never rewritten underneath.
+          This commission has already been paid, so the figure will not change. If the correction voids it, the order is
+          flagged for reversal and the money is recovered by agreement — a payment already made is never rewritten underneath.
         </Notice>
       ) : null}
 

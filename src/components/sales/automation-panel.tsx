@@ -26,8 +26,8 @@ type Run = {
  *
  * "It syncs every night" is a claim until there is a list of nights it synced
  * on. Without this the first anybody learns that the schedule stopped is a
- * payout run that comes back empty — and by then a week of commissions is
- * missing with nothing to point at.
+ * partner asking why a parcel delivered a week ago is not showing as owed —
+ * and by then a week of deliveries is missing with nothing to point at.
  */
 export function AutomationPanel() {
   const [runs, setRuns] = useState<Run[]>([]);
@@ -74,8 +74,8 @@ export function AutomationPanel() {
     {!scheduled && (
       <Notice tone="warning">
         The nightly pass is not switched on: set <code>CRON_SECRET</code> in the hosting environment to any long random
-        string. Without it, commissions still mature correctly — a payout run reads the maturity date rather than a
-        stored status — but these screens will only be as current as the last time somebody pressed Sync.
+        string. Without it, deliveries are only read in — and commissions only become owed — when somebody presses Sync,
+        so what a partner sees as owed will be as old as the last press.
       </Notice>
     )}
 

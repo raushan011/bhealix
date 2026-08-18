@@ -48,8 +48,6 @@ const schema = z.object({
   shiprocketEmail: z.email("Enter the Shiprocket API user's email").optional().or(z.literal("")),
   shiprocketPassword: z.string().trim().max(200).optional(),
   rules: z.array(ruleSchema).max(12).optional(),
-  holdDays: z.number().int().min(0).max(90).optional(),
-  payoutWeekday: z.number().int().min(0).max(6).optional(),
   backfillDays: z.number().int().min(1).max(730).optional()
 });
 
@@ -94,8 +92,6 @@ export async function GET() {
       lastShipmentSyncError: settings.lastShipmentSyncError,
 
       rules: settings.rules ?? [],
-      holdDays: settings.holdDays ?? 7,
-      payoutWeekday: settings.payoutWeekday ?? 1,
       backfillDays: settings.backfillDays ?? 90,
       currency: settings.currency ?? "INR"
     };
@@ -121,8 +117,6 @@ export async function PUT(request: Request) {
     if (input.shopifyClientId !== undefined) set.shopifyClientId = input.shopifyClientId || undefined;
     if (input.shiprocketEmail !== undefined) set.shiprocketEmail = input.shiprocketEmail || undefined;
     if (input.rules !== undefined) set.rules = input.rules;
-    if (input.holdDays !== undefined) set.holdDays = input.holdDays;
-    if (input.payoutWeekday !== undefined) set.payoutWeekday = input.payoutWeekday;
     if (input.backfillDays !== undefined) set.backfillDays = input.backfillDays;
 
     await SalesSettings.updateOne({ key: "sales" }, { $set: set }, { upsert: true });
@@ -137,23 +131,23 @@ export async function PUT(request: Request) {
     }
 
     /*
-     * Rates and the hold period are re-applied immediately.
+     * Rates are re-applied immediately.
      *
      * Saving a rate change that only takes effect on the next sync is the kind
-     * of thing that is discovered a week later, in a payout. Commissions a run
-     * has claimed keep their figures — `recalculateCommission` sees to that —
-     * so this restates what is still open and nothing else.
+     * of thing that is discovered a week later, when a partner is paid the old
+     * figure. Commissions already paid keep their figures —
+     * `recalculateCommission` sees to that — so this restates what is still
+     * open and nothing else.
      */
     const rulesChanged = input.rules !== undefined && JSON.stringify(input.rules) !== JSON.stringify(before.rules ?? []);
-    const holdChanged = input.holdDays !== undefined && input.holdDays !== before.holdDays;
-    const recalculated = rulesChanged || holdChanged ? await recalculateAll() : 0;
+    const recalculated = rulesChanged ? await recalculateAll() : 0;
 
     await record({
       actor: auth.session.userId,
       action: "sales.settings.updated",
       entityType: "SalesSettings",
       entityId: "sales",
-      metadata: { rulesChanged, holdChanged, recalculated }
+      metadata: { rulesChanged, recalculated }
     });
 
     return ok({ saved: true, recalculated });

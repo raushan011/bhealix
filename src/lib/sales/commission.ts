@@ -1,6 +1,5 @@
 import {
   COMMITTED_STATUSES,
-  DEFAULT_HOLD_DAYS,
   EARNING_STATE,
   VOID_STATES,
   type CommissionBase,
@@ -14,11 +13,11 @@ import {
  *
  * Pure and tested, because this is the arithmetic somebody is paid on. The sync
  * computes it server-side and the screens re-render the same numbers from the
- * same functions, so what a rep is shown and what the payout run pays can never
- * be two different figures.
+ * same functions, so what a rep is shown and what the administrator pays can
+ * never be two different figures.
  *
  * Everything is in **whole rupees**. A commission is a payment to a person, and
- * a payout advice reading ₹449.70 invites an argument that ₹450 does not.
+ * a payment line reading ₹449.70 invites an argument that ₹450 does not.
  */
 export const rupees = (value: number) => Math.round(value);
 
@@ -201,22 +200,16 @@ export const addDays = (date: Date, days: number) => new Date(date.getTime() + d
 
 export type CommissionStateInput = {
   delivery: DeliveryState;
-  /** When the courier delivered it. */
-  deliveredAt?: Date | string | null;
   /** The order was cancelled in Shopify, whatever the courier says. */
   cancelled?: boolean;
   /** Every rupee has been refunded. */
   fullyRefunded?: boolean;
   /** What the order is worth, from `computeCommission`. */
   amount: number;
-  holdDays?: number;
-  now?: Date;
 };
 
 export type CommissionState = {
   status: CommissionStatus;
-  /** The day it becomes payable. Absent unless it has been delivered. */
-  maturesAt?: Date;
   /** Why it is not payable, in a sentence fit to put on screen. */
   reason?: string;
 };
@@ -224,14 +217,12 @@ export type CommissionState = {
 /**
  * Where an order's commission stands right now.
  *
- * The hold exists because a delivered parcel can still come back. Paying on the
- * day of delivery means chasing money already sent; the window is the cheap
- * version of that problem.
+ * Delivered is payable. There is no hold: the moment the courier reports the
+ * parcel delivered, the money is owed and the order shows a button to pay it. A
+ * parcel that comes back after it was paid is caught by `needsReversal` below
+ * and shown to a person, rather than delaying everybody on the chance of it.
  */
 export function commissionState(input: CommissionStateInput): CommissionState {
-  const holdDays = input.holdDays ?? DEFAULT_HOLD_DAYS;
-  const now = input.now ?? new Date();
-
   if (input.cancelled) return { status: "Void", reason: "The order was cancelled." };
   if (input.fullyRefunded) return { status: "Void", reason: "The order was refunded in full." };
   if (VOID_STATES.includes(input.delivery)) {
@@ -246,36 +237,28 @@ export function commissionState(input: CommissionStateInput): CommissionState {
     return { status: "Void", reason: "Nothing was received for this order once discounts and refunds were counted." };
   }
 
-  // A courier that reports a delivery without a date still starts the clock —
-  // from the moment we learned of it. Stranding a rep's earnings because
-  // Shiprocket omitted a timestamp is not a policy anybody chose.
-  const deliveredAt = input.deliveredAt ? new Date(input.deliveredAt) : now;
-  const maturesAt = addDays(deliveredAt, holdDays);
-
-  return now >= maturesAt
-    ? { status: "Payable", maturesAt }
-    : { status: "Maturing", maturesAt, reason: `Clears ${holdDays} days after delivery.` };
+  return { status: "Payable" };
 }
 
 /**
  * The status to store, given the one already there.
  *
- * A commission a payout run has claimed keeps both its status and its figure:
- * the run is a document somebody approved, and recomputing what it contains
- * underneath it would make an approval meaningless. Releasing it is the run's
- * own business — deleting or reopening a draft hands its commissions back, and
- * they are recomputed then.
+ * A commission that has been paid keeps both its status and its figure: the
+ * payment is a record of money that left the company, and recomputing what it
+ * was underneath it would make the record meaningless. Undoing a payment is the
+ * administrator's own business — see `lib/sales/commission-payment.ts` — and the
+ * order is recomputed then.
  */
 export const nextStatus = (current: CommissionStatus | undefined, computed: CommissionStatus): CommissionStatus =>
   current && COMMITTED_STATUSES.includes(current) ? current : computed;
 
 /**
- * A commission already promised that has since gone bad — the parcel came back
- * after it was approved, or after it was paid.
+ * A commission already paid that has since gone bad — the parcel came back
+ * after the money was sent.
  *
- * This is the hole a seven-day hold leaves open, and the only honest thing to do
+ * Paying on delivery leaves this hole open, and the only honest thing to do
  * with it is show it. Nothing is reversed automatically: money that has left the
- * company is recovered by agreement, not by a background job editing a run.
+ * company is recovered by agreement, not by a background job editing a record.
  */
 export const needsReversal = (current: CommissionStatus | undefined, computed: CommissionStatus) =>
   Boolean(current && COMMITTED_STATUSES.includes(current) && computed === "Void");
@@ -292,11 +275,10 @@ export type CommissionOrderLike = {
   items: OrderLine[];
   cancelledAt?: Date | null;
   fullyRefunded?: boolean;
-  shipment?: { deliveredAt?: Date | null } | null;
   delivery: { reported?: DeliveryState; override?: DeliveryState | null; state?: DeliveryState };
   commission: {
     rate?: number; base?: number; amount?: number;
-    status?: CommissionStatus; maturesAt?: Date | null;
+    status?: CommissionStatus;
     wholeOrderFallback?: boolean; reason?: string | null;
     needsReversal?: boolean; computedAt?: Date | null;
   };
@@ -311,15 +293,15 @@ export type CommissionOrderLike = {
  * else sets those fields by hand, or the figure on the screen and the figure in
  * the payout drift apart.
  *
- * Note what it will not do: a commission a payout run has claimed keeps its
- * figure. The run is a document somebody approved, and recomputing underneath it
- * would make the approval meaningless — so instead the order is flagged
- * `needsReversal` and shown to a human.
+ * Note what it will not do: a commission that has been paid keeps its figure.
+ * The payment is a record of money that left the company, and recomputing
+ * underneath it would make the record meaningless — so instead the order is
+ * flagged `needsReversal` and shown to a human.
  */
 export function recalculateCommission<T extends CommissionOrderLike>(
   order: T,
   rules: readonly CommissionRule[],
-  options: { holdDays?: number; now?: Date } = {}
+  options: { now?: Date } = {}
 ): T {
   const now = options.now ?? new Date();
 
@@ -336,12 +318,9 @@ export function recalculateCommission<T extends CommissionOrderLike>(
   const computed = rule
     ? commissionState({
         delivery: state,
-        deliveredAt: order.shipment?.deliveredAt,
         cancelled: Boolean(order.cancelledAt),
         fullyRefunded: order.fullyRefunded,
-        amount: breakdown.amount,
-        holdDays: options.holdDays,
-        now
+        amount: breakdown.amount
       })
     : {
         status: "Void" as CommissionStatus,
@@ -353,14 +332,13 @@ export function recalculateCommission<T extends CommissionOrderLike>(
   order.commission.status = nextStatus(current, computed.status);
   order.commission.computedAt = now;
 
-  // A claimed commission keeps the figures the run committed to. Everything
-  // else is restated from what we now know.
+  // A paid commission keeps the figures that were paid. Everything else is
+  // restated from what we now know.
   if (!COMMITTED_STATUSES.includes(current as CommissionStatus)) {
     order.commission.rate = breakdown.rate;
     order.commission.base = breakdown.base;
     order.commission.amount = breakdown.amount;
     order.commission.wholeOrderFallback = breakdown.wholeOrderFallback;
-    order.commission.maturesAt = computed.maturesAt ?? null;
     order.commission.reason = computed.reason ?? null;
   }
 

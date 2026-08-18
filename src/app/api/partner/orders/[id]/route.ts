@@ -3,7 +3,7 @@ import { connectDb } from "@/lib/db/mongoose";
 import { SalesOrder } from "@/models/Sales";
 import { apiPartner } from "@/lib/auth/partner";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
-import { holdDaysOf, loadSettings } from "@/lib/sales/settings";
+import { commissionForPartner } from "@/lib/sales/commission-payment";
 import { trackingHeadline, trackOrder, trackingProgress } from "@/lib/sales/tracking";
 
 /**
@@ -33,15 +33,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
     if (!order) return badRequest("No such order", 404);
 
-    const settings = await loadSettings();
     const steps = trackOrder(order as never);
 
     return ok({
-      order,
+      order: commissionForPartner(order as { commission?: { payment?: { paidBy?: unknown } } }),
       steps,
       headline: trackingHeadline(order as never),
-      progress: trackingProgress(steps),
-      holdDays: holdDaysOf(settings)
+      progress: trackingProgress(steps)
     });
   } catch (error) {
     return fail(error);
