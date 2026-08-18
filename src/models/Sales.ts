@@ -6,6 +6,7 @@ import {
 import { DEFAULT_RULES } from "@/lib/sales/commission";
 import { LEAD_SOURCES, LEAD_STATUSES, REMARK_CHANNELS } from "@/lib/sales/leads";
 import { COUPON_SETUP_STATES, REP_STATUSES } from "@/lib/sales/partners";
+import { FULFILMENT_STATES, RETARGET_STATUSES } from "@/lib/sales/retarget";
 
 /**
  * The affiliate side of the business: the people who sell on commission, the
@@ -390,6 +391,113 @@ SalesOrderSchema.index({ "shipment.awb": 1, placedAt: -1 });
 SalesOrderSchema.index({ "shipment.courier": 1 }, { sparse: true });
 
 export const SalesOrder = models.SalesOrder ?? model("SalesOrder", SalesOrderSchema);
+
+// ------------------------------------------------------------ every shop order
+
+/**
+ * Every order the shop has ever taken, whoever brought it in — the customer
+ * base, one row per order, for ringing back.
+ *
+ * Deliberately a separate collection from `SalesOrder`. That one holds only the
+ * orders a partner's coupon attributed and everything downstream of it — the
+ * commission, the courier booking, the payout — assumes a partner behind each
+ * row. Putting the other ninety per cent of the shop's orders in there would
+ * put them on the picking list, in the revenue figures and in the payout
+ * queries, with a null where the partner should be. This is a lighter record:
+ * who bought what, when, whether it arrived, and what was said when somebody
+ * rang them about it. Where the same order *is* attributed, `order` points at
+ * the fuller record.
+ */
+const SalesShopOrderSchema = new Schema({
+  shopifyOrderId: { type: String, required: true, unique: true, index: true },
+  name: { type: String, index: true },
+  orderNumber: Number,
+  placedAt: { type: Date, required: true, index: true },
+
+  /**
+   * The same person across orders — see `customerKeyOf`. What lets the list
+   * say "has bought twice before" without a join, via `customerOrders` below,
+   * which the sync recounts for every key it touched.
+   */
+  customerKey: { type: String, required: true, index: true },
+  customerOrders: { type: Number, default: 1 },
+  customer: {
+    name: String,
+    email: String,
+    phone: String,
+    address1: String,
+    address2: String,
+    city: { type: String, index: true },
+    state: String,
+    pinCode: String,
+    country: String
+  },
+
+  items: [new Schema({ title: String, quantity: Number, sku: String }, { _id: false })],
+  /** Titles, de-duplicated, so the product filter is an indexed equality. */
+  products: { type: [String], default: [], index: true },
+  total: { type: Number, default: 0 },
+  paymentMethod: String,
+  financialStatus: String,
+  /** Shopify's own word for the parcel: the only delivery fact for an order Shiprocket was never asked about. */
+  fulfilment: { type: String, enum: FULFILMENT_STATES, default: "Unfulfilled", index: true },
+  cancelledAt: Date,
+  discountCodes: { type: [String], default: [], index: true },
+
+  /** Set when a partner's coupon brought this order in — the fuller record and its owner. */
+  order: { type: Schema.Types.ObjectId, ref: "SalesOrder" },
+  rep: { type: Schema.Types.ObjectId, ref: "SalesRep", index: true },
+  couponCode: String,
+
+  /**
+   * What the courier said, when the courier was asked. Read off Shiprocket's
+   * feed by order name on the same pass that walks the attributed orders, so an
+   * order nobody's coupon brought in still says "Delivered" here.
+   */
+  delivery: {
+    state: { type: String, enum: DELIVERY_STATES, index: true },
+    status: String,
+    courier: String,
+    awb: String,
+    deliveredAt: Date,
+    checkedAt: Date
+  },
+
+  /** The calling desk's half of the row. */
+  retarget: {
+    status: { type: String, enum: RETARGET_STATUSES, default: "Not called", index: true },
+    lastContactedAt: { type: Date, index: true },
+    contactCount: { type: Number, default: 0 },
+    /** Cached off `remarks`, so "never remarked" is a filter and not a scan. */
+    remarkCount: { type: Number, default: 0 },
+    lastChannel: { type: String, enum: REMARK_CHANNELS },
+    lastRemarkAt: Date,
+    lastRemark: String,
+    nextFollowUpAt: { type: Date, index: true },
+    /** The standing note — what to know before dialling. */
+    notes: String,
+    /** The right number, when the one the shop had was wrong. Wins over `customer.phone` on screen and in the search. */
+    phone: String,
+    remarks: [new Schema({
+      text: { type: String, required: true, trim: true },
+      channel: { type: String, enum: REMARK_CHANNELS, default: "Call" },
+      status: { type: String, enum: RETARGET_STATUSES },
+      at: { type: Date, default: Date.now },
+      by: { type: Schema.Types.ObjectId, ref: "User" },
+      byName: String
+    }, { _id: true })]
+  },
+
+  syncedAt: Date
+}, { timestamps: true });
+
+// The list's default question, and the calling desk's own: what has not been
+// rung, oldest order first; and what is due to be rung today.
+SalesShopOrderSchema.index({ "retarget.status": 1, placedAt: -1 });
+SalesShopOrderSchema.index({ "retarget.nextFollowUpAt": 1, placedAt: -1 });
+SalesShopOrderSchema.index({ "customer.phone": 1 });
+
+export const SalesShopOrder = models.SalesShopOrder ?? model("SalesShopOrder", SalesShopOrderSchema);
 
 // -------------------------------------------------------------- coupon catalogue
 

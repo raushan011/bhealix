@@ -107,6 +107,7 @@ export type ShopifyOrder = {
   updated_at?: string;
   cancelled_at?: string | null;
   financial_status?: string | null;
+  fulfillment_status?: string | null;
   currency?: string;
   total_price?: ShopifyMoney;
   gateway?: string | null;

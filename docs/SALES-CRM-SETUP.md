@@ -337,6 +337,31 @@ Only an administrator can mark a commission paid; HR can see what is owed. A pay
 wrong order can be taken back with **Undo** on the Paid list — that is for mistakes and bounced
 transfers, not for a parcel that came back after it was paid.
 
+## Retargeting — ringing the whole customer base
+
+**Retarget** lists **every order the shop has taken**, whoever brought it in — not only the ones a
+partner's coupon attributed. Each row is a customer to ring: who bought what, when, for how much,
+whether it arrived, and underneath it a thread of what was said each time somebody rang.
+
+- **Call** opens the number as a `tel:` / WhatsApp link with the remark box already open under it —
+  presets for *No answer*, *Call back*, *Interested*, *Reordered*, *Not interested*, *Do not call* —
+  and saves the remark, the new status and a follow-up date in one go.
+- **Remarks** is the full thread on that order; each line can be corrected or removed.
+- **Edit** sets the status, a standing note, a follow-up date, or a corrected phone number when the
+  shop's was wrong (the correction survives every sync).
+- Filters cover month, date range, delivery state (Shiprocket's), Shopify fulfilment, product, city,
+  payment, cancelled, partner / coupon, repeat customers, remarks (none / any / channel), contacted
+  (never / since a date), follow-up (due / later / none), amount, and sort. **Export** downloads
+  exactly what the filters show, with a second sheet of every remark.
+
+The list fills from the same sync the partners' orders use. The first time, press **Pull all
+history** on the Retarget screen to reach back two years; after that every nightly pass, manual sync
+and Shopify webhook adds new orders. Delivery status is copied from the same Shiprocket feed the
+attributed orders read, so an order nobody's coupon brought in still says "Delivered".
+
+Reading the list needs the Sales CRM; recording a call needs the calling desk's access
+(administrators and HR).
+
 ## Paying on delivery, and the hole it leaves
 
 A delivered parcel can still come back. If a return lands after a commission has been paid, the order
@@ -513,6 +538,7 @@ Two ways to clear one, both on that row:
 | Create their own coupon code | ✓ | | ✓ once approved |
 | Hold the Shopify/Shiprocket credentials and rates | ✓ | | |
 | See what is owed and what has been paid | ✓ | ✓ | own only |
+| Ring shop customers back and record what they said (Retarget) | ✓ | ✓ | |
 | Pay a commission and mark it paid | ✓ | | |
 | Change where their payment is sent | ✓ | | own only |
 

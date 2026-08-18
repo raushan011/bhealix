@@ -91,6 +91,10 @@ export const AUDIT_ACTIONS = {
   "sales.orders.processed": "Booked orders with the courier",
   "sales.synced": "Pulled orders and delivery status",
   "sales.settings.updated": "Changed the affiliate settings",
+  "sales.retarget.remarked": "Added a remark on a shop customer's order",
+  "sales.retarget.remark.updated": "Edited a remark on a shop customer's order",
+  "sales.retarget.remark.deleted": "Deleted a remark from a shop customer's order",
+  "sales.retarget.updated": "Updated a shop customer's calling status",
   "sales.commission.paid": "Paid a partner's commission on an order",
   "sales.commission.unpaid": "Took back a commission payment marked in error",
 

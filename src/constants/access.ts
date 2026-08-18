@@ -190,6 +190,14 @@ export const can = {
    * say it has been settled.
    */
   paySalesCommission: (role: Role) => admin(role),
+  /**
+   * Ringing the shop's customers back and writing down what they said.
+   *
+   * Every Shopify order, whoever brought it in, is a person to call — and
+   * calling changes no rate, no attribution and no payment, so the desk that
+   * watches deliveries can work the list too.
+   */
+  retargetCustomers: (role: Role) => admin(role) || role === "HR",
 
   // -------------------------------------------------------------- super admin
   /**

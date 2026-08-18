@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BadgePercent, BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, FileArchive, HeartHandshake, KeyRound, LayoutDashboard, LogOut, Menu, Package, Plug, Receipt, Repeat, Search, Settings, ShoppingBag, Stethoscope, Tag, Truck, Users, Wallet, Warehouse, X } from "lucide-react";
+import { BadgePercent, BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, FileArchive, HeartHandshake, KeyRound, LayoutDashboard, LogOut, Menu, Package, PhoneCall, Plug, Receipt, Repeat, Search, Settings, ShoppingBag, Stethoscope, Tag, Truck, Users, Wallet, Warehouse, X } from "lucide-react";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { NavIcon } from "@/components/layout/nav-icon";
 import { Brand, BrandMark } from "@/components/ui/brand";
@@ -55,6 +55,10 @@ const NAV = [
   // morning's picking list.
   { href: "/admin/sales/orders/process", label: "Process orders", icon: Truck, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
   { href: "/admin/sales/payouts", label: "Payouts", icon: BadgePercent, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
+  // Every order the shop took, whoever brought it in, as a calling list —
+  // the one screen here that is about the whole customer base rather than
+  // the partners' slice of it.
+  { href: "/admin/sales/retarget", label: "Retarget", icon: PhoneCall, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
   { href: "/admin/sales/settings", label: "Settings", icon: Settings, roles: ["SUPERADMIN", "ADMIN"], group: "Affiliate", workspace: "sales" },
 
   { href: "/admin/control", label: "Overview", icon: LayoutDashboard, roles: ["SUPERADMIN"], group: "", workspace: "control" },

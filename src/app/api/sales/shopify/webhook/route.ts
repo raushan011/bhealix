@@ -4,6 +4,7 @@ import { attributeOrder } from "@/lib/sales/coupons";
 import { loadCredentials, rulesOf } from "@/lib/sales/settings";
 import { codesOn, type ShopifyOrder } from "@/lib/sales/shopify";
 import { couponIndex, saveShopifyOrder } from "@/lib/sales/sync";
+import { recordShopOrders } from "@/lib/sales/shop-orders";
 import { verifyWebhook } from "@/lib/sales/webhooks";
 
 /**
@@ -46,12 +47,15 @@ export async function POST(request: Request) {
 
     const order = JSON.parse(raw) as ShopifyOrder;
     const coupons = await couponIndex();
-    const match = attributeOrder(codesOn(order), new Map([...coupons].map(([code, value]) => [code, value.repId])));
+    const byCode = new Map([...coupons].map(([code, value]) => [code, value.repId]));
+    const match = attributeOrder(codesOn(order), byCode);
 
-    if (!match) return Response.json({ ok: true, attributed: false, topic });
+    const outcome = match ? await saveShopifyOrder(order, match, coupons, rulesOf(settings)) : undefined;
+    // Every order reaches the retargeting list, whoever brought it in — after
+    // the attributed write, so the row can point at it.
+    await recordShopOrders([order], byCode);
 
-    const outcome = await saveShopifyOrder(order, match, coupons, rulesOf(settings));
-    return Response.json({ ok: true, attributed: true, topic, outcome });
+    return Response.json({ ok: true, attributed: Boolean(match), topic, outcome });
   } catch (error) {
     // A 500 has Shopify retry, which is what we want for a transient database
     // failure — the order is not lost, it arrives again in a few minutes.

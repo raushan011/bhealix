@@ -9,6 +9,7 @@ import { backfillDaysOf, loadCredentials, rulesOf, shiprocketToken, shopifyConfi
 import { codesOn, fetchOrders, mapOrder, mergeCustomer, type MappedOrder, type ShopifyOrder } from "./shopify";
 import type { CommissionRule } from "./commission";
 import { fetchShipments, matchKey, matchKeysFor } from "./shiprocket";
+import { applyShipmentsToShopOrders, recordShopOrders } from "./shop-orders";
 import { emptyReport, type SyncReport } from "./types";
 
 /**
@@ -191,6 +192,18 @@ export async function syncOrders(options: { since?: Date } = {}): Promise<SyncRe
   }
 
   /*
+   * Every order in the pull, attributed or not, into the retargeting list. After
+   * the attributed writes above, so a row can point at the fuller record the
+   * moment it exists. A failure here must not undo the commissions already
+   * written — it is a warning, and the next pass re-reads the same orders.
+   */
+  try {
+    await recordShopOrders(orders, byCode);
+  } catch (error) {
+    report.warnings.push(`Orders were attributed but the retargeting list could not be updated (${messageOf(error)}). It catches up on the next sync.`);
+  }
+
+  /*
    * The shop's own discount list, so a coupon created this morning appears on
    * the Coupons screen before anybody has used it.
    *
@@ -302,6 +315,14 @@ export async function syncShipments(options: { from?: string; to?: string } = {}
     recalculateCommission(order, rules);
     await order.save();
     report.commissionsRecalculated++;
+  }
+
+  // The same feed, handed to the orders nobody's coupon brought in, so the
+  // retargeting list can say "Delivered" about them too.
+  try {
+    await applyShipmentsToShopOrders(updates, from);
+  } catch (error) {
+    report.warnings.push(`Delivery status could not be copied to the retargeting list (${messageOf(error)}).`);
   }
 
   await SalesSettings.updateOne({ key: "sales" }, { $set: { lastShipmentSyncAt: new Date() }, $unset: { lastShipmentSyncError: "" } });

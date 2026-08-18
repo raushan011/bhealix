@@ -1,5 +1,6 @@
 import type { CommissionRule } from "./commission";
 import type { CommissionStatus, CourierRule, DeliveryState, OrderSource, PayoutMode } from "./constants";
+import type { FulfilmentState, RetargetStatus } from "./retarget";
 import type { Parcel, PickupLocation } from "./fulfilment";
 import type { LeadSource, LeadStatus, RemarkChannel } from "./leads";
 import type { CouponSetupState, RepStatus } from "./partners";
@@ -368,3 +369,63 @@ export const emptyReport = (): SyncReport => ({
   shipmentsMatched: 0, shipmentsUnmatched: 0, commissionsRecalculated: 0,
   unknownCoupons: [], warnings: []
 });
+
+// ------------------------------------------------------------- retargeting
+
+/** One line of what was said to a shop customer about one order. */
+export type RetargetRemark = {
+  _id: Id;
+  text: string;
+  channel: RemarkChannel;
+  status?: RetargetStatus;
+  at: string;
+  byName?: string;
+};
+
+/** Every Shopify order, as the retargeting screen draws it. */
+export type ShopOrderRecord = {
+  _id: Id;
+  shopifyOrderId: string;
+  name: string;
+  orderNumber?: number;
+  placedAt: string;
+  customerKey: string;
+  customerOrders: number;
+  customer: {
+    name?: string; email?: string; phone?: string;
+    address1?: string; address2?: string; city?: string; state?: string; pinCode?: string; country?: string;
+  };
+  items: { title: string; quantity: number; sku?: string }[];
+  products: string[];
+  total: number;
+  paymentMethod?: string;
+  financialStatus?: string;
+  fulfilment: FulfilmentState;
+  cancelledAt?: string | null;
+  discountCodes: string[];
+  order?: Id | null;
+  rep?: { _id: Id; name: string; code: string } | Id | null;
+  couponCode?: string | null;
+  delivery?: {
+    state?: DeliveryState;
+    status?: string;
+    courier?: string;
+    awb?: string;
+    deliveredAt?: string;
+    checkedAt?: string;
+  };
+  retarget: {
+    status: RetargetStatus;
+    lastContactedAt?: string;
+    contactCount: number;
+    remarkCount: number;
+    lastChannel?: RemarkChannel;
+    lastRemarkAt?: string;
+    lastRemark?: string;
+    nextFollowUpAt?: string;
+    notes?: string;
+    phone?: string;
+    remarks: RetargetRemark[];
+  };
+  syncedAt?: string;
+};

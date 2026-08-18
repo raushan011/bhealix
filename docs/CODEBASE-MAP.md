@@ -140,7 +140,7 @@ Seed admin: `admin@bhealix.com` / `Bhealix@123` — **change before production**
 | Billing | `Invoice`, `Customer`, `PaymentProof`, `BillingSettings`, `Counter` | `lib/billing/{constants,gst,numbering,types,customers,attachments,follow-ups}` | `lib/billing/{invoices,compose}.ts` | `/api/invoices`, `/api/customers`, `/api/billing` |
 | HR | `LeaveRequest`, `Attendance`, `Holiday` | `lib/hr/{leave,attendance}` | `lib/hr/records.ts` | `/api/hr/{leave,attendance,holidays,overview}` |
 | Payroll | `SalaryStructure`, `PayrollRun`, `Payslip`, `PayrollSettings` | `lib/hr/payroll.ts` | `lib/hr/payroll-run.ts` | `/api/hr/{payroll,payslips,salary}` |
-| Affiliate sales | `SalesRep`, `SalesOrder`, `SalesLead`, `SalesSettings` | `lib/sales/{constants,coupons,commission,delivery,leads,fulfilment,types}` | `lib/sales/{settings,shopify,shiprocket,sync,booking,address,commission-payment,reporting,secrets,http,reps}` | `/api/sales/*` |
+| Affiliate sales | `SalesRep`, `SalesOrder`, `SalesShopOrder`, `SalesLead`, `SalesSettings` | `lib/sales/{constants,coupons,commission,delivery,leads,retarget,fulfilment,types}` | `lib/sales/{settings,shopify,shiprocket,sync,booking,address,commission-payment,shop-orders,reporting,secrets,http,reps}` | `/api/sales/*` |
 | Vendor invoices | `VendorInvoice`, `FinancePeriod`, `FinanceConnection` | `lib/finance/{sources,period,files,archive,zip,statement,types}` | `lib/finance/{documents,pull,connections,file-fetched}.ts`, `lib/finance/connectors/*` | `/api/finance/*` |
 | Panel access | `User.workspaces` | `lib/workspace.ts`, `lib/auth/grants.ts` | `lib/auth/access.ts` | `/api/control/access` |
 | Audit | `AuditEvent` | — | `lib/audit.ts` | — (written inline) |
@@ -185,6 +185,7 @@ src/
 │   │   │   ├── orders/page.tsx      what the coupons brought in
 │   │   │   ├── orders/process/      the picking list (page guards can.processOrders)
 │   │   │   ├── payouts/page.tsx     what is owed, with a Pay button per order; what has been paid
+│   │   │   ├── retarget/page.tsx    every Shopify order as a calling list, with remarks
 │   │   │   └── settings/{page,layout}   layout guards can.manageSales
 │   │   └── control/                 Super admin (layout.tsx = requireWorkspace("control"))
 │   │       ├── page.tsx             this month and last, and who holds which panel
@@ -236,10 +237,10 @@ src/
 │   ├── hr/          leave, attendance, payroll, payroll-run, records
 │   ├── inventory/   movements, ledger
 │   ├── samples/     movements, ledger
-│   ├── sales/       constants, coupons, commission, delivery, leads,
+│   ├── sales/       constants, coupons, commission, delivery, leads, retarget,
 │   │                fulfilment, types                                            (pure)
 │   │                secrets, http, shopify, shiprocket, settings, sync, booking,
-│   │                address, commission-payment, reporting, reps             (server)
+│   │                address, commission-payment, shop-orders, reporting, reps (server)
 │   └── workspace.ts Which panel a path belongs to, and which can be granted
 ├── models/                          One file per bounded context — see §6
 └── (tests co-located as *.test.ts next to what they test)
