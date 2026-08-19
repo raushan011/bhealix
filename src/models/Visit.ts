@@ -36,5 +36,8 @@ VisitSchema.index({ plannedDate: -1, plannedStart: 1 });
 // "Completed today", and every other count that fixes a status and then asks
 // for a span of dates: equality first so the range can be walked from an index.
 VisitSchema.index({ status: 1, plannedDate: -1 });
+// The rep's reminders: my follow-ups falling due, walked in date order.
+// Sparse, because most visits never set one.
+VisitSchema.index({ employee: 1, followUpDate: 1 }, { sparse: true });
 
 export const Visit = models.Visit ?? model("Visit", VisitSchema);

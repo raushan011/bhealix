@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Clock, MapPin, Navigation, Package, Pencil, Phone, Plus, X } from "lucide-react";
+import { doctorMapsUrl } from "@/lib/doctors/maps";
 import { Badge, Button, Card, Field, Notice } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import { CallScheduleEditor, type EditableWindow } from "@/components/doctors/call-schedule-editor";
@@ -191,12 +192,21 @@ export function VisitForm({ visit, doctor, products, stock = {}, photos = [] }:
 
       <div className="mt-3 flex gap-2">
         {shownDoctor.phone && <a href={`tel:${shownDoctor.phone}`} className="tap flex flex-1 items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] text-sm font-semibold"><Phone size={15} />Call</a>}
-        {shownDoctor.coordinates?.length === 2 && (
-          <a href={`https://www.google.com/maps/dir/?api=1&destination=${shownDoctor.coordinates[1]},${shownDoctor.coordinates[0]}`}
-            target="_blank" rel="noreferrer" className="tap flex flex-1 items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] text-sm font-semibold">
-            <Navigation size={15} />Directions
-          </a>
-        )}
+        {(() => {
+          // Pin when there is one, an address search when there is not — see
+          // lib/doctors/maps for the fallback order.
+          const maps = doctorMapsUrl({
+            coordinates: shownDoctor.coordinates,
+            name: shownDoctor.name, clinicName: shownDoctor.clinicName,
+            fullAddress: shownDoctor.fullAddress, area: shownDoctor.area, city: shownDoctor.city
+          });
+          return maps && (
+            <a href={maps}
+              target="_blank" rel="noreferrer" className="tap flex flex-1 items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] text-sm font-semibold">
+              <Navigation size={15} />Directions
+            </a>
+          );
+        })()}
       </div>
     </Card>
 

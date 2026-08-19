@@ -1,11 +1,14 @@
 import Link from "next/link";
-import { CalendarCheck, ChevronRight, Clock, MapPin, Navigation, Phone, Route } from "lucide-react";
+import { CalendarCheck, CalendarClock, ChevronRight, Clock, IndianRupee, MapPin, Navigation, Phone, Route } from "lucide-react";
 import { requireFieldPanel } from "@/lib/auth/guard";
 import { connectDb } from "@/lib/db/mongoose";
 import { Visit } from "@/models/Visit";
 import { RoutePlan } from "@/models/RoutePlan";
+import { Invoice } from "@/models/Invoice";
 import { Badge, Card, EmptyState, LinkButton, PageTitle, statusTone } from "@/components/ui/kit";
-import { formatDate, todayIso, todayRange, toDisplayTime, weekdayOf, WEEKDAYS } from "@/lib/time";
+import { doctorMapsUrl } from "@/lib/doctors/maps";
+import { formatMoney } from "@/lib/billing/constants";
+import { dayOf, endOfDay, formatDate, shiftDay, startOfDay, todayIso, todayRange, toDisplayTime, weekdayOf, WEEKDAYS } from "@/lib/time";
 import { RegisterVisit } from "@/components/visits/register-visit";
 import { callTimeOn } from "@/lib/doctors/call-schedule";
 import type { EditableWindow } from "@/components/doctors/call-schedule-editor";
@@ -20,6 +23,17 @@ type VisitDoc = {
   };
 };
 type PlanDoc = { _id: unknown; name: string; totalDistanceKm: number; stops: unknown[] };
+type FollowUpDoc = {
+  _id: unknown; followUpDate: Date;
+  doctor?: {
+    _id: unknown; name?: string; clinicName?: string; area?: string; city?: string;
+    phones?: string[]; fullAddress?: string; location?: { coordinates?: number[] };
+  };
+};
+type DueBillDoc = {
+  _id: unknown; invoiceNo: string; balanceDue: number; dueDate?: Date; followUpDate?: Date;
+  billTo?: { name?: string; clinicName?: string };
+};
 type UpcomingPlan = { _id: unknown; name: string; date: Date; totalDistanceKm?: number; stops?: unknown[] };
 
 export default async function TodayPage() {
@@ -31,7 +45,16 @@ export default async function TodayPage() {
   const today = todayRange();
   const weekday = weekdayOf(todayIso());
 
-  const [visits, plan, upcoming] = await Promise.all([
+  /*
+   * The reminder window: what falls due in the next three days, and what is
+   * already overdue by up to a week. Narrow on purpose — a rep planning a day
+   * wants "who is due around now", and a promise from March is the History
+   * screen's business, not the morning's.
+   */
+  const horizon = endOfDay(shiftDay(todayIso(), 3));
+  const lookback = startOfDay(shiftDay(todayIso(), -7));
+
+  const [visits, plan, upcoming, followUps, dueBills] = await Promise.all([
     Visit.find({ employee: session.userId, plannedDate: today })
       .populate("doctor", "name clinicName area city phones fullAddress location callSchedule")
       .sort({ plannedStart: 1 }).lean() as unknown as Promise<VisitDoc[]>,
@@ -41,8 +64,38 @@ export default async function TodayPage() {
     // tomorrow is visible straight away instead of only on the morning it runs.
     RoutePlan.find({ assignedTo: session.userId, date: { $gt: today.$lte } })
       .select("name date totalDistanceKm stops").sort({ date: 1 }).limit(3)
-      .lean() as unknown as Promise<UpcomingPlan[]>
+      .lean() as unknown as Promise<UpcomingPlan[]>,
+    Visit.find({ employee: session.userId, status: "Completed", followUpDate: { $gte: lookback, $lte: horizon } })
+      .populate("doctor", "name clinicName area city phones fullAddress location")
+      .sort({ followUpDate: 1 }).limit(12).lean() as unknown as Promise<FollowUpDoc[]>,
+    Invoice.find({
+      employee: session.userId,
+      status: { $in: ["Unpaid", "Partially paid"] },
+      balanceDue: { $gt: 0 },
+      $or: [{ dueDate: { $lte: horizon } }, { followUpDate: { $lte: horizon } }]
+    }).select("invoiceNo balanceDue dueDate followUpDate billTo.name billTo.clinicName")
+      .sort({ dueDate: 1 }).limit(8).lean() as unknown as Promise<DueBillDoc[]>
   ]);
+
+  /*
+   * One reminder per doctor, the earliest. Three visits that each promised a
+   * follow-up are one door to knock on, not three rows saying so.
+   */
+  const followUpByDoctor = new Map<string, FollowUpDoc>();
+  for (const followUp of followUps) {
+    const key = String(followUp.doctor?._id ?? followUp._id);
+    if (!followUpByDoctor.has(key)) followUpByDoctor.set(key, followUp);
+  }
+  const reminders = [...followUpByDoctor.values()].slice(0, 6);
+
+  /** "3 days overdue", "today", "in 2 days" — the words a reminder is scanned by. */
+  const dueLabel = (value: Date) => {
+    // The day as the rep reads it, not as the server's clock slices it (§lib/time).
+    const diff = Math.round((startOfDay(todayIso()).getTime() - startOfDay(dayOf(value)).getTime()) / 86_400_000);
+    if (diff > 0) return { text: diff === 1 ? "1 day overdue" : `${diff} days overdue`, tone: "danger" as const };
+    if (diff === 0) return { text: "today", tone: "warn" as const };
+    return { text: diff === -1 ? "tomorrow" : `in ${-diff} days`, tone: "info" as const };
+  };
 
   const done = visits.filter(visit => visit.status === "Completed" || visit.status === "Missed").length;
   const progress = visits.length ? Math.round((done / visits.length) * 100) : 0;
@@ -105,6 +158,75 @@ export default async function TodayPage() {
         standing outside a clinic that is not on the plan, and half the value is
         lost if they have to scroll past the plan to find it. */}
     <RegisterVisit />
+
+    {(reminders.length > 0 || dueBills.length > 0) && (
+      <section>
+        <h2 className="mb-2 text-[15px] font-semibold">Due soon</h2>
+        <div className="space-y-2">
+          {reminders.map(reminder => {
+            const doctor = reminder.doctor;
+            const due = dueLabel(reminder.followUpDate);
+            const maps = doctor ? doctorMapsUrl({
+              coordinates: doctor.location?.coordinates,
+              name: doctor.name, clinicName: doctor.clinicName,
+              fullAddress: doctor.fullAddress, area: doctor.area, city: doctor.city
+            }) : null;
+            return <Card key={String(reminder._id)} className="p-3.5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  {doctor ? (
+                    <Link href={`/employee/doctors/${doctor._id}`} className="block truncate text-sm font-semibold">{doctor.name}</Link>
+                  ) : <p className="text-sm font-semibold">Doctor removed</p>}
+                  <p className="mt-0.5 flex items-center gap-1 text-xs text-[var(--muted)]">
+                    <CalendarClock size={11} />Follow-up promised {formatDate(reminder.followUpDate)}
+                  </p>
+                </div>
+                <Badge tone={due.tone}>{due.text}</Badge>
+              </div>
+              <div className="mt-2.5 flex gap-2">
+                {maps && (
+                  <a href={maps} target="_blank" rel="noreferrer"
+                    className="tap inline-flex flex-1 items-center justify-center gap-1.5 rounded-[10px] border border-[var(--line-2)] px-3 text-xs font-semibold">
+                    <Navigation size={13} />Map
+                  </a>
+                )}
+                {doctor?.phones?.[0] && (
+                  <a href={`tel:${doctor.phones[0]}`}
+                    className="tap inline-flex flex-1 items-center justify-center gap-1.5 rounded-[10px] border border-[var(--line-2)] px-3 text-xs font-semibold">
+                    <Phone size={13} />Call
+                  </a>
+                )}
+                {doctor && (
+                  <Link href={`/employee/doctors/${doctor._id}`}
+                    className="tap inline-flex flex-1 items-center justify-center gap-1.5 rounded-[10px] border border-[var(--line-2)] px-3 text-xs font-semibold">
+                    Visit
+                  </Link>
+                )}
+              </div>
+            </Card>;
+          })}
+
+          {dueBills.map(bill => {
+            const when = bill.dueDate ?? bill.followUpDate;
+            const due = when ? dueLabel(when) : null;
+            return <Link key={String(bill._id)} href={`/employee/bills/${bill._id}`}
+              className="card flex items-center gap-3 p-3.5 active:bg-[var(--surface-2)]">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--warn-bg)] text-[var(--warn-ink)]">
+                <IndianRupee size={15} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold">{bill.billTo?.name || bill.billTo?.clinicName || bill.invoiceNo}</p>
+                <p className="mt-0.5 truncate text-xs text-[var(--muted)]">
+                  {bill.invoiceNo} · {formatMoney(bill.balanceDue)} to collect
+                </p>
+              </div>
+              {due && <Badge tone={due.tone}>{due.text}</Badge>}
+              <ChevronRight size={16} className="shrink-0 text-[var(--muted)]" />
+            </Link>;
+          })}
+        </div>
+      </section>
+    )}
 
     <section>
       <h2 className="mb-2 text-[15px] font-semibold">Today&apos;s route</h2>

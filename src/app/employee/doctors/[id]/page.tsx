@@ -8,6 +8,7 @@ import { Visit } from "@/models/Visit";
 import { Badge, Card, PageTitle, statusTone } from "@/components/ui/kit";
 import { DoctorCallTimeCard } from "@/components/doctors/doctor-call-time-card";
 import { RegisterVisit } from "@/components/visits/register-visit";
+import { doctorMapsUrl } from "@/lib/doctors/maps";
 import { OBJECT_ID } from "@/lib/api";
 import { formatDate } from "@/lib/time";
 import type { EditableWindow } from "@/components/doctors/call-schedule-editor";
@@ -36,7 +37,13 @@ export default async function FieldDoctorDetail({ params }: { params: Promise<{ 
   ]);
   if (!doctor) notFound();
 
-  const coordinates = doctor.location?.coordinates;
+  // Pin when there is one, an address search when there is not — a doctor
+  // added by hand still deserves a working Directions button.
+  const maps = doctorMapsUrl({
+    coordinates: doctor.location?.coordinates,
+    name: doctor.name, clinicName: doctor.clinicName,
+    fullAddress: doctor.fullAddress, area: doctor.area, city: doctor.city
+  });
 
   return <div className="space-y-4">
     <Link href="/employee/doctors" className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--brand)]">
@@ -58,8 +65,8 @@ export default async function FieldDoctorDetail({ params }: { params: Promise<{ 
             <Phone size={15} />Call
           </a>
         )}
-        {coordinates?.length === 2 && (
-          <a href={`https://www.google.com/maps/dir/?api=1&destination=${coordinates[1]},${coordinates[0]}`}
+        {maps && (
+          <a href={maps}
             target="_blank" rel="noreferrer" className="tap flex flex-1 items-center justify-center gap-2 rounded-[10px] border border-[var(--line-2)] text-sm font-semibold">
             <Navigation size={15} />Directions
           </a>
