@@ -213,21 +213,38 @@ export function toLead(place: Place, type: string): DiscoveredLead | null {
   };
 }
 
+/**
+ * A Google-sourced extra: kept when it is sensible, quietly dropped when it is
+ * not — never allowed to veto the row it sits on.
+ *
+ * What a lead is *for* is its name and its phone number; the website, the
+ * rating, the Maps link are furniture. Google occasionally returns furniture
+ * the caps here dislike — a `websiteUri` that is a four-hundred-character
+ * Facebook share link was what taught this lesson, when one parlour in
+ * Bulandshahar failed the save of the sixty-six rows around it with
+ * "leads.24.website: Invalid input" and no way to tell which card that was.
+ * The caps stay (nothing pathological reaches the collection), but `catch`
+ * turns "refuse the batch" into "save the lead without that field".
+ */
+const dropIfUnusable = <T extends z.ZodType>(schema: T, fallback: z.output<T>) => schema.catch(fallback);
+
 const leadRowSchema = z.object({
   /** Google's own id — absent only for a lead typed in by hand. */
   placeId: z.string().trim().max(200).optional(),
-  name: z.string().trim().min(1, "A lead needs a name").max(160),
+  /** Required — but an over-long name is trimmed to fit rather than refused. */
+  name: z.string().trim().min(1, "A lead needs a name").transform(value => value.slice(0, 160)),
   type: typeField,
-  address: z.string().trim().max(400).default(""),
-  area: z.string().trim().max(120).default(""),
-  city: z.string().trim().max(120).default(""),
-  phone: z.string().trim().max(40).default(""),
-  website: z.string().trim().max(300).default(""),
-  mapsUrl: z.string().trim().max(500).default(""),
-  rating: z.number().min(0).max(5).optional(),
-  reviewCount: z.number().int().min(0).optional(),
-  latitude: z.number().min(-90).max(90).optional(),
-  longitude: z.number().min(-180).max(180).optional()
+  address: dropIfUnusable(z.string().trim().max(400).default(""), ""),
+  area: dropIfUnusable(z.string().trim().max(120).default(""), ""),
+  city: dropIfUnusable(z.string().trim().max(120).default(""), ""),
+  phone: dropIfUnusable(z.string().trim().max(40).default(""), ""),
+  /** 2000 is the practical URL ceiling; share links with tracking get there. */
+  website: dropIfUnusable(z.string().trim().max(2000).default(""), ""),
+  mapsUrl: dropIfUnusable(z.string().trim().max(2000).default(""), ""),
+  rating: dropIfUnusable(z.number().min(0).max(5).optional(), undefined),
+  reviewCount: dropIfUnusable(z.number().int().min(0).optional(), undefined),
+  latitude: dropIfUnusable(z.number().min(-90).max(90).optional(), undefined),
+  longitude: dropIfUnusable(z.number().min(-180).max(180).optional(), undefined)
 });
 
 export const leadSaveSchema = z.object({

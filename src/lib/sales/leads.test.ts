@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Place } from "@/lib/doctors/places";
 import {
   LEAD_QUERY_CEILING, MAX_LEAD_RESULTS, bulkLeadSchema, estimateLeadRequests, isOutreach,
-  leadSearchPages, leadSearchSchema, leadSearchZones, leadUpdateSchema, leadWhere, like,
+  leadSaveSchema, leadSearchPages, leadSearchSchema, leadSearchZones, leadUpdateSchema, leadWhere, like,
   remarkEditSchema, remarkSchema, remarkTone, telUrl, toLead, toLeadFields, whatsappNumber,
   whatsappUrl, withLeadStatus
 } from "./leads";
@@ -378,5 +378,45 @@ describe("reading the remarks across every lead", () => {
   it("hands back a row carrying the lead it belongs to", () => {
     expect(REMARK_PROJECTION._id).toBe("$remarks._id");
     expect(REMARK_PROJECTION.lead.name).toBe("$name");
+  });
+});
+
+describe("leadSaveSchema", () => {
+  const row = (extra: Record<string, unknown> = {}) =>
+    ({ placeId: "p1", name: "Glow Beauty Studio", type: "Beauty parlour", phone: "096503 06893", ...extra });
+
+  it("keeps a batch whole when one row's website is unusable", () => {
+    // The Bulandshahar case: a four-hundred-character Facebook share link on
+    // result 24 used to fail the save of the sixty-six rows around it.
+    const monster = "https://facebook.com/share/" + "a".repeat(3000);
+    const parsed = leadSaveSchema.parse({ leads: [row(), row({ placeId: "p2", website: monster })] });
+    expect(parsed.leads).toHaveLength(2);
+    expect(parsed.leads[1].website).toBe("");
+    expect(parsed.leads[1].name).toBe("Glow Beauty Studio");
+  });
+
+  it("keeps a long-but-real share link now that the cap is a URL's practical ceiling", () => {
+    const long = "https://facebook.com/profile?" + "utm=x&".repeat(60);
+    expect(leadSaveSchema.parse({ leads: [row({ website: long })] }).leads[0].website).toBe(long);
+  });
+
+  it("drops the furniture, never the row: bad rating, half a coordinate, junk phone", () => {
+    const parsed = leadSaveSchema.parse({
+      leads: [row({ rating: 17, latitude: 213.4, longitude: 77.1, phone: "call the shop after 6 unless the owner is at the other branch" })]
+    });
+    expect(parsed.leads[0].rating).toBeUndefined();
+    expect(parsed.leads[0].latitude).toBeUndefined();
+    expect(parsed.leads[0].longitude).toBe(77.1);
+    expect(parsed.leads[0].phone).toBe("");
+  });
+
+  it("trims an over-long name to fit rather than refusing it", () => {
+    const parsed = leadSaveSchema.parse({ leads: [row({ name: "Glow ".repeat(60) })] });
+    expect(parsed.leads[0].name).toHaveLength(160);
+  });
+
+  it("still refuses what makes a row meaningless — no name at all", () => {
+    expect(() => leadSaveSchema.parse({ leads: [row({ name: "  " })] })).toThrow();
+    expect(() => leadSaveSchema.parse({ leads: [] })).toThrow();
   });
 });
