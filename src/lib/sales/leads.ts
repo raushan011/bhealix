@@ -153,6 +153,25 @@ const typeField = z.string().trim()
   .min(2, "Give the results a type, so the list can be found again")
   .max(60, "A type is a short label, like Beauty parlour");
 
+/**
+ * How far around the location a sweep reaches.
+ *
+ * Offered as choices rather than a free number because each step has a
+ * meaning: 5 is a neighbourhood, 10 an area, 25 a city — the size somebody
+ * works in a day, and the old fixed value — 50 a city and its satellites,
+ * 100 a district. Wider is more billed requests for the same target, so the
+ * choice is worth making consciously.
+ */
+export const LEAD_RADIUS_CHOICES = [
+  { km: 5, label: "5 km — a neighbourhood" },
+  { km: 10, label: "10 km — an area" },
+  { km: 25, label: "25 km — a city" },
+  { km: 50, label: "50 km — city and outskirts" },
+  { km: 100, label: "100 km — the whole district" }
+] as const;
+
+export const DEFAULT_LEAD_RADIUS_KM = 25;
+
 export const leadSearchSchema = z.object({
   query: z.string().trim().min(2, "Enter what to look for, like beauty parlour"),
   location: z.string().trim().min(2, "Enter a city, area or PIN code"),
@@ -160,7 +179,9 @@ export const leadSearchSchema = z.object({
   resultLimit: z.number().int()
     .min(5, "Ask for at least 5 results")
     .max(MAX_LEAD_RESULTS, `Google returns at most ${MAX_LEAD_RESULTS} results for one search`)
-    .default(20)
+    .default(20),
+  /** How far around the location to sweep. */
+  radiusKm: z.number().int().min(2).max(100).default(DEFAULT_LEAD_RADIUS_KM)
 });
 
 export type LeadSearchInput = z.infer<typeof leadSearchSchema>;

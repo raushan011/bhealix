@@ -55,11 +55,10 @@ export async function POST(request: Request) {
      * the same question from a ring of sub-centres and merge by Place ID, which
      * is exactly what the doctor sweep does to reach five hundred.
      *
-     * The ring is sized in kilometres because that is what `searchCentres`
-     * takes; 25 km is the bias radius a single-centre lead search already used,
-     * and it is about the size of a city somebody would work in a day.
+     * The radius is the operator's now — 5 km for a neighbourhood, 100 for a
+     * district — where it used to be a fixed 25.
      */
-    const radiusKm = 25;
+    const radiusKm = input.radiusKm;
     const centres = searchCentres(origin, radiusKm, input.resultLimit);
     const pages = leadSearchPages(Math.min(input.resultLimit, LEAD_QUERY_CEILING));
     const zoneRadiusM = Math.min(50000, Math.max(2000, (radiusKm * 1000) / Math.sqrt(centres.length)));
@@ -67,11 +66,24 @@ export async function POST(request: Request) {
     const found = new Map<string, DiscoveredLead>();
     let apiCalls = 0;
 
+    let first = true;
     outer: for (const centre of centres) {
-      const places = await searchText(`${input.query} in ${input.location}`, key, {
+      /*
+       * The question changes as the ring walks outward, and this is what cures
+       * "two hundred asked for, sixty returned". "Parlour in Ghaziabad" asked
+       * from every sub-centre returns the same city-ranked list every time —
+       * the name in the query outweighs the bias circle, so five centres cost
+       * five times the money for one centre's answers. The origin keeps the
+       * name (it is what stops a common word drifting to a bigger city three
+       * states away); every other centre asks the bare trade and lets its own
+       * bias circle do the placing, so each one returns *its* neighbourhood
+       * rather than the city centre's again.
+       */
+      const places = await searchText(first ? `${input.query} in ${input.location}` : input.query, key, {
         bias: { centre, radiusM: zoneRadiusM },
         pages
       });
+      first = false;
       apiCalls += pages;
 
       for (const place of places) {

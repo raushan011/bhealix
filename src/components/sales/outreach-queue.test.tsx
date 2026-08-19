@@ -64,7 +64,7 @@ describe("the outreach autopilot", () => {
   it("opens each chat itself, reusing one window, and records every contact", async () => {
     stubFetch();
     const fakeWindow = { closed: false, location: { href: "" } };
-    const open = vi.fn(() => fakeWindow as unknown as Window);
+    const open = vi.fn<(url?: string, target?: string) => Window | null>(() => fakeWindow as unknown as Window);
     vi.stubGlobal("open", open);
 
     const { container, unmount } = await mount();

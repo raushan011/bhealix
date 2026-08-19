@@ -4,7 +4,8 @@ import { useState } from "react";
 import { ExternalLink, MapPin, Phone, Save, Search, Star } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Field, Notice, Spinner } from "@/components/ui/kit";
 import {
-  LEAD_QUERY_CEILING, LEAD_TYPE_SUGGESTIONS, MAX_LEAD_RESULTS, leadSearchSchema, type DiscoveredLead
+  DEFAULT_LEAD_RADIUS_KM, LEAD_QUERY_CEILING, LEAD_RADIUS_CHOICES, LEAD_TYPE_SUGGESTIONS,
+  MAX_LEAD_RESULTS, leadSearchSchema, type DiscoveredLead
 } from "@/lib/sales/leads";
 
 /**
@@ -26,6 +27,7 @@ export function LeadSearch({ onSaved }: { onSaved: () => void }) {
   const [location, setLocation] = useState("");
   const [type, setType] = useState("");
   const [resultLimit, setResultLimit] = useState("20");
+  const [radiusKm, setRadiusKm] = useState<number>(DEFAULT_LEAD_RADIUS_KM);
 
   const [rows, setRows] = useState<DiscoveredLead[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -42,7 +44,7 @@ export function LeadSearch({ onSaved }: { onSaved: () => void }) {
   const allSelected = rows.length > 0 && selected.size === rows.length;
 
   async function search() {
-    const parsed = leadSearchSchema.safeParse({ query, location, type, resultLimit: limit });
+    const parsed = leadSearchSchema.safeParse({ query, location, type, resultLimit: limit, radiusKm });
     if (!parsed.success) {
       setError(parsed.error.issues[0].message);
       return;
@@ -123,8 +125,12 @@ export function LeadSearch({ onSaved }: { onSaved: () => void }) {
         <Field label="Location">
           <div className="relative">
             <MapPin size={16} className="pointer-events-none absolute left-3 top-3.5 text-[var(--muted)]" />
+            {/* One box for however the place is known — "Bulandshahr",
+                "Bulandshahr, Uttar Pradesh", a PIN code. Google's geocoder
+                reads all of them; naming the state is what rescues the small
+                towns that share a name with a bigger one elsewhere. */}
             <input className="input pl-9" value={location} onKeyDown={onEnter}
-              onChange={event => setLocation(event.target.value)} placeholder="Ghaziabad, or a PIN code" />
+              onChange={event => setLocation(event.target.value)} placeholder="City, State — or a PIN code" />
           </div>
         </Field>
         {/* Hint lives in the label: a hint under the input makes this cell
@@ -140,6 +146,13 @@ export function LeadSearch({ onSaved }: { onSaved: () => void }) {
           </Button>
         </div>
       </div>
+
+      <Field label="Search radius"
+        hint="How far around the location the sweep reaches. Wider covers more ground and costs proportionally more billed requests.">
+        <select className="select" value={radiusKm} onChange={event => setRadiusKm(Number(event.target.value))}>
+          {LEAD_RADIUS_CHOICES.map(choice => <option key={choice.km} value={choice.km}>{choice.label}</option>)}
+        </select>
+      </Field>
 
       <Field label="Save these as"
         hint="The type every result is filed under. Pick one of the suggestions or type your own — this is what you filter the saved list by later.">

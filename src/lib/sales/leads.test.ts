@@ -381,6 +381,22 @@ describe("reading the remarks across every lead", () => {
   });
 });
 
+describe("the search radius", () => {
+  const base = { query: "beauty parlour", location: "Bulandshahr, Uttar Pradesh", type: "Beauty parlour", resultLimit: 200 };
+
+  it("defaults to the city-sized sweep the search always did", () => {
+    expect(leadSearchSchema.parse(base).radiusKm).toBe(25);
+  });
+
+  it("takes the operator's own radius", () => {
+    expect(leadSearchSchema.parse({ ...base, radiusKm: 100 }).radiusKm).toBe(100);
+  });
+
+  it("refuses a radius past what a bias circle can honour", () => {
+    expect(() => leadSearchSchema.parse({ ...base, radiusKm: 500 })).toThrow();
+  });
+});
+
 describe("leadSaveSchema", () => {
   const row = (extra: Record<string, unknown> = {}) =>
     ({ placeId: "p1", name: "Glow Beauty Studio", type: "Beauty parlour", phone: "096503 06893", ...extra });
