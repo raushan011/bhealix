@@ -7,6 +7,7 @@ import { DEFAULT_RULES } from "@/lib/sales/commission";
 import { LEAD_SOURCES, LEAD_STATUSES, REMARK_CHANNELS } from "@/lib/sales/leads";
 import { COUPON_SETUP_STATES, REP_STATUSES } from "@/lib/sales/partners";
 import { FULFILMENT_STATES, RETARGET_STATUSES } from "@/lib/sales/retarget";
+import { AUTOMATION_TRIGGERS, OUTREACH_STATUSES } from "@/lib/sales/automation";
 
 /**
  * The affiliate side of the business: the people who sell on commission, the
@@ -835,6 +836,28 @@ const SalesSettingsSchema = new Schema({
     courierName: String
   },
 
+  /**
+   * The WhatsApp Business Cloud API — the one way a message goes out without a
+   * person pressing send. See `lib/sales/whatsapp.ts` for the rules that come
+   * with it. The token and the app secret are encrypted and `select: false`
+   * like every other credential here.
+   */
+  whatsappPhoneNumberId: String,
+  whatsappBusinessAccountId: String,
+  whatsappAccessToken: { type: String, select: false },
+  whatsappAppSecret: { type: String, select: false },
+  /** The word Meta echoes back when it verifies the webhook address. Not a secret worth encrypting. */
+  whatsappVerifyToken: String,
+  whatsappApiVersion: String,
+  /** What Meta calls the number, written on every successful test — the screen's proof it is connected. */
+  whatsappDisplayNumber: String,
+  whatsappConnectedAt: Date,
+  lastWhatsappError: String,
+  /** The master switch. Off, rules are kept but nothing is queued or sent. */
+  whatsappAutoSend: { type: Boolean, default: false },
+  /** How many automated messages may go out in one day, across every rule. */
+  whatsappDailyCap: { type: Number, min: 1, max: 10000 },
+
   rules: { type: [RuleSchema], default: () => DEFAULT_RULES },
   /** How far back a first sync reaches when nothing has ever been pulled. */
   backfillDays: { type: Number, min: 1, max: 730, default: DEFAULT_BACKFILL_DAYS },
@@ -842,3 +865,109 @@ const SalesSettingsSchema = new Schema({
 }, { timestamps: true });
 
 export const SalesSettings = models.SalesSettings ?? model("SalesSettings", SalesSettingsSchema);
+
+// --------------------------------------------------------------- automation
+
+/**
+ * A standing instruction: when a lead like *this* is saved, send it *that*.
+ *
+ * The manual queue asks somebody to choose a list and a message and tap
+ * through it. A rule is the same two choices written down once, so that the
+ * next sweep of Ghaziabad's parlours is messaged the moment it is saved and
+ * nobody has to remember to open the Send tab. See `lib/sales/whatsapp.ts` for
+ * why the message is a Meta-approved template rather than one of the CRM's own.
+ */
+const SalesAutomationRuleSchema = new Schema({
+  name: { type: String, required: true, trim: true },
+  enabled: { type: Boolean, default: true, index: true },
+  /** Which trade. Empty means every type — spelled `type: { type: String }` for the reason on the lead (§11). */
+  leadType: { type: String, trim: true, default: "" },
+  city: { type: String, trim: true, default: "" },
+  freshOnly: { type: Boolean, default: true },
+  template: {
+    name: { type: String, required: true },
+    language: { type: String, required: true, default: "en" },
+    body: { type: String, default: "" },
+    fields: { type: [String], default: [] }
+  },
+  createdBy: { type: Schema.Types.ObjectId, ref: "User" },
+  updatedBy: { type: Schema.Types.ObjectId, ref: "User" }
+}, { timestamps: true });
+
+export const SalesAutomationRule = models.SalesAutomationRule ?? model("SalesAutomationRule", SalesAutomationRuleSchema);
+
+/**
+ * One automated message to one lead — queued, handed to Meta, and then whatever
+ * Meta reported back about it.
+ *
+ * A collection of its own rather than a count on the lead, because the panel
+ * reads it the other way round: "what went out today, and what came of it".
+ * The lead keeps its `lastContactedAt` and `contactCount` in step, so the
+ * manual queue's "never messaged" filter and this one agree.
+ */
+const SalesOutreachMessageSchema = new Schema({
+  lead: { type: Schema.Types.ObjectId, ref: "SalesLead", required: true, index: true },
+  /** Snapshots (§4.10): the log must still read after the lead is deleted. */
+  leadName: String,
+  leadType: String,
+  city: String,
+  /** International digits, no plus — what Meta was given, and what replies come back from. */
+  phone: { type: String, required: true, index: true },
+
+  rule: { type: Schema.Types.ObjectId, ref: "SalesAutomationRule", index: true },
+  ruleName: String,
+  templateName: String,
+  /** What it read like once the blanks were filled. */
+  preview: String,
+  trigger: { type: String, enum: AUTOMATION_TRIGGERS, default: "Saved" },
+
+  status: { type: String, enum: OUTREACH_STATUSES, default: "Queued", index: true },
+  /** Meta's id for the message — the key every status and reply matches on. */
+  waMessageId: { type: String, index: true, sparse: true },
+  error: String,
+  attempts: { type: Number, default: 0 },
+
+  queuedAt: { type: Date, default: Date.now, index: true },
+  sentAt: { type: Date, index: true },
+  deliveredAt: Date,
+  readAt: Date,
+  /** They wrote back — the reply itself is in the collection below. */
+  repliedAt: { type: Date, index: true }
+}, { timestamps: true });
+
+// The panel's questions: the log newest first, today's sends for the cap, and
+// the queue oldest first so nobody waits behind a later batch.
+SalesOutreachMessageSchema.index({ status: 1, queuedAt: 1 });
+SalesOutreachMessageSchema.index({ createdAt: -1 });
+// One automated message per lead per rule: a re-sweep must never queue a second.
+SalesOutreachMessageSchema.index({ lead: 1, rule: 1 }, { unique: true, sparse: true });
+
+export const SalesOutreachMessage = models.SalesOutreachMessage ?? model("SalesOutreachMessage", SalesOutreachMessageSchema);
+
+/**
+ * What a lead wrote back, verbatim.
+ *
+ * Kept apart from the lead's own remarks — those are what *we* said and
+ * decided; this is what *they* said, arriving by webhook with nobody at the
+ * desk. A copy is filed as a remark as well, so the thread on the lead reads
+ * whole; this collection is the inbox, with an unread flag, that the remark
+ * cannot be.
+ */
+const SalesOutreachReplySchema = new Schema({
+  lead: { type: Schema.Types.ObjectId, ref: "SalesLead", index: true },
+  leadName: String,
+  phone: { type: String, required: true, index: true },
+  profileName: String,
+  /** The outbound message it answered, when it can be told. */
+  message: { type: Schema.Types.ObjectId, ref: "SalesOutreachMessage" },
+  /** Meta's id — the webhook is retried, and this is what stops a reply being filed twice. */
+  waMessageId: { type: String, required: true, unique: true },
+  type: { type: String, default: "text" },
+  text: { type: String, default: "" },
+  receivedAt: { type: Date, default: Date.now, index: true },
+  seen: { type: Boolean, default: false, index: true }
+}, { timestamps: true });
+
+SalesOutreachReplySchema.index({ seen: 1, receivedAt: -1 });
+
+export const SalesOutreachReply = models.SalesOutreachReply ?? model("SalesOutreachReply", SalesOutreachReplySchema);

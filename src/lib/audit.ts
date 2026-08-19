@@ -42,6 +42,9 @@ export const AUDIT_ACTIONS = {
   "payroll.paid": "Marked payroll paid",
   "payroll.deleted": "Deleted a draft payroll month",
   "payroll.settings.updated": "Changed the payroll settings",
+  "payroll.custom.created": "Wrote a custom payslip",
+  "payroll.custom.updated": "Changed a custom payslip",
+  "payroll.custom.deleted": "Deleted a custom payslip",
 
   /**
    * The affiliate scheme. A coupon code decides whose commission an order
@@ -129,6 +132,12 @@ export const AUDIT_ACTIONS = {
   "sales.template.created": "Wrote an outreach message",
   "sales.template.updated": "Edited an outreach message",
   "sales.template.deleted": "Deleted an outreach message",
+  "sales.automation.settings.updated": "Changed the WhatsApp automation settings",
+  "sales.automation.rule.created": "Wrote an automatic-messaging rule",
+  "sales.automation.rule.updated": "Changed an automatic-messaging rule",
+  "sales.automation.rule.deleted": "Deleted an automatic-messaging rule",
+  "sales.automation.queued": "Queued saved leads for automatic messaging",
+  "sales.automation.sent": "Sent queued WhatsApp messages",
 
   /**
    * Who may enter which CRM.

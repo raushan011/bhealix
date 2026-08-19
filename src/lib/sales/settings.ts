@@ -4,6 +4,7 @@ import { DEFAULT_BACKFILL_DAYS } from "./constants";
 import { decryptSecret, encryptSecret } from "./secrets";
 import { login as shiprocketLogin, type ShiprocketConfig } from "./shiprocket";
 import { normaliseDomain, type ShopifyConfig } from "./shopify";
+import type { WhatsAppConfig } from "./whatsapp";
 
 /**
  * The affiliate settings document, and the credentials inside it.
@@ -35,6 +36,18 @@ type SettingsDoc = {
   rules?: CommissionRule[];
   backfillDays?: number;
   currency?: string;
+
+  whatsappPhoneNumberId?: string;
+  whatsappBusinessAccountId?: string;
+  whatsappAccessToken?: string;
+  whatsappAppSecret?: string;
+  whatsappVerifyToken?: string;
+  whatsappApiVersion?: string;
+  whatsappDisplayNumber?: string;
+  whatsappConnectedAt?: Date;
+  lastWhatsappError?: string;
+  whatsappAutoSend?: boolean;
+  whatsappDailyCap?: number;
 };
 
 /**
@@ -53,7 +66,7 @@ export async function loadSettings(): Promise<SettingsDoc> {
 export async function loadCredentials(): Promise<SettingsDoc> {
   await loadSettings();
   const doc = await SalesSettings.findOne({ key: "sales" })
-    .select("+shopifyAccessToken +shopifyClientSecret +shiprocketPassword +shiprocketToken")
+    .select("+shopifyAccessToken +shopifyClientSecret +shiprocketPassword +shiprocketToken +whatsappAccessToken +whatsappAppSecret")
     .lean() as SettingsDoc;
 
   return {
@@ -61,14 +74,16 @@ export async function loadCredentials(): Promise<SettingsDoc> {
     shopifyAccessToken: decryptSecret(doc?.shopifyAccessToken),
     shopifyClientSecret: decryptSecret(doc?.shopifyClientSecret),
     shiprocketPassword: decryptSecret(doc?.shiprocketPassword),
-    shiprocketToken: decryptSecret(doc?.shiprocketToken)
+    shiprocketToken: decryptSecret(doc?.shiprocketToken),
+    whatsappAccessToken: decryptSecret(doc?.whatsappAccessToken),
+    whatsappAppSecret: decryptSecret(doc?.whatsappAppSecret)
   };
 }
 
 export const backfillDaysOf = (settings: SettingsDoc) => settings.backfillDays ?? DEFAULT_BACKFILL_DAYS;
 export const rulesOf = (settings: SettingsDoc): CommissionRule[] => settings.rules ?? [];
 
-type SecretField = "shopifyAccessToken" | "shopifyClientSecret" | "shiprocketPassword";
+type SecretField = "shopifyAccessToken" | "shopifyClientSecret" | "shiprocketPassword" | "whatsappAccessToken" | "whatsappAppSecret";
 
 /** Writes a secret back encrypted; an empty value leaves what is already stored alone. */
 export async function storeSecret(field: SecretField, value: string | undefined) {
@@ -81,6 +96,17 @@ export function shopifyConfig(settings: SettingsDoc): ShopifyConfig | null {
   if (!domain || !settings.shopifyAccessToken) return null;
   return { domain, accessToken: settings.shopifyAccessToken, apiVersion: settings.shopifyApiVersion || "2026-07" };
 }
+
+/** The Cloud API credentials, or null until all three are there. */
+export const whatsappConfig = (settings: SettingsDoc): WhatsAppConfig | null =>
+  settings.whatsappPhoneNumberId && settings.whatsappBusinessAccountId && settings.whatsappAccessToken
+    ? {
+      phoneNumberId: settings.whatsappPhoneNumberId,
+      businessAccountId: settings.whatsappBusinessAccountId,
+      accessToken: settings.whatsappAccessToken,
+      apiVersion: settings.whatsappApiVersion || undefined
+    }
+    : null;
 
 export const shiprocketConfig = (settings: SettingsDoc): ShiprocketConfig | null =>
   settings.shiprocketEmail && settings.shiprocketPassword

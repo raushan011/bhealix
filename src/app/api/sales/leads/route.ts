@@ -5,6 +5,7 @@ import { can } from "@/constants/access";
 import { fail, ok, pageParams } from "@/lib/api";
 import { record } from "@/lib/audit";
 import { leadSaveSchema, leadWhere, toLeadFields, withLeadStatus } from "@/lib/sales/leads";
+import { drainQueue, queueLeads, type DrainReport, type QueueReport } from "@/lib/sales/outreach-engine";
 
 /**
  * The saved list, filtered the way somebody working through it asks about it:
@@ -130,6 +131,27 @@ export async function POST(request: Request) {
     const created = (result?.upsertedCount ?? 0) + typed.length;
     const updated = result?.matchedCount ?? 0;
 
+    /*
+     * The automation, if it is switched on: every row this save touched is
+     * offered to the rules, and whatever they queue goes out now, in this same
+     * request. Failures are swallowed into the response rather than raised —
+     * the leads *are* saved, and a Meta outage must not turn a successful save
+     * into an error screen. The panel shows what was queued and what went.
+     */
+    let automation: { queued: QueueReport; drained: DrainReport | null } | undefined;
+    try {
+      const ids = [
+        ...Object.values(result?.upsertedIds ?? {}).map(String),
+        ...known.length && result ? await SalesLead.find({ googlePlaceId: { $in: known.map(row => row.googlePlaceId) } }).distinct("_id").then(found => found.map(String)) : [],
+        ...typed.map(doc => String(doc._id))
+      ];
+      const queued = await queueLeads([...new Set(ids)], "Saved");
+      const drained = queued.queued ? await drainQueue({ trigger: "Saved" }) : null;
+      automation = { queued, drained };
+    } catch (problem) {
+      console.error("Automation after save failed", problem);
+    }
+
     await record({
       actor: auth.session.userId,
       action: "sales.leads.saved",
@@ -146,7 +168,7 @@ export async function POST(request: Request) {
       }
     });
 
-    return ok({ created, updated }, 201);
+    return ok({ created, updated, automation }, 201);
   } catch (error) {
     return fail(error);
   }

@@ -1,4 +1,6 @@
+import type { AutomationTrigger, OutreachStatus } from "./automation";
 import type { CommissionRule } from "./commission";
+import type { AutomationCounts } from "./outreach-engine";
 import type { CommissionStatus, CourierRule, DeliveryState, OrderSource, PayoutMode } from "./constants";
 import type { FulfilmentState, RetargetStatus } from "./retarget";
 import type { Parcel, PickupLocation } from "./fulfilment";
@@ -428,4 +430,81 @@ export type ShopOrderRecord = {
     remarks: RetargetRemark[];
   };
   syncedAt?: string;
+};
+
+// ------------------------------------------------------------- automation
+
+/** A rule as the panel reads it, with its figures beside it. */
+export type AutomationRuleRecord = {
+  _id: Id;
+  name: string;
+  enabled: boolean;
+  leadType: string;
+  city: string;
+  freshOnly: boolean;
+  template: { name: string; language: string; body: string; fields: string[] };
+  stats: { queued: number; sent: number; replied: number; failed: number };
+  /** How many saved leads the rule would fire for right now. */
+  matching: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+/** Everything the automation panel paints from, in one response. */
+export type AutomationOverview = {
+  connected: boolean;
+  autoSend: boolean;
+  dailyCap: number;
+  phoneNumberId: string;
+  businessAccountId: string;
+  apiVersion: string;
+  /** Whether a token is stored — the token itself never reaches a browser. */
+  accessTokenSet: boolean;
+  accessTokenHint?: string;
+  appSecretSet: boolean;
+  verifyToken: string;
+  displayNumber: string;
+  connectedAt?: string;
+  lastError?: string;
+  /** The address to paste into Meta's webhook configuration. */
+  webhookUrl: string;
+  mayEdit: boolean;
+  counts: AutomationCounts;
+  rules: AutomationRuleRecord[];
+};
+
+/** One automated message in the log. */
+export type OutreachMessageRecord = {
+  _id: Id;
+  lead?: Id;
+  leadName?: string;
+  leadType?: string;
+  city?: string;
+  phone: string;
+  rule?: Id;
+  ruleName?: string;
+  templateName?: string;
+  preview?: string;
+  trigger?: AutomationTrigger;
+  status: OutreachStatus;
+  error?: string;
+  queuedAt?: string;
+  sentAt?: string;
+  deliveredAt?: string;
+  readAt?: string;
+  repliedAt?: string;
+  createdAt?: string;
+};
+
+/** One reply in the inbox. */
+export type OutreachReplyRecord = {
+  _id: Id;
+  lead?: Id;
+  leadName?: string;
+  phone: string;
+  profileName?: string;
+  type?: string;
+  text: string;
+  receivedAt: string;
+  seen: boolean;
 };
