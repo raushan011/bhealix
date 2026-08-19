@@ -101,4 +101,34 @@ describe("the custom payslip editor", () => {
 
     unmount();
   });
+
+  it("clears the Duplicate watermark when another kind is chosen, but never a typed one", async () => {
+    stubFetch();
+    const { container, unmount } = await mount();
+    const sheet = container.querySelector("article.payslip-sheet")!;
+    const chip = (label: string) =>
+      Array.from(container.querySelectorAll("button")).find(button => button.textContent === label)!;
+    const watermark = () =>
+      Array.from(container.querySelectorAll<HTMLInputElement>("input")).find(input => input.maxLength === 30)!;
+
+    // Tapping Duplicate writes the mark and lights only that chip.
+    await act(async () => { chip("Duplicate").click(); });
+    expect(watermark().value).toBe("Duplicate");
+    expect(sheet.textContent).toContain("Duplicate");
+    expect(chip("Duplicate").getAttribute("aria-pressed")).toBe("true");
+    expect(chip("Payslip").getAttribute("aria-pressed")).toBe("false");
+
+    // Switching kind takes the mark with it — a plain payslip is not a duplicate.
+    await act(async () => { chip("Payslip").click(); });
+    expect(watermark().value).toBe("");
+    expect(chip("Payslip").getAttribute("aria-pressed")).toBe("true");
+    expect(chip("Duplicate").getAttribute("aria-pressed")).toBe("false");
+
+    // A watermark somebody typed themselves survives switching kinds.
+    await act(async () => { setValue(watermark(), "SPECIMEN"); });
+    await act(async () => { chip("Arrears").click(); });
+    expect(watermark().value).toBe("SPECIMEN");
+
+    unmount();
+  });
 });

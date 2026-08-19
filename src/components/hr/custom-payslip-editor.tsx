@@ -188,7 +188,16 @@ export function CustomPayslipEditor({ id, copyOf }: Props) {
 
   const applyPreset = (preset: (typeof PRESETS)[number]) => {
     const patch: Partial<CustomPayslipDoc> = { title: preset.title };
+    /*
+     * The Duplicate chip is the only one that writes the watermark, so it is
+     * the only mark another chip may erase — without this, one tap on
+     * Duplicate followed a switch of kind left DUPLICATE printed across a
+     * sheet nobody asked to mark. A watermark somebody typed themselves —
+     * SPECIMEN, COPY — survives switching kinds, because it was a decision
+     * and not a side effect.
+     */
     if (preset.label === "Duplicate") patch.watermark = "Duplicate";
+    else if (form.watermark === "Duplicate") patch.watermark = "";
     if (preset.label === "Contractor") { patch.attendance = { ...form.attendance, show: false }; patch.employerContributions = []; }
     if (preset.label === "Full & final") patch.periodLabel = form.periodLabel || "Full and final settlement";
     set(patch);
@@ -234,14 +243,24 @@ export function CustomPayslipEditor({ id, copyOf }: Props) {
         <Card className="space-y-4 p-5">
           <h2 className="text-sm font-semibold">What kind of sheet</h2>
           <div className="flex flex-wrap gap-1.5">
-            {PRESETS.map(preset => (
-              <button key={preset.label} type="button" title={preset.hint} onClick={() => applyPreset(preset)}
-                className={`rounded-full border px-3 py-1 text-xs font-semibold ${form.title === preset.title && (preset.label !== "Duplicate" || form.watermark)
+            {PRESETS.map(preset => {
+              /*
+               * "Payslip" and "Duplicate" share a printed title, so the title
+               * alone cannot say which chip is on — the DUPLICATE watermark is
+               * the whole difference between them, and it is what decides here.
+               * Without this, tapping Duplicate lit both chips at once.
+               */
+              const active = form.title === preset.title && (preset.label === "Duplicate"
+                ? form.watermark === "Duplicate"
+                : !(preset.title === "Payslip" && form.watermark === "Duplicate"));
+              return <button key={preset.label} type="button" title={preset.hint} onClick={() => applyPreset(preset)}
+                aria-pressed={active}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${active
                   ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--on-brand)]"
                   : "border-[var(--line-2)] bg-[var(--surface)] text-[var(--ink-2)]"}`}>
                 {preset.label}
-              </button>
-            ))}
+              </button>;
+            })}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Title" hint="Printed across the top of the sheet.">
