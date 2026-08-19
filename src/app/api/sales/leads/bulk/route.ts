@@ -4,7 +4,7 @@ import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
 import { fail, ok } from "@/lib/api";
 import { record } from "@/lib/audit";
-import { bulkLeadSchema } from "@/lib/sales/leads";
+import { bulkLeadSchema, canonicalType } from "@/lib/sales/leads";
 
 /**
  * The same change to everything that was ticked.
@@ -55,7 +55,11 @@ export async function POST(request: Request) {
       return ok({ deleted: result.deletedCount });
     }
 
-    const change = input.action === "status" ? { status: input.status } : { type: input.type };
+    const change = input.action === "status"
+      ? { status: input.status }
+      // Case-blind against what is already saved, so a bulk re-file cannot
+      // open a near-duplicate entry in the type filter.
+      : { type: canonicalType(input.type ?? "", await SalesLead.distinct("type") as string[]) };
     const result = await SalesLead.updateMany(where, { $set: { ...change, updatedBy: auth.session.userId } });
 
     await record({

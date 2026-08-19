@@ -271,6 +271,35 @@ export function toLeadFields(row: LeadRow) {
   return { ...rest, googlePlaceId: placeId, googleMapsUrl: mapsUrl };
 }
 
+/**
+ * The one spelling a type gets.
+ *
+ * The type is what makes a saved lead findable, and it is typed by hand — so
+ * "Beauty parlour", "beauty parlour" and "Beauty  Parlour" arrive as three
+ * strings and become three entries in the filter, splitting one list into
+ * three that each look incomplete. Every write path runs the typed value
+ * through this against the types already saved: an existing spelling wins
+ * case-blind, so the filter shows one entry however the second person spelt
+ * it, and a genuinely new type is kept exactly as typed.
+ */
+export function canonicalType(typed: string, existing: readonly string[]): string {
+  const wanted = typed.trim().replace(/\s+/g, " ");
+  const match = wanted.toLowerCase();
+  return existing.find(candidate => candidate.trim().replace(/\s+/g, " ").toLowerCase() === match) ?? wanted;
+}
+
+/** Every lead filed under this type, spelt however it was spelt. */
+export const typeMatches = (type: string) => {
+  const escaped = type.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+  return { type: new RegExp(`^\\s*${escaped}\\s*$`, "i") };
+};
+
+/** Renaming a type wholesale: every lead filed under one word moves to another. */
+export const typeRenameSchema = z.object({
+  from: z.string().trim().min(1, "Which type to rename").max(60),
+  to: typeField
+});
+
 export const leadUpdateSchema = z.object({
   status: z.enum(LEAD_STATUSES).optional(),
   type: typeField.optional(),

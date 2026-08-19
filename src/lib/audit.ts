@@ -111,6 +111,7 @@ export const AUDIT_ACTIONS = {
   "sales.lead.deleted": "Removed a lead",
   "sales.leads.bulk-updated": "Changed a batch of leads",
   "sales.leads.bulk-deleted": "Removed a batch of leads",
+  "sales.leads.type-renamed": "Renamed a lead type across the list",
 
   /**
    * What was said on a call, and any later correction to it. The remark itself

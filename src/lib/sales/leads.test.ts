@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { Place } from "@/lib/doctors/places";
 import {
   LEAD_QUERY_CEILING, MAX_LEAD_RESULTS, bulkLeadSchema, estimateLeadRequests, isOutreach,
-  leadSaveSchema, leadSearchPages, leadSearchSchema, leadSearchZones, leadUpdateSchema, leadWhere, like,
+  canonicalType, leadSaveSchema, leadSearchPages, leadSearchSchema, leadSearchZones, leadUpdateSchema, leadWhere, like,
   remarkEditSchema, remarkSchema, remarkTone, telUrl, toLead, toLeadFields, whatsappNumber,
-  whatsappUrl, withLeadStatus
+  typeMatches, typeRenameSchema, whatsappUrl, withLeadStatus
 } from "./leads";
 import { REMARK_PROJECTION, remarkStages } from "./remark-log";
 
@@ -418,5 +418,37 @@ describe("leadSaveSchema", () => {
   it("still refuses what makes a row meaningless — no name at all", () => {
     expect(() => leadSaveSchema.parse({ leads: [row({ name: "  " })] })).toThrow();
     expect(() => leadSaveSchema.parse({ leads: [] })).toThrow();
+  });
+});
+
+describe("one spelling per type", () => {
+  const saved = ["Beauty parlour", "Chemist"];
+
+  it("joins an existing type case-blind, keeping the stored spelling", () => {
+    expect(canonicalType("beauty parlour", saved)).toBe("Beauty parlour");
+    expect(canonicalType("  BEAUTY  PARLOUR ", saved)).toBe("Beauty parlour");
+  });
+
+  it("keeps a genuinely new type exactly as typed, tidied of stray spaces", () => {
+    expect(canonicalType("  Nail  studio ", saved)).toBe("Nail studio");
+  });
+
+  it("matches every spelling of a type when renaming it", () => {
+    const { type } = typeMatches("Beauty parlour");
+    expect(type.test("beauty parlour")).toBe(true);
+    expect(type.test(" Beauty  PARLOUR ")).toBe(true);
+    expect(type.test("Beauty parlour Ghaziabad")).toBe(false);
+  });
+
+  it("escapes what a type name might carry into a regex", () => {
+    expect(typeMatches("Spa (Ayurvedic)").type.test("spa (ayurvedic)")).toBe(true);
+    expect(typeMatches("Spa (Ayurvedic)").type.test("spa ayurvedic")).toBe(false);
+  });
+
+  it("the rename request needs both halves", () => {
+    expect(typeRenameSchema.parse({ from: "Beauty Parlour Ghaziabad", to: "Beauty parlour" }))
+      .toEqual({ from: "Beauty Parlour Ghaziabad", to: "Beauty parlour" });
+    expect(() => typeRenameSchema.parse({ from: "", to: "Beauty parlour" })).toThrow();
+    expect(() => typeRenameSchema.parse({ from: "X", to: "y" })).toThrow();
   });
 });

@@ -4,7 +4,7 @@ import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
 import { record } from "@/lib/audit";
-import { leadUpdateSchema } from "@/lib/sales/leads";
+import { canonicalType, leadUpdateSchema } from "@/lib/sales/leads";
 
 /** Working the list: where a lead got to, and what was said. */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -16,6 +16,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     await connectDb();
 
     const input = leadUpdateSchema.parse(await request.json());
+    // A corrected type joins an existing spelling case-blind rather than
+    // opening a near-duplicate entry in the filter.
+    if (input.type) input.type = canonicalType(input.type, await SalesLead.distinct("type") as string[]);
     const lead = await SalesLead.findByIdAndUpdate(
       id,
       { ...input, updatedBy: auth.session.userId },

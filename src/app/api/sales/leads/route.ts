@@ -4,7 +4,7 @@ import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
 import { fail, ok, pageParams } from "@/lib/api";
 import { record } from "@/lib/audit";
-import { leadSaveSchema, leadWhere, toLeadFields, withLeadStatus } from "@/lib/sales/leads";
+import { canonicalType, leadSaveSchema, leadWhere, toLeadFields, withLeadStatus } from "@/lib/sales/leads";
 import { drainQueue, queueLeads, type DrainReport, type QueueReport } from "@/lib/sales/outreach-engine";
 
 /**
@@ -92,7 +92,16 @@ export async function POST(request: Request) {
       updatedBy: auth.session.userId
     };
 
-    const rows = input.leads.map(toLeadFields);
+    /*
+     * The type every row is filed under is matched case-blind against the
+     * types already saved, so "beauty parlour" typed today lands under the
+     * "Beauty parlour" saved last week instead of opening a second entry in
+     * the filter. One list per trade, however it was spelt.
+     */
+    const knownTypes = await SalesLead.distinct("type") as string[];
+    const rows = input.leads
+      .map(row => ({ ...row, type: canonicalType(row.type, knownTypes) }))
+      .map(toLeadFields);
     const known = rows.filter(row => row.googlePlaceId);
     const unknown = rows.filter(row => !row.googlePlaceId);
 

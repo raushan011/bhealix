@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Download, ExternalLink, MapPin, MessageSquare, Phone, PhoneOff, Star, Trash2, UsersRound
+  Download, ExternalLink, MapPin, MessageSquare, Pencil, Phone, PhoneOff, Star, Trash2, UsersRound
 } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Field, Notice, Spinner } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
@@ -53,6 +53,7 @@ export function LeadList({ mayEdit, reloadToken }: { mayEdit: boolean; reloadTok
   const [contacting, setContacting] = useState<SalesLeadRecord | null>(null);
   const [reading, setReading] = useState<SalesLeadRecord | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [renamingType, setRenamingType] = useState(false);
   const [busyId, setBusyId] = useState<string>();
   const [error, setError] = useState("");
 
@@ -145,10 +146,25 @@ export function LeadList({ mayEdit, reloadToken }: { mayEdit: boolean; reloadTok
             onChange={event => set("q")(event.target.value)} />
         </Field>
         <Field label="Type">
-          <select className="select" value={filters.type} onChange={event => set("type")(event.target.value)}>
-            <option value="">Every type</option>
-            {data.types.map(value => <option key={value} value={value}>{value}</option>)}
-          </select>
+          <div className="flex gap-2">
+            <select className="select min-w-0 flex-1" value={filters.type} onChange={event => set("type")(event.target.value)}>
+              <option value="">Every type</option>
+              {data.types.map(value => <option key={value} value={value}>{value}</option>)}
+            </select>
+            {/*
+              * Renaming moves every lead filed under the chosen type, which is
+              * how "Beauty Parlour Ghaziabad" and "Beauty parlour" become one
+              * entry — the fix for a filter that grows a near-duplicate per
+              * sweep. Offered only against a chosen type: "rename every type"
+              * is not a sentence.
+              */}
+            {mayEdit && filters.type && (
+              <button type="button" onClick={() => setRenamingType(true)} title={`Rename “${filters.type}” everywhere`}
+                className="inline-flex min-h-[44px] items-center gap-1 rounded-[10px] border border-[var(--line-2)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--ink-2)] hover:bg-[var(--surface-2)]">
+                <Pencil size={13} />Rename
+              </button>
+            )}
+          </div>
         </Field>
         <Field label="Status">
           <select className="select" value={filters.status} onChange={event => set("status")(event.target.value)}>
@@ -353,7 +369,58 @@ export function LeadList({ mayEdit, reloadToken }: { mayEdit: boolean; reloadTok
 
     {editing && <EditLead lead={editing} onClose={() => setEditing(null)}
       onSaved={change => { const lead = editing; setEditing(null); patch(lead, change); }} />}
+
+    {renamingType && filters.type && <RenameType from={filters.type} onClose={() => setRenamingType(false)}
+      onRenamed={to => { setRenamingType(false); set("type")(to); }} />}
   </div>;
+}
+
+/**
+ * Renaming a type everywhere it appears.
+ *
+ * Renaming into a type that already exists is a merge, and is said so plainly
+ * — that is the whole reason anybody opens this: two spellings of one trade,
+ * collapsed to one entry in the filter. The city never lived in the type; it
+ * is its own field on every lead, and its own filter.
+ */
+function RenameType({ from, onClose, onRenamed }: {
+  from: string;
+  onClose: () => void;
+  onRenamed: (to: string) => void;
+}) {
+  const [to, setTo] = useState(from);
+  const [error, setError] = useState("");
+
+  async function rename() {
+    setError("");
+    const response = await fetch("/api/sales/leads/types", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ from, to })
+    });
+    const json = await response.json() as { error?: string; data?: { renamed: number; to: string } };
+    if (!response.ok) return setError(json.error ?? "The type could not be renamed");
+    onRenamed(json.data?.to ?? to.trim());
+  }
+
+  return <Modal title={`Rename “${from}”`}
+    description="Every lead filed under it moves. Type an existing type to merge the two into one entry."
+    onClose={onClose}
+    footer={<div className="flex gap-2">
+      <Button tone="secondary" className="flex-1" onClick={onClose}>Cancel</Button>
+      <Button className="flex-1" disabled={to.trim().length < 2 || to.trim() === from} onClick={rename}>Rename</Button>
+    </div>}>
+    <div className="space-y-3">
+      <Field label="New name">
+        <input className="input" list="lead-types-rename" value={to} autoFocus
+          onChange={event => setTo(event.target.value)} />
+        <datalist id="lead-types-rename">
+          {LEAD_TYPE_SUGGESTIONS.map(suggestion => <option key={suggestion} value={suggestion} />)}
+        </datalist>
+      </Field>
+      {error && <Notice tone="error">{error}</Notice>}
+    </div>
+  </Modal>;
 }
 
 // ------------------------------------------------------------- many at once
