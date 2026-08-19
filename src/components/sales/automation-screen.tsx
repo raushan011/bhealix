@@ -720,8 +720,8 @@ function Setup({ data, onChanged, say }: {
       <p>
         <RefreshCw size={13} className="mr-1 inline" />
         When a search is saved on the Leads screen, every new lead is offered to the rules; whatever matches is
-        queued and sent in the same breath, inside the daily cap. A scheduled run every three hours picks up
-        anything the cap or an outage left waiting.
+        queued and sent in the same breath, inside the daily cap. A daily scheduled run — and the Send now
+        button any time — picks up anything the cap or an outage left waiting.
       </p>
       <p>
         <AlertTriangle size={13} className="mr-1 inline" />

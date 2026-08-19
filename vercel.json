@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/sales/automation/run",
-      "schedule": "0 4,7,10,13 * * *"
+      "schedule": "45 4 * * *"
     }
   ]
 }
