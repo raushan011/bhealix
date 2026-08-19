@@ -237,7 +237,7 @@ export function CustomPayslipEditor({ id, copyOf }: Props) {
             {PRESETS.map(preset => (
               <button key={preset.label} type="button" title={preset.hint} onClick={() => applyPreset(preset)}
                 className={`rounded-full border px-3 py-1 text-xs font-semibold ${form.title === preset.title && (preset.label !== "Duplicate" || form.watermark)
-                  ? "border-[var(--brand)] bg-[var(--brand)] text-white"
+                  ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--on-brand)]"
                   : "border-[var(--line-2)] bg-[var(--surface)] text-[var(--ink-2)]"}`}>
                 {preset.label}
               </button>
