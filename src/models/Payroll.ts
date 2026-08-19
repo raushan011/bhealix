@@ -1,5 +1,6 @@
 import { Schema, model, models } from "mongoose";
 import { DEFAULT_PT_SLABS, EMPLOYMENT_STATUSES, LOP_BASES, PAY_MODES, PAYROLL_STATUSES } from "@/lib/hr/payroll";
+import { CUSTOM_PAYSLIP_STATUSES } from "@/lib/hr/custom-payslip";
 
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -199,3 +200,74 @@ const PayrollSettingsSchema = new Schema({
 }, { timestamps: true });
 
 export const PayrollSettings = models.PayrollSettings ?? model("PayrollSettings", PayrollSettingsSchema);
+
+const DetailLineSchema = new Schema({
+  label: { type: String, trim: true, maxlength: 40, default: "" },
+  value: { type: String, trim: true, maxlength: 120, default: "" }
+}, { _id: false });
+
+/**
+ * A payslip written by hand — see `lib/hr/custom-payslip.ts`.
+ *
+ * Kept apart from `Payslip` on purpose. That collection is what the monthly run
+ * wrote and what the run's totals are counted from; a slip an administrator
+ * typed for an arrear, a settlement or a bonus must not be mistaken for a month
+ * that was worked out from attendance, and must not be recounted into one.
+ * Every word and every figure on the sheet is stored, so it prints the same
+ * for as long as it exists.
+ */
+const CustomPayslipSchema = new Schema({
+  status: { type: String, enum: CUSTOM_PAYSLIP_STATUSES, default: "Draft", index: true },
+  employee: { type: Schema.Types.ObjectId, ref: "User", index: true, default: null },
+  employeeName: { type: String, trim: true, default: "" },
+
+  title: { type: String, required: true, trim: true, maxlength: 60 },
+  periodLabel: { type: String, required: true, trim: true, maxlength: 80 },
+  month: { type: String, match: MONTH, index: true },
+
+  company: {
+    name: { type: String, default: "" },
+    address: { type: String, default: "" },
+    pan: { type: String, default: "" }
+  },
+  details: { type: [DetailLineSchema], default: [] },
+
+  attendance: {
+    show: { type: Boolean, default: true },
+    daysInMonth: { type: Number, default: 0 },
+    divisorDays: { type: Number, default: 0 },
+    paidDays: { type: Number, default: 0 },
+    lopDays: { type: Number, default: 0 }
+  },
+
+  earnings: { type: [NamedAmountSchema], default: [] },
+  deductions: { type: [NamedAmountSchema], default: [] },
+  employerContributions: { type: [NamedAmountSchema], default: [] },
+  employerContributionsNote: { type: String, default: "" },
+
+  netPayMode: { type: String, enum: ["computed", "manual"], default: "computed" },
+  netPayOverride: { type: Number, default: 0 },
+  roundOff: { type: Number, default: 0 },
+  showAmountInWords: { type: Boolean, default: true },
+
+  paymentDate: String,
+  paymentMode: { type: String, enum: [...PAY_MODES, ""] },
+  reference: String,
+  signatoryName: { type: String, default: "" },
+  note: { type: String, default: "" },
+  footerText: { type: String, default: "" },
+  showDraftMark: { type: Boolean, default: false },
+  watermark: { type: String, default: "" },
+
+  /** Worked out on save from the lines above, so the list can show a total without reading every sheet. */
+  gross: { type: Number, default: 0 },
+  totalDeductions: { type: Number, default: 0 },
+  netPay: { type: Number, default: 0 },
+
+  createdBy: { type: Schema.Types.ObjectId, ref: "User" },
+  updatedBy: { type: Schema.Types.ObjectId, ref: "User" }
+}, { timestamps: true });
+
+CustomPayslipSchema.index({ createdAt: -1 });
+
+export const CustomPayslip = models.CustomPayslip ?? model("CustomPayslip", CustomPayslipSchema);

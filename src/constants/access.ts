@@ -155,6 +155,14 @@ export const can = {
   approvePayroll: (role: Role) => admin(role),
   /** Reading what somebody else earns. Everybody may read their own payslip. */
   viewPayroll: (role: Role) => admin(role) || role === "HR",
+  /**
+   * Writing a payslip by hand — an arrear, a settlement, a bonus, a duplicate,
+   * a slip for somebody the monthly run never saw. Every figure on it is typed
+   * rather than worked out, so it stays with the authority that approves
+   * payroll: the person who can put any number on a payslip must be the person
+   * answerable for the numbers.
+   */
+  issueCustomPayslip: (role: Role) => admin(role),
 
   // ------------------------------------------------------------ affiliate sales
   /**

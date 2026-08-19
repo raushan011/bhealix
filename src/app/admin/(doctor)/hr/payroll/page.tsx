@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, IndianRupee, Settings2, Wallet } from "lucide-react";
+import { AlertTriangle, FilePen, IndianRupee, Settings2, Wallet } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Field, LinkButton, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import { formatMoney } from "@/lib/billing/constants";
@@ -40,15 +40,17 @@ export default function PayrollPage() {
   const router = useRouter();
   const [runs, setRuns] = useState<Run[]>([]);
   const [mayRun, setMayRun] = useState(false);
+  const [mayCustom, setMayCustom] = useState(false);
   const [loading, setLoading] = useState(true);
   const [preparing, setPreparing] = useState(false);
   const [notice, setNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
   const load = useCallback(async () => {
     const response = await fetch("/api/hr/payroll");
-    const json = await response.json() as { data?: { items: Run[]; mayRun: boolean } };
+    const json = await response.json() as { data?: { items: Run[]; mayRun: boolean; mayCustom?: boolean } };
     setRuns(json.data?.items ?? []);
     setMayRun(Boolean(json.data?.mayRun));
+    setMayCustom(Boolean(json.data?.mayCustom));
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -62,6 +64,7 @@ export default function PayrollPage() {
     <PageTitle title="Payroll" subtitle="One month at a time — prepared, approved, then paid"
       actions={<>
         <LinkButton tone="secondary" href="/admin/hr/payroll/settings"><Settings2 size={16} />Settings</LinkButton>
+        {mayCustom && <LinkButton tone="secondary" href="/admin/hr/payroll/custom"><FilePen size={16} />Custom payslip</LinkButton>}
         {mayRun && <Button onClick={() => setPreparing(true)}><Wallet size={16} />Prepare a month</Button>}
       </>} />
 

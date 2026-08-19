@@ -26,7 +26,10 @@ export async function GET() {
       .populate("generatedBy", "name").populate("approvedBy", "name").populate("paidBy", "name")
       .sort({ month: -1 }).limit(36).lean();
 
-    return ok({ items, mayRun: can.runPayroll(auth.session.role), mayApprove: can.approvePayroll(auth.session.role) });
+    return ok({
+      items, mayRun: can.runPayroll(auth.session.role), mayApprove: can.approvePayroll(auth.session.role),
+      mayCustom: can.issueCustomPayslip(auth.session.role)
+    });
   } catch (error) {
     return fail(error);
   }

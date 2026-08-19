@@ -53,6 +53,28 @@ export type PayslipMeta = {
   paymentDate?: string; paymentMode?: string; reference?: string; signatoryName?: string; note?: string;
 };
 
+/**
+ * What a hand-written payslip may say differently from a computed one.
+ *
+ * Every field is optional and the sheet reads the same as before when none is
+ * given: the monthly run's payslips are untouched by this. When `details` is
+ * supplied it replaces the employee block wholesale, so a slip for somebody who
+ * was never on the rolls can still carry whatever lines the administrator wants
+ * on it.
+ */
+export type PayslipCustom = {
+  title?: string;
+  periodLabel?: string;
+  details?: Array<{ label: string; value: string }>;
+  showAttendance?: boolean;
+  showAmountInWords?: boolean;
+  employerContributionsNote?: string;
+  /** Replaces the "computer-generated payslip" line when set. */
+  footerText?: string;
+  /** Printed faintly across the sheet — "DUPLICATE", "COPY". */
+  watermark?: string;
+};
+
 const cell = "border border-neutral-400 px-2 py-1 align-top";
 const rupee = (amount: number) =>
   `${amount < 0 ? "-" : ""}₹${Math.abs(amount).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
@@ -65,20 +87,32 @@ function Detail({ label, value }: { label: string; value?: string | number | nul
   </div>;
 }
 
-export function PayslipDocument({ payslip, company, meta }: {
-  payslip: PayslipRecord; company: PayslipCompany; meta?: PayslipMeta;
+export function PayslipDocument({ payslip, company, meta, custom }: {
+  payslip: PayslipRecord; company: PayslipCompany; meta?: PayslipMeta; custom?: PayslipCustom;
 }) {
   const who = payslip.snapshot ?? {};
   const employer = company.tradeName || company.legalName || "";
   const rows = Math.max(payslip.earnings.length, payslip.deductions.length);
   const prorated = payslip.paidDays < payslip.divisorDays;
+  const showAttendance = custom?.showAttendance ?? true;
+  const showWords = custom?.showAmountInWords ?? true;
+  const details = custom?.details;
+  // The hand-written block splits down the middle, like the computed one does.
+  const half = details ? Math.ceil(details.length / 2) : 0;
+  const leftDetails = details?.slice(0, half) ?? [];
+  const rightDetails = details?.slice(half) ?? [];
 
   /*
    * A 10mm margin is right on paper and wrong on a 360px phone, where it eats a
    * fifth of the screen before the sheet has drawn anything. The screen gets a
    * smaller inset and paper gets its margin back at the width an A4 page needs.
    */
-  return <article className="payslip-sheet mx-auto w-full max-w-[210mm] bg-white p-4 text-neutral-900 shadow-sm sm:p-[10mm] print:max-w-none print:p-0 print:shadow-none">
+  return <article className="payslip-sheet relative mx-auto w-full max-w-[210mm] bg-white p-4 text-neutral-900 shadow-sm sm:p-[10mm] print:max-w-none print:p-0 print:shadow-none">
+    {custom?.watermark && (
+      <p aria-hidden className="pointer-events-none absolute inset-0 grid select-none place-items-center overflow-hidden text-[64px] font-black uppercase tracking-[0.3em] text-neutral-900/[0.07] [transform:rotate(-24deg)]">
+        {custom.watermark}
+      </p>
+    )}
     <header className="border border-neutral-400 px-3 py-2 text-center">
       <h1 className="text-[14px] font-bold uppercase tracking-[0.15em]">{employer}</h1>
       {(company.address || company.city) && (
@@ -87,7 +121,10 @@ export function PayslipDocument({ payslip, company, meta }: {
         </p>
       )}
       <p className="mt-1 text-[12px] font-bold uppercase tracking-[0.2em]">
-        Payslip for {monthLabel(payslip.month)}
+        {custom?.title ?? "Payslip"}{" "}
+        {custom?.periodLabel !== undefined
+          ? (custom.periodLabel ? `for ${custom.periodLabel}` : "")
+          : `for ${monthLabel(payslip.month)}`}
       </p>
       {/* An unapproved slip must never be mistaken for one. */}
       {payslip.status === "Draft" && (
@@ -99,6 +136,23 @@ export function PayslipDocument({ payslip, company, meta }: {
 
     {/* One column on a phone. Side by side, each half was about 150px wide and
         the 34mm label left roughly nothing for the value beside it. */}
+    {details ? (
+      (details.length > 0 || showAttendance) && (
+        <section className="mt-2 flex flex-wrap border border-neutral-400">
+          <div className="min-w-0 basis-full space-y-0.5 border-b border-neutral-400 p-2.5 sm:flex-1 sm:basis-0 sm:border-b-0 sm:border-r">
+            {leftDetails.map((line, index) => <Detail key={index} label={line.label} value={line.value} />)}
+          </div>
+          <div className="min-w-0 basis-full space-y-0.5 p-2.5 sm:flex-1 sm:basis-0">
+            {rightDetails.map((line, index) => <Detail key={index} label={line.label} value={line.value} />)}
+            {showAttendance && <>
+              {payslip.daysInMonth > 0 && <Detail label="Days in month" value={payslip.daysInMonth} />}
+              {payslip.divisorDays > 0 && <Detail label="Paid days" value={`${payslip.paidDays} of ${payslip.divisorDays}`} />}
+              {payslip.lopDays > 0 && <Detail label="Loss of pay" value={`${payslip.lopDays} day${payslip.lopDays === 1 ? "" : "s"}`} />}
+            </>}
+          </div>
+        </section>
+      )
+    ) : (
     <section className="mt-2 flex flex-wrap border border-neutral-400">
       <div className="min-w-0 basis-full space-y-0.5 border-b border-neutral-400 p-2.5 sm:flex-1 sm:basis-0 sm:border-b-0 sm:border-r">
         <Detail label="Name" value={who.name} />
@@ -121,6 +175,7 @@ export function PayslipDocument({ payslip, company, meta }: {
         {payslip.lopDays > 0 && <Detail label="Loss of pay" value={`${payslip.lopDays} day${payslip.lopDays === 1 ? "" : "s"}`} />}
       </div>
     </section>
+    )}
 
     {/* Earnings and deductions side by side need about 520px between the four
         columns. On a phone the pair scrolls rather than forcing the sheet wider
@@ -167,9 +222,11 @@ export function PayslipDocument({ payslip, company, meta }: {
         <span className="text-[12px] font-bold uppercase tracking-wider">Net pay</span>
         <span className="text-[15px] font-bold tabular-nums">{rupee(payslip.netPay)}</span>
       </div>
-      <p className="border-t border-neutral-400 px-3 py-1.5 text-[11px] font-semibold">
-        {amountInWords(payslip.netPay)}
-      </p>
+      {showWords && (
+        <p className="border-t border-neutral-400 px-3 py-1.5 text-[11px] font-semibold">
+          {amountInWords(payslip.netPay)}
+        </p>
+      )}
     </section>
 
     {prorated && payslip.fullGross ? (
@@ -181,7 +238,7 @@ export function PayslipDocument({ payslip, company, meta }: {
     {Boolean(payslip.employerContributions?.length) && (
       <section className="mt-2 border border-neutral-400">
         <p className="border-b border-neutral-400 bg-neutral-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wider">
-          Paid by the company on your behalf — not deducted from you
+          {custom?.employerContributionsNote || "Paid by the company on your behalf — not deducted from you"}
         </p>
         <div className="flex flex-wrap gap-x-6 gap-y-1 px-3 py-2 text-[11px]">
           {payslip.employerContributions!.map(row => (
@@ -210,7 +267,7 @@ export function PayslipDocument({ payslip, company, meta }: {
         {payslip.note && <p>{payslip.note}</p>}
         {meta?.note && <p>{meta.note}</p>}
         <p className="mt-1">
-          This is a computer-generated payslip and is valid without a signature.
+          {custom?.footerText || "This is a computer-generated payslip and is valid without a signature."}
           {company.pan ? ` Employer PAN ${company.pan}.` : ""}
         </p>
       </div>
