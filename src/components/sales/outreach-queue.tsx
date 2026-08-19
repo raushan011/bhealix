@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ArrowLeft, CheckCircle2, MapPin, MessageSquare, PhoneOff, Send, SkipForward
+  ArrowLeft, CheckCircle2, MapPin, MessageSquare, Pause, PhoneOff, Play, Send, SkipForward, Zap
 } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Field, Notice, Spinner } from "@/components/ui/kit";
 import { MessageTemplates } from "@/components/sales/message-templates";
 import {
-  WHATSAPP_APP_KEY, WHATSAPP_APPS, buildQueue, whatsappAndroidUrl, whatsappSendUrl,
+  AUTOPILOT_DELAY_KEY, AUTOPILOT_DELAYS, WHATSAPP_APP_KEY, WHATSAPP_APPS, buildQueue,
+  clampAutopilotDelay, whatsappAndroidUrl, whatsappSendUrl, whatsappWebUrl,
   type QueueEntry, type TemplateRecord, type WhatsAppApp
 } from "@/lib/sales/outreach";
 import type { SalesLeadRecord } from "@/lib/sales/types";
@@ -92,6 +93,49 @@ export function OutreachQueue({ mayEdit }: { mayEdit: boolean }) {
     try { localStorage.setItem(WHATSAPP_APP_KEY, value); } catch { /* remembered for this visit only */ }
   };
 
+  /*
+   * Autopilot: the queue opens each chat itself and moves on by itself, so the
+   * only thing a person does is press Send inside WhatsApp. That last press is
+   * deliberately not automated — no web page can reach into another site's
+   * compose box, and the robots that fake it with browser extensions are
+   * exactly what gets a number banned. What *can* be automated is everything
+   * around the press, which is where all the clicking back and forth lived.
+   *
+   * On a desk: each chat opens in one reused WhatsApp Web tab, and the next
+   * follows after a chosen number of seconds. On a phone: the next chat opens
+   * by itself the moment the rep swipes back from WhatsApp.
+   */
+  const [mode, setMode] = useState<"manual" | "auto">("manual");
+  const [autoRunning, setAutoRunning] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const [autoDelay, setAutoDelay] = useState<number>(AUTOPILOT_DELAYS.fallback);
+  /** Which lead's chat autopilot has already opened, so a re-render never opens it twice. */
+  const openedFor = useRef<string | null>(null);
+  /**
+   * The one WhatsApp Web window, held onto.
+   *
+   * The first open happens on the Start click and is allowed everywhere; the
+   * ones after that come from a timer, which popup blockers refuse. But a
+   * window already open can be *navigated* without anybody's permission — so
+   * the handle is kept, and every later chat is a navigation of the same
+   * window rather than a new open. Closing it mid-batch pauses the run with a
+   * Resume button, whose click is the user gesture the reopen needs.
+   */
+  const waWindow = useRef<Window | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = Number(localStorage.getItem(AUTOPILOT_DELAY_KEY));
+      if (saved) setAutoDelay(clampAutopilotDelay(saved));
+    } catch { /* the default pace will do */ }
+  }, []);
+
+  const chooseDelay = (value: number) => {
+    const clamped = clampAutopilotDelay(value);
+    setAutoDelay(clamped);
+    try { localStorage.setItem(AUTOPILOT_DELAY_KEY, String(clamped)); } catch { /* kept for this visit */ }
+  };
+
   /** Nothing may be written to storage until what was there has been read. */
   const restored = useRef(false);
 
@@ -171,6 +215,8 @@ export function OutreachQueue({ mayEdit }: { mayEdit: boolean }) {
     setQueue(buildQueue(leads, template.body) as Entry[]);
     setIndex(0);
     setSent(new Set());
+    openedFor.current = null;
+    setAutoRunning(mode === "auto");
   }
 
   /**
@@ -182,9 +228,8 @@ export function OutreachQueue({ mayEdit }: { mayEdit: boolean }) {
    * failure surfaces as a notice and the lead stays in tomorrow's queue, which
    * is the harmless direction to be wrong in.
    */
-  function markSent(entry: Entry) {
+  function recordContact(entry: Entry) {
     setSent(current => new Set(current).add(entry.lead._id));
-    setIndex(current => current + 1);
 
     fetch(`/api/sales/leads/${entry.lead._id}/contacted`, {
       method: "POST",
@@ -196,6 +241,11 @@ export function OutreachQueue({ mayEdit }: { mayEdit: boolean }) {
         setError(json.error ?? `${entry.lead.name} could not be marked as messaged.`);
       }
     }).catch(() => setError(`${entry.lead.name} could not be marked as messaged.`));
+  }
+
+  function markSent(entry: Entry) {
+    recordContact(entry);
+    setIndex(current => current + 1);
   }
 
   /**
@@ -223,6 +273,88 @@ export function OutreachQueue({ mayEdit }: { mayEdit: boolean }) {
     if (onPhone && app) window.location.href = app;
     else if (entry.url) window.open(entry.url, "_blank", "noopener,noreferrer");
   }
+
+  /**
+   * The autopilot's step: open the current chat, once, and set up the advance.
+   *
+   * `openedFor` is the whole safety of this loop — every re-render lands here
+   * again, and the ref is what makes "open lead 12" idempotent. A dead number
+   * is skipped without ceremony; it stays unmessaged on the list, exactly as
+   * the manual skip leaves it.
+   */
+  useEffect(() => {
+    if (!autoRunning || !queue) return;
+    const entry = queue[index];
+    if (!entry) { setAutoRunning(false); return; }
+    if (!entry.url) { setIndex(current => current + 1); return; }
+    if (openedFor.current === entry.lead._id) return;
+    openedFor.current = entry.lead._id;
+
+    if (onPhone) {
+      // Recorded before the hand-off — the page is about to lose the screen.
+      // The advance happens when the rep swipes back: the listener below.
+      recordContact(entry);
+      const app = whatsappAndroidUrl(entry.lead.phone, entry.message, onAndroid ? whatsappApp : "default");
+      if (app) window.location.href = app;
+    } else {
+      const url = whatsappWebUrl(entry.lead.phone, entry.message) ?? entry.url;
+      let win = waWindow.current;
+      if (win && !win.closed) {
+        // Navigation of the window we already hold — never blocked.
+        win.location.href = url;
+      } else {
+        win = window.open(url, "bhealix-whatsapp");
+      }
+      if (!win) {
+        // The browser refused the window and nothing was sent — undo the
+        // claim on this lead and wait for the click that Resume is.
+        openedFor.current = null;
+        setAutoRunning(false);
+        setCountdown(0);
+        setError("The browser blocked the WhatsApp window. Press Resume — that click is the permission it wants.");
+        return;
+      }
+      waWindow.current = win;
+      recordContact(entry);
+      setCountdown(autoDelay);
+    }
+    // recordContact is stable enough for this effect's purpose; listing it
+    // would re-run the step on every render for nothing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRunning, queue, index, onPhone, onAndroid, whatsappApp, autoDelay]);
+
+  /** The desk-side clock: one tick a second, advance at zero. */
+  useEffect(() => {
+    if (!autoRunning || onPhone || countdown <= 0) return;
+    const timer = setTimeout(() => {
+      if (countdown === 1) setIndex(current => current + 1);
+      setCountdown(current => current - 1);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [autoRunning, onPhone, countdown]);
+
+  /** The phone-side advance: coming back from WhatsApp is the signal to continue. */
+  useEffect(() => {
+    if (!autoRunning || !onPhone || !queue) return;
+    const entry = queue[index];
+    const handler = () => {
+      if (document.visibilityState !== "visible") return;
+      if (entry && openedFor.current === entry.lead._id) {
+        // A beat before the next chat, so the return does not feel like a trap.
+        setTimeout(() => setIndex(current => current + 1), 800);
+      }
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, [autoRunning, onPhone, queue, index]);
+
+  const pauseAuto = () => { setAutoRunning(false); setCountdown(0); };
+  const resumeAuto = () => {
+    // The chat on screen was already opened before the pause — resuming
+    // re-opening it would message the same shop twice, so resume moves on.
+    if (queue && openedFor.current === queue[index]?.lead._id) setIndex(current => current + 1);
+    setAutoRunning(true);
+  };
 
   /**
    * Editing what this one lead gets, without touching the saved template.
@@ -288,7 +420,7 @@ export function OutreachQueue({ mayEdit }: { mayEdit: boolean }) {
 
       <div>
         <div className="flex items-center justify-between text-sm">
-          <button onClick={() => { setQueue(null); count(); }}
+          <button onClick={() => { pauseAuto(); setQueue(null); count(); }}
             className="tap inline-flex items-center gap-1.5 text-[var(--muted)] hover:text-[var(--ink)]">
             <ArrowLeft size={15} />Setup
           </button>
@@ -299,6 +431,22 @@ export function OutreachQueue({ mayEdit }: { mayEdit: boolean }) {
             style={{ width: `${(done / queue.length) * 100}%` }} />
         </div>
       </div>
+
+      {mode === "auto" && (
+        <Card className="flex items-center justify-between gap-3 p-3.5">
+          <p className="flex min-w-0 items-center gap-2 text-sm">
+            <Zap size={15} className="shrink-0 text-[var(--brand)]" />
+            {autoRunning
+              ? <span className="min-w-0 truncate font-semibold">
+                  {onPhone ? "Autopilot on — press Send, then swipe back" : countdown > 0 ? `Next chat in ${countdown}s` : "Opening chat…"}
+                </span>
+              : <span className="text-[var(--muted)]">Autopilot paused</span>}
+          </p>
+          <Button tone="secondary" className="shrink-0 px-3 text-xs" onClick={autoRunning ? pauseAuto : resumeAuto}>
+            {autoRunning ? <><Pause size={13} />Pause</> : <><Play size={13} />Resume</>}
+          </Button>
+        </Card>
+      )}
 
       <Card className="p-5">
         <div className="flex flex-wrap items-center gap-2">
@@ -322,9 +470,9 @@ export function OutreachQueue({ mayEdit }: { mayEdit: boolean }) {
         </div>
 
         {entry.url ? (<>
-          <button type="button" onClick={() => send(entry)}
-            className="mt-4 inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-[10px] bg-[var(--brand)] px-4 text-sm font-semibold text-[var(--on-brand)] transition-colors hover:bg-[var(--brand-hover)]">
-            <Send size={17} />Send on WhatsApp
+          <button type="button" onClick={() => send(entry)} disabled={autoRunning}
+            className="mt-4 inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-[10px] bg-[var(--brand)] px-4 text-sm font-semibold text-[var(--on-brand)] transition-colors hover:bg-[var(--brand-hover)] disabled:opacity-50">
+            <Send size={17} />{autoRunning ? "Autopilot is sending…" : "Send on WhatsApp"}
           </button>
           {/*
             * The escape hatch for a phone with no WhatsApp installed, where the
@@ -349,7 +497,7 @@ export function OutreachQueue({ mayEdit }: { mayEdit: boolean }) {
         )}
 
         <div className="mt-3 flex items-center justify-between">
-          <button onClick={() => setIndex(current => Math.max(0, current - 1))} disabled={index === 0}
+          <button onClick={() => setIndex(current => Math.max(0, current - 1))} disabled={index === 0 || autoRunning}
             className="tap inline-flex items-center gap-1.5 text-sm text-[var(--muted)] hover:text-[var(--ink)] disabled:opacity-40">
             <ArrowLeft size={15} />Back
           </button>
@@ -424,6 +572,43 @@ export function OutreachQueue({ mayEdit }: { mayEdit: boolean }) {
       </label>
 
       {appPicker}
+
+      <div className="space-y-2">
+        <p className="text-[13px] font-medium text-[var(--ink-2)]">How it sends</p>
+        <label className="flex items-start gap-2.5 text-sm">
+          <input type="radio" name="outreach-mode" className="mt-0.5" checked={mode === "manual"}
+            onChange={() => setMode("manual")} />
+          <span>
+            One at a time
+            <span className="block text-xs text-[var(--muted)]">You press the button for each chat, and come back when you choose.</span>
+          </span>
+        </label>
+        <label className="flex items-start gap-2.5 text-sm">
+          <input type="radio" name="outreach-mode" className="mt-0.5" checked={mode === "auto"}
+            onChange={() => setMode("auto")} />
+          <span>
+            Autopilot
+            <span className="block text-xs text-[var(--muted)]">
+              {onPhone
+                ? "Each chat opens by itself the moment you swipe back from WhatsApp — you only press Send there."
+                : "Chats open one after another in a single WhatsApp Web tab — you only press Enter there. Sign in to WhatsApp Web in this browser first."}
+            </span>
+          </span>
+        </label>
+        {mode === "auto" && !onPhone && (
+          <Field label="Seconds between chats"
+            hint="Long enough to read and press Enter. The pause button is there mid-batch when a chat needs more.">
+            <input type="number" className="input" min={AUTOPILOT_DELAYS.min} max={AUTOPILOT_DELAYS.max}
+              value={autoDelay} onChange={event => chooseDelay(Number(event.target.value))} />
+          </Field>
+        )}
+        {mode === "auto" && (
+          <p className="text-xs text-[var(--muted)]">
+            The final press of Send stays yours on purpose — a robot pressing it inside WhatsApp is what gets a number
+            banned, and this number is the one on the packaging.
+          </p>
+        )}
+      </div>
     </Card>
 
     {template && (
@@ -445,7 +630,7 @@ export function OutreachQueue({ mayEdit }: { mayEdit: boolean }) {
           {counting ? "Counting…" : <><span className="font-semibold text-[var(--ink)]">{matches}</span> leads match</>}
         </p>
         <Button className="w-full sm:w-auto" disabled={!matches || !template || counting} onClick={start}>
-          <Send size={16} />Start sending
+          {mode === "auto" ? <><Zap size={16} />Start autopilot</> : <><Send size={16} />Start sending</>}
         </Button>
         {(matches ?? 0) > BATCH && (
           <p className="text-xs text-[var(--muted)]">{BATCH} at a time — load the next batch when this one is done.</p>

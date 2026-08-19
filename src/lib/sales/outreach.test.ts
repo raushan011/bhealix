@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  MAX_MESSAGE_LENGTH, WHATSAPP_APPS, advancesOnSend, buildQueue, render, templateSchema,
-  templateUpdateSchema, unknownFields, whatsappAndroidUrl, whatsappAppUrl, whatsappSendUrl
+  AUTOPILOT_DELAYS, MAX_MESSAGE_LENGTH, WHATSAPP_APPS, advancesOnSend, buildQueue, clampAutopilotDelay,
+  render, templateSchema, templateUpdateSchema, unknownFields, whatsappAndroidUrl, whatsappAppUrl,
+  whatsappSendUrl, whatsappWebUrl
 } from "./outreach";
 
 const parlour = {
@@ -196,5 +197,23 @@ describe("choosing which WhatsApp opens", () => {
   it("offers the business app before the personal one — this is a business queue", () => {
     expect(WHATSAPP_APPS[0].value).toBe("default");
     expect(WHATSAPP_APPS[1].value).toBe("business");
+  });
+});
+
+describe("the autopilot's own pieces", () => {
+  it("opens the chat inside WhatsApp Web, skipping the wa.me interstitial", () => {
+    expect(whatsappWebUrl(parlour.phone, "Hi there"))
+      .toBe("https://web.whatsapp.com/send?phone=919650306893&text=Hi%20there");
+  });
+
+  it("stays unsendable for a number that cannot be made sense of", () => {
+    expect(whatsappWebUrl("ask at the counter", "Hi")).toBeNull();
+  });
+
+  it("boxes the pace into something a human is actually pressing Enter at", () => {
+    expect(clampAutopilotDelay(1)).toBe(AUTOPILOT_DELAYS.min);
+    expect(clampAutopilotDelay(600)).toBe(AUTOPILOT_DELAYS.max);
+    expect(clampAutopilotDelay(12)).toBe(12);
+    expect(clampAutopilotDelay(Number.NaN)).toBe(AUTOPILOT_DELAYS.fallback);
   });
 });

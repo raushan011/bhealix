@@ -167,6 +167,33 @@ export function whatsappAppUrl(phone: string | null | undefined, message: string
 }
 
 /**
+ * The chat opened straight inside WhatsApp Web, for a desk that is signed in.
+ *
+ * `wa.me` is right for a first tap from anywhere — it works signed in or not —
+ * but it lands on a "Continue to chat" interstitial before WhatsApp Web opens,
+ * and the autopilot below opens a chat every few seconds. One interstitial is
+ * a shrug; forty are the feature. `web.whatsapp.com/send` goes straight to the
+ * compose box when the browser is signed in, which the autopilot's setup text
+ * tells the operator to be.
+ */
+export function whatsappWebUrl(phone: string | null | undefined, message: string): string | null {
+  const number = whatsappNumber(phone);
+  if (!number) return null;
+  const text = message.trim();
+  return `https://web.whatsapp.com/send?phone=${number}${text ? `&text=${encodeURIComponent(text)}` : ""}`;
+}
+
+/** How long autopilot waits between chats. Enough to read and press Enter; not enough to drift off. */
+export const AUTOPILOT_DELAYS = { min: 4, max: 60, fallback: 8 } as const;
+
+/** A delay as typed, boxed into what the autopilot will actually honour. */
+export const clampAutopilotDelay = (value: number) =>
+  Math.min(AUTOPILOT_DELAYS.max, Math.max(AUTOPILOT_DELAYS.min, Math.round(value) || AUTOPILOT_DELAYS.fallback));
+
+/** Where the chosen pace is remembered — a habit of the desk, not of the account. */
+export const AUTOPILOT_DELAY_KEY = "bhealix.outreach.autopilot-delay";
+
+/**
  * Which of the two WhatsApps a phone should open.
  *
  * A phone doing outreach usually has both installed — the personal app and
