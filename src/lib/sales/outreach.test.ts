@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  MAX_MESSAGE_LENGTH, advancesOnSend, buildQueue, render, templateSchema,
-  templateUpdateSchema, unknownFields, whatsappAppUrl, whatsappSendUrl
+  MAX_MESSAGE_LENGTH, WHATSAPP_APPS, advancesOnSend, buildQueue, render, templateSchema,
+  templateUpdateSchema, unknownFields, whatsappAndroidUrl, whatsappAppUrl, whatsappSendUrl
 } from "./outreach";
 
 const parlour = {
@@ -174,5 +174,27 @@ describe("saving a template", () => {
   it("refuses an update that changes nothing", () => {
     expect(templateUpdateSchema.safeParse({}).success).toBe(false);
     expect(templateUpdateSchema.safeParse({ body: base.body }).success).toBe(true);
+  });
+});
+
+describe("choosing which WhatsApp opens", () => {
+  it("names the package on Android, so the choice is honoured and not the phone's default", () => {
+    const url = whatsappAndroidUrl(parlour.phone, "Hi", "business");
+    expect(url).toBe("intent://send?phone=919650306893&text=Hi#Intent;scheme=whatsapp;package=com.whatsapp.w4b;end");
+    expect(whatsappAndroidUrl(parlour.phone, "Hi", "personal")).toContain("package=com.whatsapp;end");
+  });
+
+  it("falls back to the plain scheme when the phone's own default is wanted", () => {
+    expect(whatsappAndroidUrl(parlour.phone, "Hi", "default"))
+      .toBe(whatsappAppUrl(parlour.phone, "Hi"));
+  });
+
+  it("stays unsendable for a number that cannot be made sense of", () => {
+    expect(whatsappAndroidUrl("call the shop", "Hi", "business")).toBeNull();
+  });
+
+  it("offers the business app before the personal one — this is a business queue", () => {
+    expect(WHATSAPP_APPS[0].value).toBe("default");
+    expect(WHATSAPP_APPS[1].value).toBe("business");
   });
 });

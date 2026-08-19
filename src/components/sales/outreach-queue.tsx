@@ -7,7 +7,8 @@ import {
 import { Badge, Button, Card, EmptyState, Field, Notice, Spinner } from "@/components/ui/kit";
 import { MessageTemplates } from "@/components/sales/message-templates";
 import {
-  buildQueue, whatsappAppUrl, whatsappSendUrl, type QueueEntry, type TemplateRecord
+  WHATSAPP_APP_KEY, WHATSAPP_APPS, buildQueue, whatsappAndroidUrl, whatsappSendUrl,
+  type QueueEntry, type TemplateRecord, type WhatsAppApp
 } from "@/lib/sales/outreach";
 import type { SalesLeadRecord } from "@/lib/sales/types";
 
@@ -69,9 +70,27 @@ export function OutreachQueue({ mayEdit }: { mayEdit: boolean }) {
    * two, whereas `whatsapp://` on a desktop browser does nothing at all.
    */
   const [onPhone, setOnPhone] = useState(false);
+  /** Only Android can be told *which* WhatsApp to open — see WHATSAPP_APPS. */
+  const [onAndroid, setOnAndroid] = useState(false);
+  /**
+   * Which WhatsApp this device sends with. A device preference rather than an
+   * account one — it is about what is installed on *this* phone — so it lives
+   * in local storage and survives sign-outs.
+   */
+  const [whatsappApp, setWhatsappApp] = useState<WhatsAppApp>("default");
   useEffect(() => {
     setOnPhone(/android|iphone|ipad|ipod/i.test(navigator.userAgent));
+    setOnAndroid(/android/i.test(navigator.userAgent));
+    try {
+      const saved = localStorage.getItem(WHATSAPP_APP_KEY);
+      if (WHATSAPP_APPS.some(candidate => candidate.value === saved)) setWhatsappApp(saved as WhatsAppApp);
+    } catch { /* storage refused — the default carries the day */ }
   }, []);
+
+  const chooseWhatsappApp = (value: WhatsAppApp) => {
+    setWhatsappApp(value);
+    try { localStorage.setItem(WHATSAPP_APP_KEY, value); } catch { /* remembered for this visit only */ }
+  };
 
   /** Nothing may be written to storage until what was there has been read. */
   const restored = useRef(false);
@@ -198,7 +217,9 @@ export function OutreachQueue({ mayEdit }: { mayEdit: boolean }) {
   function send(entry: Entry) {
     markSent(entry);
 
-    const app = whatsappAppUrl(entry.lead.phone, entry.message);
+    // On Android the chosen app is named in the URL itself; everywhere else
+    // the plain scheme is the only option there is.
+    const app = whatsappAndroidUrl(entry.lead.phone, entry.message, onAndroid ? whatsappApp : "default");
     if (onPhone && app) window.location.href = app;
     else if (entry.url) window.open(entry.url, "_blank", "noopener,noreferrer");
   }
@@ -216,6 +237,18 @@ export function OutreachQueue({ mayEdit }: { mayEdit: boolean }) {
         : entry
     ));
   }
+
+  /** The "which WhatsApp" picker — shown only where the choice can be honoured. */
+  const appPicker = onAndroid && (
+    <Field label="Send with" hint="A phone with both apps opens the personal one unless told otherwise. Set it once — this phone remembers.">
+      <select className="select" value={whatsappApp}
+        onChange={event => chooseWhatsappApp(event.target.value as WhatsAppApp)}>
+        {WHATSAPP_APPS.map(candidate => (
+          <option key={candidate.value} value={candidate.value}>{candidate.label}</option>
+        ))}
+      </select>
+    </Field>
+  );
 
   /*
    * The queue is checked before the loading guard below, not after.
@@ -331,6 +364,11 @@ export function OutreachQueue({ mayEdit }: { mayEdit: boolean }) {
         WhatsApp opens with the message ready. Press send, then come back here —
         this page will already be on the next one.
       </p>
+
+      {/* Mid-batch is exactly when the wrong app opening gets noticed. */}
+      {onAndroid && (
+        <Card className="p-3.5">{appPicker}</Card>
+      )}
     </div>;
   }
 
@@ -384,6 +422,8 @@ export function OutreachQueue({ mayEdit }: { mayEdit: boolean }) {
           </span>
         </span>
       </label>
+
+      {appPicker}
     </Card>
 
     {template && (

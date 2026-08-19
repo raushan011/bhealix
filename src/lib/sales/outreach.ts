@@ -166,6 +166,41 @@ export function whatsappAppUrl(phone: string | null | undefined, message: string
   return `whatsapp://send?phone=${number}${text ? `&text=${encodeURIComponent(text)}` : ""}`;
 }
 
+/**
+ * Which of the two WhatsApps a phone should open.
+ *
+ * A phone doing outreach usually has both installed — the personal app and
+ * WhatsApp Business — and the bare `whatsapp://` scheme goes to whichever
+ * Android has marked as the default, which is silently the personal one. The
+ * fix is Android's own: an `intent://` URL naming the package, which opens
+ * exactly the app it names. Nothing equivalent exists on iOS or desktop, so
+ * the choice is offered only where it can be honoured.
+ */
+export const WHATSAPP_APPS = [
+  { value: "default", label: "Phone’s default", package: null },
+  { value: "business", label: "WhatsApp Business", package: "com.whatsapp.w4b" },
+  { value: "personal", label: "WhatsApp (personal)", package: "com.whatsapp" }
+] as const;
+
+export type WhatsAppApp = (typeof WHATSAPP_APPS)[number]["value"];
+
+/** Where the chosen app is remembered — a device preference, not an account one. */
+export const WHATSAPP_APP_KEY = "bhealix.outreach.whatsapp";
+
+/**
+ * The Android send URL for a *named* WhatsApp, falling back to the plain
+ * scheme when the choice is "whatever the phone prefers".
+ */
+export function whatsappAndroidUrl(phone: string | null | undefined, message: string, app: WhatsAppApp): string | null {
+  const chosen = WHATSAPP_APPS.find(candidate => candidate.value === app);
+  if (!chosen?.package) return whatsappAppUrl(phone, message);
+
+  const number = whatsappNumber(phone);
+  if (!number) return null;
+  const text = message.trim();
+  return `intent://send?phone=${number}${text ? `&text=${encodeURIComponent(text)}` : ""}#Intent;scheme=whatsapp;package=${chosen.package};end`;
+}
+
 /** One lead, ready to be tapped — or ready to explain why it cannot be. */
 export type QueueEntry = {
   lead: Addressable & { _id: string };
