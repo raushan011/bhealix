@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { Button, Card, Field, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
 import { RetargetList } from "@/components/sales/retarget-list";
@@ -13,6 +13,8 @@ import type { SalesRepRecord, ShopOrderRecord } from "@/lib/sales/types";
 type Payload = {
   items: ShopOrderRecord[];
   total: number;
+  /** Matching everything but the status and follow-up chips — the All chip's count. */
+  all: number;
   page: number;
   pages: number;
   statuses: Record<string, number>;
@@ -58,13 +60,24 @@ export default function RetargetPage() {
     return search;
   }, [filters]);
 
+  // Every filter change fires a fetch, and nothing stops a slow old response
+  // landing after a fast new one — so each request takes a number, and only
+  // the latest one is allowed to write what the screen shows.
+  const requested = useRef(0);
   const load = useCallback(async () => {
+    const mine = ++requested.current;
     const search = new URLSearchParams(query);
     search.set("page", String(page));
     search.set("limit", "50");
-    const response = await fetch(`/api/sales/retarget?${search}`);
-    const json = await response.json() as { data?: Payload };
-    setData(json.data ?? null);
+    try {
+      const response = await fetch(`/api/sales/retarget?${search}`);
+      const json = await response.json() as { data?: Payload };
+      if (mine !== requested.current) return;
+      setData(json.data ?? null);
+    } catch {
+      if (mine !== requested.current) return;
+      setData(null);
+    }
     setLoading(false);
   }, [query, page]);
 
@@ -120,7 +133,7 @@ export default function RetargetPage() {
 
     {/* One tap per status, because "show me everybody I have not rung" is the question nine times in ten. */}
     <div className="flex flex-wrap gap-1.5">
-      <Chip active={!filters.status && !filters.followUp} onClick={() => { set("status")(""); set("followUp")(""); }}>All {data ? `(${data.total})` : ""}</Chip>
+      <Chip active={!filters.status && !filters.followUp} onClick={() => { set("status")(""); set("followUp")(""); }}>All {data ? `(${data.all ?? data.total})` : ""}</Chip>
       {RETARGET_STATUSES.map(status => (
         <Chip key={status} active={filters.status === status} onClick={() => set("status")(filters.status === status ? "" : status)}>
           {status} {statuses[status] !== undefined ? `(${statuses[status]})` : ""}

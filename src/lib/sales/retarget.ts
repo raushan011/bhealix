@@ -204,8 +204,12 @@ export function shopOrderFilter(params: URLSearchParams, now = new Date()): Reco
     };
   }
 
+  // A row synced before the calling desk existed carries no status at all;
+  // on screen it reads "Not called", so the filter treats it that way too.
   const status = params.get("status");
-  if (status && (RETARGET_STATUSES as readonly string[]).includes(status)) filter["retarget.status"] = status;
+  if (status && (RETARGET_STATUSES as readonly string[]).includes(status)) {
+    filter["retarget.status"] = status === "Not called" ? { $in: ["Not called", null] } : status;
+  }
 
   // "Delivered" is Shiprocket's word where the parcel was tracked, and the
   // shop's fulfilment where it was not; the two are offered side by side rather

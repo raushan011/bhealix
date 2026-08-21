@@ -54,6 +54,11 @@ describe("shopOrderFilter", () => {
       .toEqual({ "retarget.status": "Reordered", "delivery.state": "Delivered" });
   });
 
+  it("counts a row nobody has touched as Not called, the way the screen reads it", () => {
+    expect(shopOrderFilter(params({ status: "Not called" }), now))
+      .toEqual({ "retarget.status": { $in: ["Not called", null] } });
+  });
+
   it("finds a phone typed with spaces against a phone stored with dashes", () => {
     const filter = shopOrderFilter(params({ q: "98999 43298" }), now) as { $and: { $or: Record<string, RegExp>[] }[] };
     const phone = filter.$and[0].$or.find(clause => "customer.phone" in clause)!["customer.phone"];

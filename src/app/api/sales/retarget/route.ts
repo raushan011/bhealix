@@ -8,11 +8,16 @@ import { RETARGET_STATUSES, shopOrderFilter, shopOrderSort } from "@/lib/sales/r
 /**
  * Every Shopify order, filtered every way the calling desk asks.
  *
- * The filter is built once by `shopOrderFilter` and reused for the page, the
- * count and the status breakdown, so the three figures on the screen are three
- * views of one set. The facets — cities, products — are read over the whole
- * collection rather than the filtered set, because a dropdown that empties
- * itself as you narrow the list cannot be used to widen it again.
+ * The filter is built once by `shopOrderFilter` and reused for the page and
+ * the count, so the list and its total are two views of one set.
+ *
+ * The chip counts are different on purpose: each chip answers "what would I
+ * see if I tapped this now", so its count keeps every other filter but leaves
+ * out its own dimension. Counting the status chips *with* the status filter
+ * would zero every sibling tab the moment one is selected. The facets —
+ * cities, products — are read over the whole collection rather than the
+ * filtered set, because a dropdown that empties itself as you narrow the list
+ * cannot be used to widen it again.
  */
 export async function GET(request: Request) {
   try {
@@ -25,14 +30,27 @@ export async function GET(request: Request) {
     const filter = shopOrderFilter(params);
     const sort = shopOrderSort(params.get("sort"));
 
-    const [items, total, byStatus, cities, products, months, due] = await Promise.all([
+    // The same filters with a chip's own dimension taken back out.
+    const without = (...keys: string[]) => {
+      const rest = new URLSearchParams(params);
+      for (const key of keys) rest.delete(key);
+      return shopOrderFilter(rest);
+    };
+    const statusFilter = without("status");
+    const followUpFilter = without("followUp");
+    const allFilter = without("status", "followUp");
+
+    const [items, total, all, byStatus, cities, products, months, due] = await Promise.all([
       SalesShopOrder.find(filter).sort(sort).skip(skip).limit(limit)
         .populate("rep", "name code")
         .lean(),
       SalesShopOrder.countDocuments(filter),
+      SalesShopOrder.countDocuments(allFilter),
       SalesShopOrder.aggregate<{ _id: string; count: number }>([
-        { $match: filter },
-        { $group: { _id: "$retarget.status", count: { $sum: 1 } } }
+        { $match: statusFilter },
+        // A row synced before the status existed has none; on screen it reads
+        // "Not called", so it is counted there too.
+        { $group: { _id: { $ifNull: ["$retarget.status", "Not called"] }, count: { $sum: 1 } } }
       ]),
       SalesShopOrder.distinct("customer.city", { "customer.city": { $nin: ["", null] } }),
       SalesShopOrder.distinct("products"),
@@ -43,7 +61,7 @@ export async function GET(request: Request) {
         { $sort: { _id: -1 } },
         { $limit: 36 }
       ]),
-      SalesShopOrder.countDocuments({ "retarget.nextFollowUpAt": { $lte: new Date() } })
+      SalesShopOrder.countDocuments({ ...followUpFilter, "retarget.nextFollowUpAt": { $lte: new Date() } })
     ]);
 
     const statuses = Object.fromEntries(RETARGET_STATUSES.map(status => [status, 0])) as Record<string, number>;
@@ -52,6 +70,7 @@ export async function GET(request: Request) {
     return ok({
       items,
       total,
+      all,
       page,
       pages: Math.max(1, Math.ceil(total / limit)),
       statuses,
