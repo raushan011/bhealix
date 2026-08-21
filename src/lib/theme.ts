@@ -16,7 +16,13 @@
 
 export type Theme = "light" | "dark" | "system";
 
-/** The warm brand palette, or greyscale. `original` is the default and the absence of a mark. */
+/**
+ * Greyscale, or the warm brand palette. `mono` is the default: it is what the
+ * root carries when nothing has been chosen, and `original` is the stored
+ * choice. The stylesheet keys greyscale off `data-palette="mono"`, so the
+ * default is a mark that is *present* rather than absent — the script below
+ * puts it there before the first paint, and choosing the original removes it.
+ */
 export type Palette = "original" | "mono";
 
 export const THEME_KEY = "bhealix-theme";
@@ -36,8 +42,8 @@ export function readTheme(): Theme {
 }
 
 export function readPalette(): Palette {
-  if (typeof window === "undefined") return "original";
-  return window.localStorage?.getItem(PALETTE_KEY) === "mono" ? "mono" : "original";
+  if (typeof window === "undefined") return "mono";
+  return window.localStorage?.getItem(PALETTE_KEY) === "original" ? "original" : "mono";
 }
 
 /** Applies a mode and remembers it. "system" removes both the mark and the memory. */
@@ -53,15 +59,18 @@ export function applyTheme(theme: Theme) {
   paintBrowserChrome();
 }
 
-/** The same, for the palette. "original" is the absence of a choice, so it clears both. */
+/**
+ * The same, for the palette. "mono" is the default, so choosing it forgets the
+ * choice and puts the default mark back; "original" is remembered and clears it.
+ */
 export function applyPalette(palette: Palette) {
   const root = document.documentElement;
   if (palette === "original") {
     root.removeAttribute("data-palette");
-    window.localStorage?.removeItem(PALETTE_KEY);
-  } else {
-    root.setAttribute("data-palette", palette);
     window.localStorage?.setItem(PALETTE_KEY, palette);
+  } else {
+    root.setAttribute("data-palette", "mono");
+    window.localStorage?.removeItem(PALETTE_KEY);
   }
   paintBrowserChrome();
 }
@@ -149,7 +158,8 @@ export const THEME_SCRIPT = `try{` +
   `var t=localStorage.getItem(${JSON.stringify(THEME_KEY)});` +
   `if(t==="dark"||t==="light")d.setAttribute("data-theme",t);` +
   `var p=localStorage.getItem(${JSON.stringify(PALETTE_KEY)});` +
-  `if(p==="mono")d.setAttribute("data-palette",p);` +
+  // Greyscale unless the original was asked for by name — see `Palette`.
+  `if(p!=="original")d.setAttribute("data-palette","mono");` +
   /*
    * The device only gets a say when nothing has been chosen over it, and only
    * where it can be asked — `matchMedia` is guarded for the same reason
@@ -159,6 +169,6 @@ export const THEME_SCRIPT = `try{` +
   `var dark=t==="dark"||(t!=="light"&&!!window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);` +
   `var m=document.createElement("meta");` +
   `m.setAttribute("name","theme-color");` +
-  `m.setAttribute("content",${JSON.stringify(CHROME)}[(p==="mono"?"mono":"original")+(dark?"-dark":"-light")]);` +
+  `m.setAttribute("content",${JSON.stringify(CHROME)}[(p==="original"?"original":"mono")+(dark?"-dark":"-light")]);` +
   `document.head.appendChild(m);` +
   `}catch(e){}`;

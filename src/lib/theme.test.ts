@@ -53,29 +53,34 @@ describe("the mode", () => {
 });
 
 describe("the palette", () => {
-  it("starts at the brand's own, unmarked", () => {
-    expect(readPalette()).toBe("original");
-    expect(root().hasAttribute("data-palette")).toBe(false);
-  });
-
-  it("marks the root and remembers black and white", () => {
-    applyPalette("mono");
-    expect(root().getAttribute("data-palette")).toBe("mono");
-    expect(localStorage.getItem(PALETTE_KEY)).toBe("mono");
+  it("starts in black and white when nothing has been chosen", () => {
     expect(readPalette()).toBe("mono");
   });
 
-  it("clears the mark going back to the original", () => {
-    applyPalette("mono");
+  it("clears the mark and remembers the warm palette by name", () => {
     applyPalette("original");
     expect(root().hasAttribute("data-palette")).toBe(false);
-    expect(localStorage.getItem(PALETTE_KEY)).toBeNull();
+    expect(localStorage.getItem(PALETTE_KEY)).toBe("original");
     expect(readPalette()).toBe("original");
+  });
+
+  it("puts the default mark back going to black and white, and forgets the choice", () => {
+    applyPalette("original");
+    applyPalette("mono");
+    expect(root().getAttribute("data-palette")).toBe("mono");
+    expect(localStorage.getItem(PALETTE_KEY)).toBeNull();
+    expect(readPalette()).toBe("mono");
   });
 
   it("ignores a stored value that is not a palette", () => {
     localStorage.setItem(PALETTE_KEY, "neon");
-    expect(readPalette()).toBe("original");
+    expect(readPalette()).toBe("mono");
+  });
+
+  /** Anybody who chose greyscale before it became the default keeps it. */
+  it("still honours an old stored 'mono'", () => {
+    localStorage.setItem(PALETTE_KEY, "mono");
+    expect(readPalette()).toBe("mono");
   });
 
   /**
@@ -84,50 +89,50 @@ describe("the palette", () => {
    */
   it("leaves the mode alone, and is left alone by it", () => {
     applyTheme("dark");
-    applyPalette("mono");
-    expect(root().getAttribute("data-theme")).toBe("dark");
-    expect(root().getAttribute("data-palette")).toBe("mono");
-
     applyPalette("original");
+    expect(root().getAttribute("data-theme")).toBe("dark");
+    expect(root().hasAttribute("data-palette")).toBe(false);
+
+    applyPalette("mono");
     expect(readTheme()).toBe("dark");
 
     applyTheme("system");
-    applyPalette("mono");
+    applyPalette("original");
     applyTheme("light");
-    expect(readPalette()).toBe("mono");
+    expect(readPalette()).toBe("original");
   });
 });
 
 describe("the script that runs before the first paint", () => {
   const run = () => new Function(THEME_SCRIPT)();
 
-  it("restores both marks", () => {
+  it("restores the mode, and clears the default mark for the warm palette", () => {
     localStorage.setItem(THEME_KEY, "dark");
-    localStorage.setItem(PALETTE_KEY, "mono");
+    localStorage.setItem(PALETTE_KEY, "original");
     run();
     expect(root().getAttribute("data-theme")).toBe("dark");
-    expect(root().getAttribute("data-palette")).toBe("mono");
-  });
-
-  it("restores one without the other", () => {
-    localStorage.setItem(PALETTE_KEY, "mono");
-    run();
-    expect(root().hasAttribute("data-theme")).toBe(false);
-    expect(root().getAttribute("data-palette")).toBe("mono");
-  });
-
-  it("marks nothing when nothing was chosen", () => {
-    run();
-    expect(root().hasAttribute("data-theme")).toBe(false);
     expect(root().hasAttribute("data-palette")).toBe(false);
   });
 
-  it("refuses a stored value it does not recognise", () => {
-    localStorage.setItem(THEME_KEY, "system");
+  it("restores one without the other", () => {
     localStorage.setItem(PALETTE_KEY, "original");
     run();
     expect(root().hasAttribute("data-theme")).toBe(false);
     expect(root().hasAttribute("data-palette")).toBe(false);
+  });
+
+  it("follows the device and paints black and white when nothing was chosen", () => {
+    run();
+    expect(root().hasAttribute("data-theme")).toBe(false);
+    expect(root().getAttribute("data-palette")).toBe("mono");
+  });
+
+  it("refuses a stored value it does not recognise", () => {
+    localStorage.setItem(THEME_KEY, "system");
+    localStorage.setItem(PALETTE_KEY, "neon");
+    run();
+    expect(root().hasAttribute("data-theme")).toBe(false);
+    expect(root().getAttribute("data-palette")).toBe("mono");
   });
 
   /*
@@ -141,19 +146,7 @@ describe("the script that runs before the first paint", () => {
     expect(chrome()?.hasAttribute("media")).toBe(false);
   });
 
-  it("opens on the brand in light and the page's own background in dark", () => {
-    run();
-    expect(chrome()?.getAttribute("content")).toBe("#73461f");
-
-    document.head.innerHTML = "";
-    localStorage.setItem(THEME_KEY, "dark");
-    run();
-    expect(chrome()?.getAttribute("content")).toBe("#15110d");
-  });
-
-  /** The combination the old media-keyed tags could not express at all. */
-  it("knows the monochrome palette before the stylesheet has landed", () => {
-    localStorage.setItem(PALETTE_KEY, "mono");
+  it("opens in black and white, on the brand in light and the page's own background in dark", () => {
     run();
     expect(chrome()?.getAttribute("content")).toBe("#111113");
 
@@ -161,6 +154,18 @@ describe("the script that runs before the first paint", () => {
     localStorage.setItem(THEME_KEY, "dark");
     run();
     expect(chrome()?.getAttribute("content")).toBe("#0b0b0c");
+  });
+
+  /** The combination the old media-keyed tags could not express at all. */
+  it("knows the warm palette before the stylesheet has landed", () => {
+    localStorage.setItem(PALETTE_KEY, "original");
+    run();
+    expect(chrome()?.getAttribute("content")).toBe("#73461f");
+
+    document.head.innerHTML = "";
+    localStorage.setItem(THEME_KEY, "dark");
+    run();
+    expect(chrome()?.getAttribute("content")).toBe("#15110d");
   });
 
   /** Storage throws outright in a locked-down browser, and a theme is not worth a blank page. */

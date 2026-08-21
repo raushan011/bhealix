@@ -15,8 +15,8 @@ const MODES: { value: Theme; label: string; icon: typeof Sun; hint: string }[] =
 ];
 
 const PALETTES: { value: Palette; label: string; icon: typeof Sun; hint: string }[] = [
-  { value: "original", label: "Original", icon: PaletteIcon, hint: "The brand's warm cream and walnut" },
-  { value: "mono", label: "Black & white", icon: Contrast, hint: "Greyscale throughout, brand colour included" }
+  { value: "mono", label: "Black & white", icon: Contrast, hint: "Greyscale throughout — the default" },
+  { value: "original", label: "Warm", icon: PaletteIcon, hint: "The brand's cream and walnut" }
 ];
 
 /**
@@ -37,7 +37,7 @@ const PALETTES: { value: Palette; label: string; icon: typeof Sun; hint: string 
 export function Appearance({ className = "" }: { className?: string }) {
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState<Theme | null>(null);
-  const [palette, setPalette] = useState<Palette>("original");
+  const [palette, setPalette] = useState<Palette>("mono");
 
   useEffect(() => {
     setTheme(readTheme());

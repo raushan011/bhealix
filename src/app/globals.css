@@ -161,9 +161,10 @@
  * independent — somebody wants monochrome at night as much as at noon. So it
  * rides on its own attribute and every combination of the two is a real state.
  *
- * The original stays the default. Nothing here is reached without `data-palette`
- * being set, so a browser that has never been told renders exactly the warm
- * cream it always did.
+ * This is the default. Nothing here is reached without `data-palette="mono"`
+ * on the root, and the blocking script in the head puts it there before the
+ * first paint unless somebody has chosen the warm palette by name — so the
+ * cream above is what a person opts *into*, and the greyscale is what they get.
  *
  * Monochrome reaches the status colours too, which is the part worth being
  * deliberate about: green for delivered and red for returned are *reinforcement*
