@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BadgePercent, BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, FileArchive, HeartHandshake, KeyRound, LayoutDashboard, LogOut, Menu, Package, PhoneCall, Plug, Receipt, Repeat, Search, Settings, ShoppingBag, Stethoscope, Tag, Truck, Users, Wallet, Warehouse, X, Zap } from "lucide-react";
+import { BadgePercent, BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, FileArchive, HeartHandshake, Inbox, KeyRound, LayoutDashboard, LogOut, Menu, Package, PhoneCall, Plug, Receipt, Repeat, Search, Settings, ShoppingBag, Stethoscope, Tag, Truck, Users, Wallet, Warehouse, X, Zap } from "lucide-react";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { NavIcon } from "@/components/layout/nav-icon";
 import { Brand, BrandMark } from "@/components/ui/brand";
@@ -67,7 +67,8 @@ const NAV = [
   { href: "/admin/control/invoices", label: "Invoice vault", icon: FileArchive, roles: ["SUPERADMIN"], group: "Accounts", workspace: "control" },
   { href: "/admin/control/connections", label: "Connections", icon: Plug, roles: ["SUPERADMIN"], group: "Accounts", workspace: "control" },
   { href: "/admin/control/access", label: "Panel access", icon: KeyRound, roles: ["SUPERADMIN"], group: "Control", workspace: "control" },
-  { href: "/admin/control/users", label: "Users", icon: Users, roles: ["SUPERADMIN"], group: "Control", workspace: "control" }
+  { href: "/admin/control/users", label: "Users", icon: Users, roles: ["SUPERADMIN"], group: "Control", workspace: "control" },
+  { href: "/admin/control/demo-leads", label: "Demo leads", icon: Inbox, roles: ["SUPERADMIN"], group: "Prospects", workspace: "control" }
 ] as const;
 
 /**

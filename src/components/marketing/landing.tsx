@@ -1,8 +1,8 @@
 import Link from "next/link";
 import {
-  ArrowRight, BadgeCheck, BarChart3, Boxes, Building2, CalendarCheck, Camera, FileText, Landmark,
-  Lock, MapPin, MessageCircle, Package, PhoneCall, Route, ShieldCheck, Smartphone, Store, Truck,
-  Users, Wallet, Zap
+  ArrowRight, BadgeCheck, BarChart3, Boxes, Building2, CalendarCheck, Camera, Database, FileText, Landmark,
+  Lock, MapPin, MessageCircle, Package, PhoneCall, Plug, Route, ShieldCheck, Smartphone, Store, Truck,
+  Users, Wallet, Wrench, Zap
 } from "lucide-react";
 import { Badge } from "@/components/ui/kit";
 import { Brand, BrandMark } from "@/components/ui/brand";
@@ -22,7 +22,8 @@ import { Appearance } from "@/components/ui/appearance";
  * for except the appearance switcher, which is its own client island.
  */
 
-const CONTACT = "mailto:sales@bhealix.com?subject=BHEALIX%20CRM%20walkthrough";
+/** Every call to action lands on the demo form; its requests surface in the control room's Demo leads. */
+const CONTACT = "/demo";
 
 type Icon = React.ComponentType<{ size?: number; className?: string }>;
 
@@ -108,6 +109,7 @@ export function LandingPage() {
           <a href="#panels" className="hover:text-[var(--brand)]">Product</a>
           <a href="#modules" className="hover:text-[var(--brand)]">Modules</a>
           <a href="#integrations" className="hover:text-[var(--brand)]">Integrations</a>
+          <a href="#custom" className="hover:text-[var(--brand)]">Custom work</a>
           <a href="#trust" className="hover:text-[var(--brand)]">Security</a>
         </nav>
         <div className="flex items-center gap-2">
@@ -303,7 +305,7 @@ export function LandingPage() {
               ["Razorpay", "gateway fee statements for the vault"],
               ["Meta Ads", "ad spend statements for the vault"],
               ["Excel / CSV", "imports and exports on every list"],
-              ["PDF", "invoices, labels, payslips, batch-merged"]
+              ["Anything else", "custom integrations built to order — see below"]
             ].map(([name, what]) => (
               <div key={name} className="card px-4 py-3.5">
                 <p className="text-sm font-semibold">{name}</p>
@@ -318,6 +320,40 @@ export function LandingPage() {
           </p>
         </Section>
       </div>
+
+      {/* ------------------------------------------------------- custom work */}
+      <Section id="custom" eyebrow="Custom development &amp; integrations"
+        title="Don't see your tool or your workflow? We build it."
+        lead="BHEALIX is a product, not a template — and it comes with the team that built it. If your business runs on something we don't connect to yet, or works a way the screens don't, that is a conversation, not a dead end.">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <FeatureCard icon={Wrench} title="Custom modules" points={[
+            "New screens, reports and approval flows built to your process",
+            "Your own fields, statuses and documents — not renamed versions of ours",
+            "Delivered inside the same system, same sign-in, same permissions"
+          ]} />
+          <FeatureCard icon={Plug} title="Custom integrations" points={[
+            "Other storefronts, couriers, payment gateways and accounting software",
+            "SMS, email and telephony providers; ERPs and tally-style ledgers",
+            "Webhooks and exports for anything downstream of you"
+          ]} />
+          <FeatureCard icon={Building2} title="Your brand, your deployment" points={[
+            "Your company name, logo and colours throughout — including the apps your reps install",
+            "A dedicated deployment and database per company; nothing shared",
+            "Hosted where your customers are"
+          ]} />
+          <FeatureCard icon={Database} title="Migration &amp; rollout" points={[
+            "Doctor, customer, product and partner lists brought in from Excel or your old system",
+            "Order history pulled in, so day one is not an empty screen",
+            "Training for the desk, the field and the partners"
+          ]} />
+        </div>
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <a href={CONTACT} className="inline-flex min-h-[44px] items-center gap-2 rounded-[10px] bg-[var(--brand)] px-5 text-sm font-semibold text-[var(--on-brand)] hover:bg-[var(--brand-hover)]">
+            Tell us what you need<ArrowRight size={16} />
+          </a>
+          <p className="text-sm text-[var(--muted)]">Scoped and quoted before any work starts.</p>
+        </div>
+      </Section>
 
       {/* ------------------------------------------------------------ trust */}
       <Section id="trust" eyebrow="Security &amp; trust"
@@ -368,7 +404,7 @@ export function LandingPage() {
           <Link href="/login" className="hover:text-[var(--brand)]">Staff sign in</Link>
           <Link href="/partner/login" className="hover:text-[var(--brand)]">Partner sign in</Link>
           <Link href="/partner/register" className="hover:text-[var(--brand)]">Become a partner</Link>
-          <a href={CONTACT} className="hover:text-[var(--brand)]">Contact sales</a>
+          <a href={CONTACT} className="hover:text-[var(--brand)]">Book a demo</a>
         </nav>
       </div>
     </footer>

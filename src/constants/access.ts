@@ -235,5 +235,12 @@ export const can = {
    */
   viewFinance: (role: Role) => role === "SUPERADMIN",
   /** Filing an invoice, correcting one, deleting one, closing a month. */
-  manageFinance: (role: Role) => role === "SUPERADMIN"
+  manageFinance: (role: Role) => role === "SUPERADMIN",
+  /**
+   * The companies asking to buy the product: every demo request the public
+   * site has taken. These are the vendor's own prospects, not the customer's —
+   * which is why they sit in the control room beside the books rather than in
+   * the Sales CRM, whose Leads screen is the *customer's* prospecting desk.
+   */
+  manageDemoLeads: (role: Role) => role === "SUPERADMIN"
 };

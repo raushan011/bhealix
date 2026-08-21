@@ -9,8 +9,12 @@ import { encodeSecret, PARTNER_COOKIE, sessionCookieOptions, STAFF_COOKIE, verif
  * Leaving them behind the session gate would have every delivery answered
  * with a 401 until the sender gave up and removed the subscription — which is
  * exactly what both Shopify and Meta do.
+ *
+ * The demo request is public because it is the front door: a company that
+ * wants to buy the product has no account by definition. It is rate-limited,
+ * validated, and grants nothing — it writes one row for the control room.
  */
-const PUBLIC_API = ["/api/auth/login", "/api/auth/logout", "/api/sales/shopify/webhook", "/api/sales/whatsapp/webhook"];
+const PUBLIC_API = ["/api/auth/login", "/api/auth/logout", "/api/sales/shopify/webhook", "/api/sales/whatsapp/webhook", "/api/demo/request"];
 
 /**
  * The affiliate portal's own front door, which by definition has to be
