@@ -1,410 +1,350 @@
 import Link from "next/link";
+import { Bricolage_Grotesque, IBM_Plex_Mono } from "next/font/google";
 import {
-  ArrowRight, BadgeCheck, BarChart3, Boxes, Building2, CalendarCheck, Camera, Database, FileText, Landmark,
-  Lock, MapPin, MessageCircle, Package, PhoneCall, Plug, Route, ShieldCheck, Smartphone, Store, Truck,
-  Users, Wallet, Wrench, Zap
+  ArrowRight, ArrowUpRight, Building2, Database, FileText, Layers, Lock, Plug, ShieldCheck, Smartphone, Users, Wrench, Zap
 } from "lucide-react";
-import { Badge } from "@/components/ui/kit";
-import { Brand, BrandMark } from "@/components/ui/brand";
-import { Appearance } from "@/components/ui/appearance";
+import { BrandMark } from "@/components/ui/brand";
+import { HeroConsole } from "./hero-console";
+import { Reveal } from "./reveal";
+import styles from "./landing.module.css";
 
 /**
  * The front door for somebody who has never signed in.
  *
  * The panels sell the product to the people already using it; this page sells
- * it to everybody else. It is written for the buyer, not the operator — what
- * the system runs, not how — and it paints with the same tokens as the panels
- * behind it, so the first page a prospect sees and the first screen they are
- * shown in a demo are visibly the same product. Dark mode and the monochrome
- * palette come along for free for the same reason.
- *
- * Server-rendered and static: there is nothing here worth shipping JavaScript
- * for except the appearance switcher, which is its own client island.
+ * it to everybody else — and it has a second job: a company judging whether
+ * to trust us with their systems reads our own front door as the first piece
+ * of evidence. So it is built as one committed piece of design rather than a
+ * restyled panel: its own ink-and-paper palette, its own type, a hero that is
+ * the product narrating a day instead of a screenshot, and a timeline that
+ * walks that day through the product. Static and server-rendered, with two
+ * small client islands: the ticking console and the scroll reveal.
  */
 
-/** Every call to action lands on the demo form; its requests surface in the control room's Demo leads. */
-const CONTACT = "/demo";
+const display = Bricolage_Grotesque({ subsets: ["latin"], display: "swap", variable: "--font-display", axes: ["opsz", "wdth"] });
+const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], display: "swap", variable: "--font-mono" });
 
-type Icon = React.ComponentType<{ size?: number; className?: string }>;
+const DEMO = "/demo";
 
-const TRUST: { icon: Icon; title: string; body: string }[] = [
-  { icon: ShieldCheck, title: "Server-side permissions, every request", body: "Five staff roles plus per-person panel grants, re-read from the database on every click — suspending someone takes effect on their next tap, not their next sign-in." },
-  { icon: Lock, title: "Secrets encrypted, PII minimised", body: "Shopify, Shiprocket and Meta credentials encrypted at rest and never sent to a browser. Only the last four digits of Aadhaar are ever stored; bank accounts are masked everywhere but the paying screen." },
-  { icon: FileText, title: "Documents that can't drift", body: "A payslip carries the employment record as it stood on issue day. A paid commission is frozen. Cancelled invoice numbers stay in the books. Every ledger is append-only." },
-  { icon: Zap, title: "Fast where your customers are", body: "Hosted in Mumbai beside the database, installable on any phone, and honest offline behaviour — a shared device never serves one rep's data to the next." }
+const MARQUEE = [
+  "Doctor discovery", "Route plans by call hours", "GPS-verified visits", "Day view", "GST billing", "Part-payments with proof",
+  "Inventory ledger", "Samples", "Attendance that fills itself", "Statutory payroll", "Shopify sync", "Partner portal",
+  "Self-serve coupons", "Live courier rates", "Batch booking", "Pay-on-delivery commissions", "Retarget", "WhatsApp outreach",
+  "Invoice vault", "Custom integrations"
 ];
 
-function Section({ id, eyebrow, title, lead, children }: {
-  id?: string; eyebrow: string; title: string; lead?: string; children: React.ReactNode;
-}) {
-  return <section id={id} className="mx-auto w-full max-w-6xl scroll-mt-24 px-5 py-14 sm:px-8 sm:py-20">
-    <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--brand)]">{eyebrow}</p>
-    <h2 className="mt-2 max-w-2xl text-balance text-2xl font-semibold sm:text-3xl">{title}</h2>
-    {lead && <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-[var(--muted)]">{lead}</p>}
-    <div className="mt-8 sm:mt-10">{children}</div>
-  </section>;
-}
+type Stop = { time: string; label: string; title: string; body: React.ReactNode; frag: React.ReactNode };
 
-function FeatureCard({ icon: Icon, title, points }: {
-  icon: React.ComponentType<{ size?: number; className?: string }>; title: string; points: string[];
-}) {
-  return <div className="card p-5">
-    <span className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-[var(--brand-soft)] text-[var(--brand)]">
-      <Icon size={19} />
-    </span>
-    <h3 className="mt-3.5 text-[15px] font-semibold">{title}</h3>
-    <ul className="mt-2 space-y-1.5">
-      {points.map(point => (
-        <li key={point} className="flex gap-2 text-sm leading-relaxed text-[var(--ink-2)]">
-          <span aria-hidden className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-[var(--line-2)]" />
-          {point}
-        </li>
-      ))}
-    </ul>
-  </div>;
-}
+const DAY: Stop[] = [
+  {
+    time: "06:40", label: "the route", title: "The day plans itself around the doctors' hours.",
+    body: <>Each doctor&rsquo;s call window is recorded once. Routes are ordered <b>by call time first, distance second</b>, with a planned arrival per stop — and a doctor who cannot be reached in their window is flagged, never quietly misplaced.</>,
+    frag: <div className={styles.frag}>
+      <div className={styles.fragHead}><span>Rahul · Tuesday</span><span className={`${styles.chip} ${styles.chipInfo}`}>9 stops</span></div>
+      <div className={styles.row}><div>Dr. Meera Krishnan<small>Indiranagar · sees reps 10–1</small></div><span className={styles.mono}>10:05</span></div>
+      <div className={styles.row}><div>Dr. Anil Rao<small>Koramangala · sees reps 11–2</small></div><span className={styles.mono}>11:20</span></div>
+      <div className={styles.row}><div>Dr. S. Iyer<small>Jayanagar · sees reps 2–4 PM</small></div><span className={styles.mono}>14:10</span></div>
+      <div className={styles.row}><div>Dr. Farah Khan<small>HSR · Thursdays only</small></div><span className={`${styles.chip} ${styles.chipWarn}`}>Conflict → Thu</span></div>
+    </div>
+  },
+  {
+    time: "10:12", label: "the visit", title: "Verified, not reported.",
+    body: <>Check-in captures the phone&rsquo;s position. The rep logs the outcome, samples with quantities and a photo of the prescription pad. <b>The samples leave the stock ledger the same second.</b> Photos clear themselves after thirty days; the record stays for good.</>,
+    frag: <div className={styles.frag}>
+      <div className={styles.fragHead}><span>Visit · Dr. Krishnan</span><span className={`${styles.chip} ${styles.chipOk}`}>GPS verified</span></div>
+      <div className={styles.row}><div>Samples given<small>Sun Screen SPF 50g ×1 · Pigmentation kit ×1</small></div><span className={styles.mono}>−2</span></div>
+      <div className={styles.row}><div>Interest<small>Will prescribe the kit</small></div><span className={`${styles.chip} ${styles.chipOk}`}>High</span></div>
+      <div className={styles.row}><div>Time in clinic<small>Checked in 10:12 · closed 10:31</small></div><span className={styles.mono}>19 min</span></div>
+    </div>
+  },
+  {
+    time: "12:58", label: "the order", title: "The order attributes itself.",
+    body: <>A Shopify order lands by webhook in seconds, carrying Priya&rsquo;s coupon. The commission base is printed on the row — <b>30% of ₹1,499</b> — so it can be checked, not trusted. It stays <b>pending</b> until the parcel is delivered.</>,
+    frag: <div className={styles.frag}>
+      <div className={styles.fragHead}><span>Order #1804</span><span className={`${styles.chip} ${styles.chipInfo}`}>Prepaid</span></div>
+      <div className={styles.row}><div>Coupon PRIYA30<small>Priya Nair · Kochi</small></div><span className={styles.mono}>₹1,499</span></div>
+      <div className={styles.row}><div>Commission<small>30% of ₹1,499 · pending delivery</small></div><span className={styles.mono}>₹450</span></div>
+    </div>
+  },
+  {
+    time: "13:03", label: "the parcel", title: "Every courier's live price. One tap.",
+    body: <>Open the order and every courier serving that PIN appears with its price and promised days, cheapest first. <b>Book forty in a batch</b>; each success reports its AWB, each failure its exact reason. Thirty labels come back as one PDF.</>,
+    frag: <div className={styles.frag}>
+      <div className={styles.fragHead}><span>Ships to 682016 · 0.4 kg</span><span className={`${styles.chip} ${styles.chipOk}`}>4 couriers</span></div>
+      <div className={styles.row}><div>Delhivery Surface<small>3 days</small></div><span className={styles.mono}>₹62</span></div>
+      <div className={styles.row}><div>Xpressbees<small>3 days · +₹9</small></div><span className={styles.mono}>₹71</span></div>
+      <div className={styles.row}><div>Blue Dart Air<small>1 day · +₹86</small></div><span className={styles.mono}>₹148</span></div>
+    </div>
+  },
+  {
+    time: "17:45", label: "the payout", title: "Commission clears on delivery — not before.",
+    body: <>Delivered, so ₹450 moves from pending to <b>payable</b>, grouped under Priya with her UPI ID beside the total. A parcel that comes back after payment is <b>flagged for a human</b>, never deducted in silence. Priya sees the same line in her portal.</>,
+    frag: <div className={styles.frag}>
+      <div className={styles.fragHead}><span>Priya Nair · owed</span><span className={`${styles.chip} ${styles.chipOk}`}>Delivered</span></div>
+      <div className={styles.row}><div>In transit<small>2 parcels</small></div><span className={styles.mono}>₹840</span></div>
+      <div className={styles.row}><div>Payable now<small>#1804 · #1791</small></div><span className={styles.big}>₹900</span></div>
+      <div className={styles.row}><div>Paid this month<small>UTR 4471…</small></div><span className={styles.mono}>₹3,150</span></div>
+    </div>
+  },
+  {
+    time: "19:30", label: "the call back", title: "The March customer gets a call.",
+    body: <>Every order the shop has ever taken is a customer to ring — two years pulled in on day one. One tap opens the call with the remark box ready and presets for how calls actually end. <b>&ldquo;Do not call&rdquo; is respected on every later pass.</b></>,
+    frag: <div className={styles.frag}>
+      <div className={styles.fragHead}><span>Retarget · 789 orders</span><span className={`${styles.chip} ${styles.chipWarn}`}>36 follow-ups due</span></div>
+      <div className={styles.row}><div>Adarsh Singh · 45 orders<small>&ldquo;Happy with the kit — will reorder next month.&rdquo;</small></div><span className={`${styles.chip} ${styles.chipOk}`}>Interested</span></div>
+      <div className={styles.row}><div>Suroj Mallick · 2 orders<small>Last order 15 Aug · in transit</small></div><span className={styles.chip}>Not called</span></div>
+    </div>
+  },
+  {
+    time: "31 Aug", label: "month end", title: "The books close themselves.",
+    body: <>Payroll reads the attendance the visits already wrote: PF, ESI and professional tax computed, joiners pro-rated, <b>nobody left out quietly</b>. The GST invoices carry their HSN summaries. The vault has every vendor bill filed — and names the one that is missing.</>,
+    frag: <div className={styles.frag}>
+      <div className={styles.fragHead}><span>August · payroll</span><span className={`${styles.chip} ${styles.chipInfo}`}>Prepared</span></div>
+      <div className={styles.row}><div>On the rolls<small>38 people · 2 joiners pro-rated</small></div><span className={styles.mono}>38</span></div>
+      <div className={styles.row}><div>Could not pay<small>No salary set — listed, not skipped</small></div><span className={styles.mono}>1</span></div>
+      <div style={{ marginTop: 10 }}><div className={styles.bar}><i style={{ width: "72%" }} /></div><small style={{ display: "block", marginTop: 6, fontSize: 12, color: "var(--muted)" }}>Vault: 5 of 7 sources filed · Meta ads, Razorpay outstanding</small></div>
+    </div>
+  }
+];
 
-/** A believable sliver of the product, drawn with the product's own parts. */
-function HeroVignette() {
-  return <div className="relative mx-auto w-full max-w-[420px]" aria-hidden>
-    <div className="card space-y-3 p-4">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Today&rsquo;s route · 8 calls</p>
-        <Badge tone="info">On round</Badge>
-      </div>
-      <div className="rounded-[10px] border border-[var(--line)] bg-[var(--surface-2)] px-3.5 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm font-semibold">Dr. Meera Krishnan</p>
-          <Badge tone="warn">Sees reps 2&ndash;4 PM</Badge>
-        </div>
-        <p className="mt-0.5 text-xs text-[var(--muted)]">Skin &amp; Hair Clinic, Indiranagar · 4.8 ★ · planned 2:20 PM</p>
-      </div>
-      <div className="rounded-[10px] border border-[var(--line)] bg-[var(--surface-2)] px-3.5 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm font-semibold">Order #1804 · ₹1,499</p>
-          <Badge tone="success">Delivered</Badge>
-        </div>
-        <p className="mt-0.5 text-xs text-[var(--muted)]">Coupon PRIYA30 · commission 30% of ₹1,499 → <span className="font-semibold text-[var(--ok-ink)]">₹450 payable</span></p>
-      </div>
-      <div className="rounded-[10px] border border-[var(--line)] bg-[var(--surface-2)] px-3.5 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm font-semibold">Retarget · Adarsh Singh</p>
-          <Badge tone="brand">Interested</Badge>
-        </div>
-        <p className="mt-0.5 text-xs text-[var(--muted)]">&ldquo;Happy with the kit — will reorder next month.&rdquo; · follow up 12 Sep</p>
-      </div>
-    </div>
-    <div className="absolute -bottom-4 -right-2 hidden rounded-full border border-[var(--ok-line)] bg-[var(--ok-bg)] px-3.5 py-2 text-xs font-semibold text-[var(--ok-ink)] shadow-sm sm:block">
-      40 parcels booked in one batch
-    </div>
-  </div>;
-}
+const INDEX: { group: string; items: [string, string][] }[] = [
+  { group: "Field & clinic", items: [
+    ["Find doctors", "Google Maps discovery across 13 specialities, up to 100 km, hundreds of results"],
+    ["Doctors & call hours", "The directory, with when each doctor actually sees reps"],
+    ["Route plans", "Ordered by call time, then distance, with arrival per stop"],
+    ["Visits", "GPS check-in, samples, outcome, photos that expire"],
+    ["Day view", "Time in clinics vs travel; kilometres planned vs walked"],
+    ["Reports", "Completion, samples, outcomes, interest — per rep, any range"]
+  ] },
+  { group: "Online & affiliates", items: [
+    ["Leads & WhatsApp", "Prospect any business on Google Maps; a human-paced send queue or Meta API autopilot"],
+    ["Partners & coupons", "Self-registration, self-minted codes live in Shopify, suspend kills the code"],
+    ["Orders", "Attributed, with the commission base shown on every row"],
+    ["Process orders", "Live courier rates per PIN, batch booking, merged labels, live tracking"],
+    ["Payouts", "Pending → payable on delivery → paid and frozen; reversals flagged"],
+    ["Retarget", "Every customer the shop has ever had, as a calling list"]
+  ] },
+  { group: "Back office", items: [
+    ["Billing", "GST or bill of supply, HSN summary, part-payments with proof, PDF from one link"],
+    ["Inventory & samples", "Append-only ledger; one stock pool for bills and samples"],
+    ["HR desk", "Attendance that fills itself, leave with enforced balances, holidays"],
+    ["Payroll", "Dated salary revisions, statutory deductions, prepared → approved → paid"],
+    ["Invoice vault", "Every vendor bill by month, gaps named, one ZIP for the CA"],
+    ["Panel access", "Per-person grants that take effect on the next click"]
+  ] }
+];
 
 export function LandingPage() {
-  return <div className="min-h-[100dvh] bg-[var(--bg)]">
-    <header className="sticky top-0 z-20 border-b border-[var(--line)] bg-[var(--surface-veil)] backdrop-blur">
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-5 py-3 sm:px-8">
-        <Brand subtitle="Field, online & back office" />
-        <nav className="hidden items-center gap-6 text-sm font-medium text-[var(--ink-2)] lg:flex" aria-label="Page sections">
-          <a href="#panels" className="hover:text-[var(--brand)]">Product</a>
-          <a href="#modules" className="hover:text-[var(--brand)]">Modules</a>
-          <a href="#integrations" className="hover:text-[var(--brand)]">Integrations</a>
-          <a href="#custom" className="hover:text-[var(--brand)]">Custom work</a>
-          <a href="#trust" className="hover:text-[var(--brand)]">Security</a>
+  return <div className={`${styles.page} ${display.variable} ${mono.variable}`} style={{ fontFamily: "var(--font-display), ui-sans-serif, system-ui, sans-serif" }}>
+    <Reveal root={styles.page} />
+
+    <header className={styles.header}>
+      <div className={`${styles.wrap} ${styles.headerRow}`}>
+        <Link href="/" className={styles.brand} aria-label="BHEALIX home">
+          <BrandMark size={30} />
+          <span><b>BHEALIX</b><small>One day. One system.</small></span>
+        </Link>
+        <nav className={styles.nav} aria-label="Page sections">
+          <a href="#day">The day</a>
+          <a href="#doors">Who uses it</a>
+          <a href="#modules">Modules</a>
+          <a href="#custom">Custom work</a>
+          <a href="#trust">Trust</a>
         </nav>
-        <div className="flex items-center gap-2">
-          <Appearance />
-          <Link href="/login" className="tap hidden items-center rounded-[10px] border border-[var(--line-2)] bg-[var(--surface)] px-4 text-sm font-semibold hover:bg-[var(--surface-2)] sm:inline-flex">
-            Sign in
-          </Link>
-          <a href={CONTACT} className="tap inline-flex items-center gap-1.5 rounded-[10px] bg-[var(--brand)] px-4 text-sm font-semibold text-[var(--on-brand)] hover:bg-[var(--brand-hover)]">
-            Book a demo
-          </a>
+        <div className={styles.headerActions}>
+          <Link href="/login" className={`${styles.btn} ${styles.btnGhost} ${styles.hideSm}`}>Sign in</Link>
+          <a href={DEMO} className={`${styles.btn} ${styles.btnAmber}`}>Book a demo</a>
         </div>
       </div>
     </header>
 
     <main>
-      {/* ------------------------------------------------------------- hero */}
-      <section className="mx-auto grid w-full max-w-6xl items-center gap-10 px-5 pb-14 pt-12 sm:px-8 sm:pt-16 lg:grid-cols-[1.1fr_0.9fr] lg:gap-14 lg:pb-20">
-        <div className="page-enter">
-          <p className="inline-flex items-center gap-2 rounded-full border border-[var(--line-2)] bg-[var(--surface)] px-3.5 py-1.5 text-xs font-semibold text-[var(--ink-2)]">
-            <Zap size={13} className="text-[var(--brand)]" />One system for field sales, online sales and the back office
-          </p>
-          <h1 className="mt-5 text-balance text-[32px] font-semibold leading-[1.12] sm:text-[44px]">
-            Run the reps, the store and the books &mdash; without running three systems.
-          </h1>
-          <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-[var(--muted)] sm:text-base">
-            BHEALIX CRM plans your field force&rsquo;s day around each clinic&rsquo;s call hours, syncs every Shopify
-            order and pays affiliate commissions only on delivery, rings your whole customer base back for repeat
-            sales, and raises the GST invoice and the payslip at the end of it. Built in India, for how business
-            is actually done here.
-          </p>
-          <div className="mt-7 flex flex-wrap items-center gap-3">
-            <a href={CONTACT} className="inline-flex min-h-[48px] items-center gap-2 rounded-[10px] bg-[var(--brand)] px-6 text-sm font-semibold text-[var(--on-brand)] hover:bg-[var(--brand-hover)]">
-              Book a walkthrough<ArrowRight size={16} />
-            </a>
-            <Link href="/login" className="inline-flex min-h-[48px] items-center rounded-[10px] border border-[var(--line-2)] bg-[var(--surface)] px-6 text-sm font-semibold hover:bg-[var(--surface-2)]">
-              Sign in
-            </Link>
+      {/* ---------------------------------------------------------------- hero */}
+      <section className={styles.hero}>
+        <div className={`${styles.wrap} ${styles.heroGrid}`}>
+          <div>
+            <p className={`${styles.pulse} ${styles.mono}`}><span className={styles.dot} aria-hidden />Field force · online store · back office</p>
+            <h1 className={styles.h1}>One day.<br />One <em>system.</em></h1>
+            <p className={styles.lede}>
+              BHEALIX runs the reps on the road, the orders coming in online, and the books at the end of the
+              month — as one piece of software, on one database, where a visit, an order, an invoice and a payslip
+              are the same data and nothing is typed twice.
+            </p>
+            <div className={styles.heroCtas}>
+              <a href={DEMO} className={`${styles.btn} ${styles.btnAmber}`}>Book a 30-minute walkthrough<ArrowRight size={16} /></a>
+              <a href="#day" className={`${styles.btn} ${styles.btnGhost}`}>Watch the day</a>
+            </div>
+            <dl className={styles.stats}>
+              <div className={styles.stat}><dd><b>3</b><span>portals — desk, field app, partner</span></dd></div>
+              <div className={styles.stat}><dd><b>40</b><span>parcels booked in one batch</span></dd></div>
+              <div className={styles.stat}><dd><b>2 yrs</b><span>of orders pulled in on day one</span></dd></div>
+            </dl>
           </div>
-          <dl className="mt-9 grid max-w-xl grid-cols-3 gap-4 border-t border-[var(--line)] pt-6">
-            {[
-              ["3 portals", "desk, field app, partner"],
-              ["40 at once", "parcels booked in a batch"],
-              ["2 years", "of orders pulled on day one"]
-            ].map(([value, label]) => (
-              <div key={value} className="min-w-0">
-                <dt className="sr-only">{label}</dt>
-                <dd>
-                  <p className="text-lg font-semibold tabular-nums sm:text-xl">{value}</p>
-                  <p className="mt-0.5 text-xs leading-snug text-[var(--muted)]">{label}</p>
-                </dd>
-              </div>
-            ))}
-          </dl>
+          <HeroConsole />
         </div>
-        <HeroVignette />
       </section>
 
-      {/* ------------------------------------------------- the three doors */}
-      <div className="border-y border-[var(--line)] bg-[var(--surface)]">
-        <Section id="panels" eyebrow="One platform, three doors"
-          title="Every person gets the screen their day actually needs"
-          lead="A desk panel for the people who run the business, a phone-first app for the people on the road, and a portal for the partners who sell for you — one database underneath, so nobody retypes anything.">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <FeatureCard icon={Building2} title="The desk panel" points={[
-              "Doctor CRM, Sales CRM and a super-admin control room, switchable from one sign-in",
-              "Dashboards, approvals, billing, payroll, inventory and every report",
-              "Per-person panel grants — withdrawing access takes effect on the next click"
-            ]} />
-            <FeatureCard icon={Smartphone} title="The field app" points={[
-              "Installable phone app (PWA) with the day's route in visiting order",
-              "One-tap call, one-tap directions, GPS check-in and call photos",
-              "Reps raise bills, collect payments and apply for leave from the same phone"
-            ]} />
-            <FeatureCard icon={Users} title="The partner portal" points={[
-              "Affiliates apply, get approved, and mint their own coupon codes — live in Shopify the same second",
-              "Every order tracked placed → dispatched → delivered → commission → paid",
-              "What they're owed, split honestly: in transit, clearing, payable, paid"
-            ]} />
-          </div>
-        </Section>
+      <div className={styles.marquee} aria-hidden>
+        <div className={styles.marqueeTrack}>
+          {[...MARQUEE, ...MARQUEE].map((item, index) => <span key={index}>{item}</span>)}
+        </div>
       </div>
 
-      {/* ----------------------------------------------------- the modules */}
-      <Section id="modules" eyebrow="Field &amp; clinic operations"
-        title="From finding the doctor to knowing how the day really went"
-        lead="Built for teams that sell into clinics: discovery, routing around each doctor's visiting hours, GPS-verified calls, and a day view that reports the day as it was actually walked.">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <FeatureCard icon={MapPin} title="Doctor discovery" points={[
-            "Search Google Maps for 13 specialities — dermatologists to trichologists — up to 100 km out",
-            "Wide sweeps return hundreds of results, not Google's usual twenty",
-            "Save to the directory in bulk; export to Excel and upload the edited sheet back"
-          ]} />
-          <FeatureCard icon={Route} title="Route plans" points={[
-            "Each doctor's own call hours recorded — which days, which times, appointment or not",
-            "Routes ordered by call time first, distance second, with a planned arrival per stop",
-            "Assign the plan to a rep and their day appears on their phone"
-          ]} />
-          <FeatureCard icon={Camera} title="Visits, verified" points={[
-            "GPS check-in, outcome, products discussed, samples with quantities, order value",
-            "Up to eight photos per call — clinic front, prescription pad — auto-deleted after 30 days",
-            "Follow-up dates that surface on the right day"
-          ]} />
-          <FeatureCard icon={BarChart3} title="The day, as it went" points={[
-            "Time inside clinics vs travel, average call length, gaps between calls",
-            "Distance actually travelled leg by leg, set against what the plan intended",
-            "Completion judged on what was attempted — and stale open rounds flagged"
-          ]} />
-          <FeatureCard icon={CalendarCheck} title="HR that fills itself in" points={[
-            "A completed visit marks the rep present; approved leave marks itself; holidays apply to all",
-            "Leave with balances enforced at request time — nobody signs off their own",
-            "Employment records kept whole: leavers are recorded, never erased"
-          ]} />
-          <FeatureCard icon={Wallet} title="Statutory payroll" points={[
-            "The month builds itself from attendance — PF, ESI and professional tax computed, joiners and leavers pro-rated",
-            "Salary as effective-dated revisions, so old payslips never change",
-            "HR prepares, the administrator approves and releases — by design"
-          ]} />
-        </div>
-      </Section>
-
-      <div className="border-y border-[var(--line)] bg-[var(--surface)]">
-        <Section eyebrow="Online sales &amp; affiliates"
-          title="From a stranger's shopfront to a commission paid on delivery"
-          lead="The whole online funnel in one place: find leads, message them on WhatsApp, let partners sell on their own coupons, ship with live courier rates, pay commissions only when the parcel lands — then ring every customer back.">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <FeatureCard icon={MessageCircle} title="Leads &amp; WhatsApp outreach" points={[
-              "Prospect any business type on Google Maps — parlours, salons, chemists — up to 500 at a time",
-              "A one-tap send queue with templates and merge fields, or full autopilot via Meta's WhatsApp Business API",
-              "Daily caps, delivery receipts and a reply inbox — a reply stops the run for that lead"
-            ]} />
-            <FeatureCard icon={Store} title="Shopify, attributed" points={[
-              "Orders sync by webhook in seconds, with a nightly pass and on-demand resync behind it",
-              "Every coupon order attributed to its partner, with the commission base shown, not hidden",
-              "Partners mint their own codes — created in Shopify instantly, disabled the moment one is suspended"
-            ]} />
-            <FeatureCard icon={Truck} title="Shipping desk" points={[
-              "Every courier serving that PIN listed with its live price the moment the dialog opens",
-              "Book 40 orders in one batch — each success and each failure reported by name",
-              "Thirty labels or invoices merged into one printable PDF; live scan-by-scan tracking"
-            ]} />
-            <FeatureCard icon={Package} title="Commissions &amp; payouts" points={[
-              "Pending in transit, payable on delivery, frozen once paid — never recomputed",
-              "Payouts grouped by partner with their UPI or account beside the total",
-              "Parcels returned after payment are flagged for a human, never deducted silently"
-            ]} />
-            <FeatureCard icon={PhoneCall} title="Retarget every customer" points={[
-              "Every order the shop has ever taken becomes a customer to ring — two years pulled on day one",
-              "One-tap call and WhatsApp with the remark box already open, presets for how calls actually end",
-              "Repeat buyers recognised across orders; 'Do not call' respected on every later pass"
-            ]} />
-            <FeatureCard icon={FileText} title="GST billing &amp; collections" points={[
-              "Tax invoices with per-line discounts, HSN summaries, CGST/SGST or IGST by place of supply",
-              "Part-payments with proof attached — UPI screenshot, cheque photo — and a chase list per bill",
-              "Bank details and payment QR printed on every bill; PDF from one link, desk or phone"
-            ]} />
+      {/* ----------------------------------------------------------------- day */}
+      <section id="day" className={styles.section}>
+        <div className={styles.wrap}>
+          <div className={`${styles.sectionHead} ${styles.reveal}`} data-reveal>
+            <p className={styles.eyebrow} style={{ color: "var(--amber-deep)" }}>A Tuesday, start to finish</p>
+            <h2 className={styles.h2}>What one day looks like when nothing is retyped.</h2>
+            <p className={styles.sub}>Seven moments from an ordinary working day — each one handled by the same system, each one leaving the ledgers still balanced. Every figure below is how the product actually behaves.</p>
           </div>
-        </Section>
-      </div>
-
-      <Section eyebrow="Back office"
-        title="Stock, purchase paper and the books that always add up"
-        lead="Append-only ledgers underneath everything: a stock figure, a bill balance or a sample count can never disagree with the events behind it.">
-        <div className="grid gap-4 sm:grid-cols-3">
-          <FeatureCard icon={Boxes} title="Inventory &amp; samples" points={[
-            "One stock pool per product — billed goods and rep samples draw from the same figure",
-            "Batches, expiries, reorder alerts, and stocktakes recorded as corrections",
-            "A per-rep sample matrix rebuilt from visits, so re-submitting never double-counts"
-          ]} />
-          <FeatureCard icon={Landmark} title="The invoice vault" points={[
-            "Every bill the company receives, filed by month — Shiprocket, Razorpay, Shopify, Meta and the rest",
-            "Fetched automatically where the vendor has an API; the gaps named, not hidden",
-            "A month's whole bundle as one ZIP for the CA, with a contents sheet of totals"
-          ]} />
-          <FeatureCard icon={BadgeCheck} title="Approvals with teeth" points={[
-            "Payroll: prepared → approved → paid, and a paid month cannot be reopened",
-            "Leave, partner applications and commission payouts each pass a named human",
-            "An audit trail beside every change — who did what, and when"
-          ]} />
+          <div className={styles.day}>
+            {DAY.map(stop => (
+              <article key={stop.time} className={`${styles.stop} ${styles.reveal}`} data-reveal>
+                <div className={styles.stopTime}>{stop.time}<small>{stop.label}</small></div>
+                <div><h3>{stop.title}</h3><p>{stop.body}</p></div>
+                {stop.frag}
+              </article>
+            ))}
+          </div>
         </div>
-      </Section>
+      </section>
 
-      {/* -------------------------------------------------------- integrations */}
-      <div className="border-y border-[var(--line)] bg-[var(--surface)]">
-        <Section id="integrations" eyebrow="Integrations"
-          title="Connected to the tools Indian commerce actually runs on"
-          lead="Connect once from a settings screen — no developer needed day to day. Credentials are encrypted at rest and never shown again.">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {[
-              ["Shopify", "orders, customers, discount codes, webhooks"],
-              ["Shiprocket", "live courier rates, AWBs, labels, tracking"],
-              ["WhatsApp Business", "automated outreach via Meta's Cloud API"],
-              ["Google Maps", "doctor & lead discovery, routes, geocoding"],
-              ["Razorpay", "gateway fee statements for the vault"],
-              ["Meta Ads", "ad spend statements for the vault"],
-              ["Excel / CSV", "imports and exports on every list"],
-              ["Anything else", "custom integrations built to order — see below"]
-            ].map(([name, what]) => (
-              <div key={name} className="card px-4 py-3.5">
-                <p className="text-sm font-semibold">{name}</p>
-                <p className="mt-0.5 text-xs leading-snug text-[var(--muted)]">{what}</p>
+      {/* --------------------------------------------------------------- doors */}
+      <section id="doors" className={`${styles.section}`} style={{ background: "var(--paper-2)" }}>
+        <div className={styles.wrap}>
+          <div className={`${styles.sectionHead} ${styles.reveal}`} data-reveal>
+            <p className={styles.eyebrow} style={{ color: "var(--amber-deep)" }}>One database, three doors</p>
+            <h2 className={styles.h2}>Every person gets the screen their day needs.</h2>
+            <p className={styles.sub}>The desk, the road and the partners each get their own door. Behind all three is one system, so nobody retypes what somebody else already knows.</p>
+          </div>
+          <div className={`${styles.doors} ${styles.reveal}`} data-reveal>
+            <div className={styles.door}>
+              <span className={styles.eyebrow}><Building2 size={14} style={{ verticalAlign: "-2px", marginRight: 8 }} />Desk panel</span>
+              <h3>The people who run it</h3>
+              <p>Doctor CRM, Sales CRM and a control room, switchable from one sign-in.</p>
+              <ul><li>Dashboards, approvals, billing, payroll, inventory</li><li>Per-person panel grants, live on the next click</li><li>Every report, every export</li></ul>
+            </div>
+            <div className={styles.door}>
+              <span className={styles.eyebrow}><Smartphone size={14} style={{ verticalAlign: "-2px", marginRight: 8 }} />Field app</span>
+              <h3>The people on the road</h3>
+              <p>Installs on the phone like an app. Five tabs built for one hand in a corridor.</p>
+              <ul><li>Today&rsquo;s route, one-tap call and directions</li><li>GPS check-in, samples, photos</li><li>Bills, payments with proof, leave, payslips</li></ul>
+            </div>
+            <div className={styles.door}>
+              <span className={styles.eyebrow}><Users size={14} style={{ verticalAlign: "-2px", marginRight: 8 }} />Partner portal</span>
+              <h3>The people who sell for you</h3>
+              <p>Affiliates apply, get approved, and mint their own coupon codes — live in Shopify instantly.</p>
+              <ul><li>Every order as a timeline, placed to paid</li><li>Owed, split honestly five ways</li><li>Their own payment details and password</li></ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ------------------------------------------------------------- modules */}
+      <section id="modules" className={styles.section}>
+        <div className={styles.wrap}>
+          <div className={`${styles.sectionHead} ${styles.reveal}`} data-reveal>
+            <p className={styles.eyebrow} style={{ color: "var(--amber-deep)" }}>The index</p>
+            <h2 className={styles.h2}>Eighteen modules. One sign-in.</h2>
+            <p className={styles.sub}>Everything below ships today. Each line is a screen somebody uses every working day, not a roadmap item.</p>
+          </div>
+          <div className={styles.index}>
+            {INDEX.map(group => (
+              <div key={group.group} className={`${styles.group} ${styles.reveal}`} data-reveal>
+                <h3>{group.group}</h3>
+                <dl>{group.items.map(([name, what]) => <div key={name}><dt>{name}</dt><dd>{what}</dd></div>)}</dl>
               </div>
             ))}
           </div>
-          <p className="mt-6 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">
-            Three layers of sync, on purpose: webhooks land in seconds, a nightly pass catches anything they
-            missed, and a full resync is one tap when you want the belt checked as well as the braces. The last
-            twenty passes are listed on screen, so the automation can be <em>seen</em> working rather than assumed.
-          </p>
-        </Section>
-      </div>
-
-      {/* ------------------------------------------------------- custom work */}
-      <Section id="custom" eyebrow="Custom development &amp; integrations"
-        title="Don't see your tool or your workflow? We build it."
-        lead="BHEALIX is a product, not a template — and it comes with the team that built it. If your business runs on something we don't connect to yet, or works a way the screens don't, that is a conversation, not a dead end.">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <FeatureCard icon={Wrench} title="Custom modules" points={[
-            "New screens, reports and approval flows built to your process",
-            "Your own fields, statuses and documents — not renamed versions of ours",
-            "Delivered inside the same system, same sign-in, same permissions"
-          ]} />
-          <FeatureCard icon={Plug} title="Custom integrations" points={[
-            "Other storefronts, couriers, payment gateways and accounting software",
-            "SMS, email and telephony providers; ERPs and tally-style ledgers",
-            "Webhooks and exports for anything downstream of you"
-          ]} />
-          <FeatureCard icon={Building2} title="Your brand, your deployment" points={[
-            "Your company name, logo and colours throughout — including the apps your reps install",
-            "A dedicated deployment and database per company; nothing shared",
-            "Hosted where your customers are"
-          ]} />
-          <FeatureCard icon={Database} title="Migration &amp; rollout" points={[
-            "Doctor, customer, product and partner lists brought in from Excel or your old system",
-            "Order history pulled in, so day one is not an empty screen",
-            "Training for the desk, the field and the partners"
-          ]} />
         </div>
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          <a href={CONTACT} className="inline-flex min-h-[44px] items-center gap-2 rounded-[10px] bg-[var(--brand)] px-5 text-sm font-semibold text-[var(--on-brand)] hover:bg-[var(--brand-hover)]">
-            Tell us what you need<ArrowRight size={16} />
-          </a>
-          <p className="text-sm text-[var(--muted)]">Scoped and quoted before any work starts.</p>
-        </div>
-      </Section>
+      </section>
 
-      {/* ------------------------------------------------------------ trust */}
-      <Section id="trust" eyebrow="Security &amp; trust"
-        title="Built like the books depend on it — because they do"
-        lead="Permissions are decided on the server on every request, money is computed on the server every time, and anything that is evidence stores a snapshot rather than a reference.">
-        <div className="grid gap-4 sm:grid-cols-2">
-          {TRUST.map(({ icon: Icon, title, body }) => (
-            <div key={title} className="card flex gap-4 p-5">
-              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[var(--brand-soft)] text-[var(--brand)]">
-                <Icon size={19} />
-              </span>
-              <div className="min-w-0">
-                <h3 className="text-[15px] font-semibold">{title}</h3>
-                <p className="mt-1 text-sm leading-relaxed text-[var(--ink-2)]">{body}</p>
-              </div>
+      {/* -------------------------------------------------------------- custom */}
+      <section id="custom" className={`${styles.section} ${styles.onInk}`}>
+        <div className={`${styles.wrap} ${styles.custom}`}>
+          <div className={`${styles.sectionHead} ${styles.reveal}`} data-reveal>
+            <p className={styles.eyebrow} style={{ color: "var(--amber)" }}>Custom development &amp; integrations</p>
+            <h2 className={styles.h2}>Don&rsquo;t see your tool or your workflow? We build it.</h2>
+            <p className={styles.sub}>BHEALIX is a product that comes with the team that built it. If your business runs on something we don&rsquo;t connect to yet, or works a way the screens don&rsquo;t, that is a conversation — scoped and quoted before any work starts.</p>
+            <div style={{ marginTop: 8 }}>
+              <a href={DEMO} className={`${styles.btn} ${styles.btnAmber}`}>Tell us what you need<ArrowUpRight size={16} /></a>
             </div>
-          ))}
-        </div>
-      </Section>
-
-      {/* -------------------------------------------------------- final CTA */}
-      <div className="border-t border-[var(--line)] bg-[var(--brand-soft)]">
-        <section className="mx-auto w-full max-w-6xl px-5 py-16 text-center sm:px-8 sm:py-20">
-          <BrandMark size={44} />
-          <h2 className="mx-auto mt-5 max-w-xl text-balance text-2xl font-semibold sm:text-3xl">
-            See your own numbers in it, not a slide about ours
-          </h2>
-          <p className="mx-auto mt-3 max-w-lg text-[15px] leading-relaxed text-[var(--muted)]">
-            A walkthrough takes thirty minutes: your city on the discovery map, a route planned around real
-            call hours, an order shipped and a commission cleared — live.
-          </p>
-          <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-            <a href={CONTACT} className="inline-flex min-h-[48px] items-center gap-2 rounded-[10px] bg-[var(--brand)] px-6 text-sm font-semibold text-[var(--on-brand)] hover:bg-[var(--brand-hover)]">
-              Book a walkthrough<ArrowRight size={16} />
-            </a>
-            <Link href="/partner/register" className="inline-flex min-h-[48px] items-center rounded-[10px] border border-[var(--line-2)] bg-[var(--surface)] px-6 text-sm font-semibold hover:bg-[var(--surface-2)]">
-              Apply as a sales partner
-            </Link>
           </div>
-        </section>
-      </div>
+          <div className={`${styles.customList} ${styles.reveal}`} data-reveal>
+            <div className={styles.customItem}><Wrench size={20} /><div><b>Custom modules</b><p>New screens, reports and approval flows built to your process — your fields, your statuses, your documents — inside the same sign-in and permissions.</p></div></div>
+            <div className={styles.customItem}><Plug size={20} /><div><b>Custom integrations</b><p>Other storefronts, couriers and payment gateways; accounting and ERP systems; SMS, email and telephony providers; webhooks and exports for anything downstream.</p></div></div>
+            <div className={styles.customItem}><Layers size={20} /><div><b>Your brand, your deployment</b><p>Your name, logo and colours throughout, including the apps your reps and partners install. A dedicated deployment and database per company.</p></div></div>
+            <div className={styles.customItem}><Database size={20} /><div><b>Migration &amp; rollout</b><p>Doctor, customer, product and partner lists brought in from Excel or your old system; order history pulled in; training for the desk, the field and the partners.</p></div></div>
+          </div>
+        </div>
+      </section>
+
+      {/* -------------------------------------------------------- integrations */}
+      <section id="integrations" className={styles.section}>
+        <div className={styles.wrap}>
+          <div className={`${styles.sectionHead} ${styles.reveal}`} data-reveal>
+            <p className={styles.eyebrow} style={{ color: "var(--amber-deep)" }}>Connected</p>
+            <h2 className={styles.h2}>Plugged into the tools Indian commerce runs on.</h2>
+            <p className={styles.sub}>Connected from a settings screen, not by a developer. Credentials are encrypted at rest and never shown again.</p>
+          </div>
+          <div className={`${styles.logos} ${styles.reveal}`} data-reveal>
+            {[["Shopify", "orders, customers, discount codes"], ["Shiprocket", "rates, AWBs, labels, tracking"], ["WhatsApp Business", "Meta Cloud API"], ["Google Maps", "discovery, routes, geocoding"], ["Razorpay", "fee statements"], ["Meta Ads", "spend statements"], ["Excel / CSV", "in and out"], ["PDF", "invoices, labels, payslips"]].map(([name, what]) => (
+              <span key={name} className={styles.logo}>{name}<small>{what}</small></span>
+            ))}
+          </div>
+          <div className={`${styles.layers} ${styles.reveal}`} data-reveal>
+            <div className={styles.layer}><b>Seconds</b><p><strong>Webhooks.</strong> An order placed, paid or cancelled in Shopify is here before the customer has closed the tab.</p></div>
+            <div className={styles.layer}><b>Nightly</b><p><strong>The 1:30 AM pass.</strong> Re-reads anything a webhook lost, asks every courier about every moving parcel, re-prices every unpaid commission.</p></div>
+            <div className={styles.layer}><b>On demand</b><p><strong>Full resync.</strong> One tap reaches over the whole history. The last twenty passes are listed on screen, so the automation can be seen working.</p></div>
+          </div>
+        </div>
+      </section>
+
+      {/* --------------------------------------------------------------- trust */}
+      <section id="trust" className={styles.section} style={{ background: "var(--paper-2)" }}>
+        <div className={styles.wrap}>
+          <div className={`${styles.sectionHead} ${styles.reveal}`} data-reveal>
+            <p className={styles.eyebrow} style={{ color: "var(--amber-deep)" }}>Built like the books depend on it</p>
+            <h2 className={styles.h2}>Because they do.</h2>
+            <p className={styles.sub}>Permissions decided on the server on every request. Money computed on the server every time. Anything that is evidence stores a snapshot, not a reference.</p>
+          </div>
+          <div className={styles.trust}>
+            {[
+              [ShieldCheck, "Server-side permissions, every request", "Five staff roles plus per-person panel grants, re-read from the database on every click. A suspension takes effect on the next tap, not the next sign-in."],
+              [Lock, "Secrets encrypted, personal data minimised", "Shopify, Shiprocket and Meta credentials encrypted at rest and never sent to a browser. Only the last four digits of Aadhaar are ever stored."],
+              [FileText, "Documents that cannot drift", "A payslip carries the employment record as it stood on issue day. A paid commission is frozen. Every ledger is append-only; balances are derived."],
+              [Zap, "Fast where your people are", "Hosted in Mumbai beside the database. Installable on any phone. Honest offline behaviour — a shared device never serves one rep's data to the next."]
+            ].map(([Icon, title, body]) => {
+              const I = Icon as React.ComponentType<{ size?: number }>;
+              return <div key={title as string} className={`${styles.trustItem} ${styles.reveal}`} data-reveal><I size={24} /><div><b>{title as string}</b><p>{body as string}</p></div></div>;
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* ----------------------------------------------------------------- cta */}
+      <section className={styles.cta}>
+        <div className={`${styles.wrap} ${styles.ctaInner}`}>
+          <p className={styles.eyebrow} style={{ color: "var(--amber)" }}>Thirty minutes, your numbers</p>
+          <h2>See your own Tuesday run through it.</h2>
+          <p className={styles.sub}>Your city on the discovery map. A route planned around real call hours. An order shipped, a commission cleared, an invoice and a payslip raised — live, on your data, not a slide about ours.</p>
+          <div className={styles.ctaRow}>
+            <a href={DEMO} className={`${styles.btn} ${styles.btnAmber}`}>Book a walkthrough<ArrowRight size={16} /></a>
+            <Link href="/partner/register" className={`${styles.btn} ${styles.btnGhost}`}>Apply as a sales partner</Link>
+          </div>
+        </div>
+      </section>
     </main>
 
-    <footer className="border-t border-[var(--line)]">
-      <div className="mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-4 px-5 py-8 sm:flex-row sm:items-center sm:px-8">
-        <Brand />
-        <nav className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-[var(--muted)]" aria-label="Footer">
-          <Link href="/login" className="hover:text-[var(--brand)]">Staff sign in</Link>
-          <Link href="/partner/login" className="hover:text-[var(--brand)]">Partner sign in</Link>
-          <Link href="/partner/register" className="hover:text-[var(--brand)]">Become a partner</Link>
-          <a href={CONTACT} className="hover:text-[var(--brand)]">Book a demo</a>
+    <footer className={styles.footer}>
+      <div className={`${styles.wrap} ${styles.footerRow}`}>
+        <span className={styles.mono}>BHEALIX CRM · field, online &amp; back office</span>
+        <nav aria-label="Footer">
+          <Link href="/login">Staff sign in</Link>
+          <Link href="/partner/login">Partner sign in</Link>
+          <Link href="/partner/register">Become a partner</Link>
+          <a href={DEMO}>Book a demo</a>
         </nav>
       </div>
     </footer>
