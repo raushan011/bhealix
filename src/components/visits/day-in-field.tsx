@@ -83,87 +83,101 @@ export function DayInField({ rounds, day, isToday, links, emptyTitle, emptyDescr
   </>;
 }
 
-function RoundCard({ round, isToday, links }: { round: Round; isToday: boolean; links: DayLinks }) {
+/**
+ * The head of a round: who, how far through, and the day's figures.
+ *
+ * Exported on its own because the rep's first screen wants exactly this much
+ * — the numbers without the call list it already shows in visiting order.
+ */
+export function RoundSummary({ round, isToday, links, title }: {
+  round: Round; isToday: boolean; links: DayLinks;
+  /** What to call the round when there is no rep's name to head it with. */
+  title?: string;
+}) {
   const state = describeState(round, isToday);
   const done = round.completed + round.missed;
   // Out of everything on the day, so the bar reads as progress through a round
   // rather than as a mark out of what has been attempted.
   const share = round.total ? Math.round((done / round.total) * 100) : 0;
 
-  return <Card className="overflow-hidden">
-    <div className="border-b border-[var(--line)] px-5 py-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          {links.employee ? (
-            <Link href={links.employee(round.employeeId)}
-              className="text-base font-semibold hover:text-[var(--brand)]">{round.employeeName}</Link>
-          ) : <p className="text-base font-semibold">Your round</p>}
-          <p className="mt-0.5 text-xs text-[var(--muted)]">
-            {round.planName ? round.planName : "No plan assigned — own calls only"}
-            {round.plannedDistanceKm ? ` · ${Math.round(round.plannedDistanceKm)} km planned` : ""}
-            {round.firstCheckInAt ? ` · started ${clockOf(round.firstCheckInAt)}` : ""}
-            {round.lastActivityAt && round.state !== "not-started" ? ` · last seen ${clockOf(round.lastActivityAt)}` : ""}
-          </p>
-        </div>
-        <Badge tone={state.tone}>{state.label}</Badge>
-      </div>
-
-      {/* The bar is the thing somebody reads first, so it says its own numbers. */}
-      <div className="mt-3">
-        <div className="flex items-center justify-between text-xs font-medium">
-          <span>{done} of {round.total} visited</span>
-          <span className="text-[var(--muted)]">{share}%</span>
-        </div>
-        <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[var(--surface-2)]">
-          <div className="h-full rounded-full bg-[var(--brand)] transition-[width]" style={{ width: `${share}%` }} />
-        </div>
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-7">
-        <Stat label="Worked" value={duration(round.workedMinutes)} />
-        <Stat label="In clinics" value={duration(round.inClinicMinutes)} />
-        <Stat label="Travel & waiting" value={duration(round.betweenMinutes)} />
-        <Stat label="Average call" value={round.averageCallMinutes ? formatDuration(round.averageCallMinutes) : "—"} />
-        <Stat label="Distance covered" value={round.travelledKm ? distance(round.travelledKm) : "—"} />
-        <Stat label="Sample units" value={round.sampleUnits} />
-        <Stat label="Orders" value={rupees(round.orderValue)} />
-      </div>
-
-      {/*
-        * A round walked in 61 km against a plan of 43 went somewhere it was not
-        * meant to; one walked in 12 is a plan mostly not attempted. Said only
-        * when there is a plan to compare against.
-        */}
-      {round.plannedDistanceKm && round.travelledKm > 0 && (
-        <p className="mt-2 flex items-start gap-1.5 text-xs text-[var(--muted)]">
-          <Navigation size={12} className="mt-0.5 shrink-0" />
-          {distance(round.travelledKm)} between the calls actually made, against {Math.round(round.plannedDistanceKm)} km planned
-          {round.travelledApproximate ? " — some legs measured from a registered address" : ""}.
+  return <div className="px-5 py-4">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0">
+        {links.employee ? (
+          <Link href={links.employee(round.employeeId)}
+            className="text-base font-semibold hover:text-[var(--brand)]">{round.employeeName}</Link>
+        ) : <p className="text-base font-semibold">{title ?? "Your round"}</p>}
+        <p className="mt-0.5 text-xs text-[var(--muted)]">
+          {round.planName ? round.planName : "No plan assigned — own calls only"}
+          {round.plannedDistanceKm ? ` · ${Math.round(round.plannedDistanceKm)} km planned` : ""}
+          {round.firstCheckInAt ? ` · started ${clockOf(round.firstCheckInAt)}` : ""}
+          {round.lastActivityAt && round.state !== "not-started" ? ` · last seen ${clockOf(round.lastActivityAt)}` : ""}
         </p>
-      )}
-
-      {/*
-        * Said out loud when the in-clinic figure is built from fewer calls than
-        * were made — a visit checked into and never closed has no duration, and
-        * an average quietly computed over four of six calls is a figure somebody
-        * would otherwise take at face value.
-        */}
-      {round.measuredCalls < done && (
-        <p className="mt-2 flex items-start gap-1.5 text-xs text-[var(--muted)]">
-          <Clock size={12} className="mt-0.5 shrink-0" />
-          Timings come from {round.measuredCalls} of {done} calls — the rest were never checked out of.
-        </p>
-      )}
-
-      {round.samplesByProduct.length > 0 && (
-        <p className="mt-2 flex items-start gap-1.5 text-xs text-[var(--ink-2)]">
-          <Package size={12} className="mt-0.5 shrink-0 text-[var(--brand)]" />
-          <span>{round.samplesByProduct.map(sample => `${sample.product} ×${sample.quantity}`).join(" · ")}</span>
-        </p>
-      )}
+      </div>
+      <Badge tone={state.tone}>{state.label}</Badge>
     </div>
 
-    <ol className="divide-y divide-[var(--line)]">
+    {/* The bar is the thing somebody reads first, so it says its own numbers. */}
+    <div className="mt-3">
+      <div className="flex items-center justify-between text-xs font-medium">
+        <span>{done} of {round.total} visited</span>
+        <span className="text-[var(--muted)]">{share}%</span>
+      </div>
+      <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[var(--surface-2)]">
+        <div className="h-full rounded-full bg-[var(--brand)] transition-[width]" style={{ width: `${share}%` }} />
+      </div>
+    </div>
+
+    <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-7">
+      <Stat label="Worked" value={duration(round.workedMinutes)} />
+      <Stat label="In clinics" value={duration(round.inClinicMinutes)} />
+      <Stat label="Travel & waiting" value={duration(round.betweenMinutes)} />
+      <Stat label="Average call" value={round.averageCallMinutes ? formatDuration(round.averageCallMinutes) : "—"} />
+      <Stat label="Distance covered" value={round.travelledKm ? distance(round.travelledKm) : "—"} />
+      <Stat label="Sample units" value={round.sampleUnits} />
+      <Stat label="Orders" value={rupees(round.orderValue)} />
+    </div>
+
+    {/*
+      * A round walked in 61 km against a plan of 43 went somewhere it was not
+      * meant to; one walked in 12 is a plan mostly not attempted. Said only
+      * when there is a plan to compare against.
+      */}
+    {round.plannedDistanceKm && round.travelledKm > 0 && (
+      <p className="mt-2 flex items-start gap-1.5 text-xs text-[var(--muted)]">
+        <Navigation size={12} className="mt-0.5 shrink-0" />
+        {distance(round.travelledKm)} between the calls actually made, against {Math.round(round.plannedDistanceKm)} km planned
+        {round.travelledApproximate ? " — some legs measured from a registered address" : ""}.
+      </p>
+    )}
+
+    {/*
+      * Said out loud when the in-clinic figure is built from fewer calls than
+      * were made — a visit checked into and never closed has no duration, and
+      * an average quietly computed over four of six calls is a figure somebody
+      * would otherwise take at face value.
+      */}
+    {round.measuredCalls < done && (
+      <p className="mt-2 flex items-start gap-1.5 text-xs text-[var(--muted)]">
+        <Clock size={12} className="mt-0.5 shrink-0" />
+        Timings come from {round.measuredCalls} of {done} calls — the rest were never checked out of.
+      </p>
+    )}
+
+    {round.samplesByProduct.length > 0 && (
+      <p className="mt-2 flex items-start gap-1.5 text-xs text-[var(--ink-2)]">
+        <Package size={12} className="mt-0.5 shrink-0 text-[var(--brand)]" />
+        <span>{round.samplesByProduct.map(sample => `${sample.product} ×${sample.quantity}`).join(" · ")}</span>
+      </p>
+    )}
+  </div>;
+}
+
+function RoundCard({ round, isToday, links }: { round: Round; isToday: boolean; links: DayLinks }) {
+  return <Card className="overflow-hidden">
+    <RoundSummary round={round} isToday={isToday} links={links} />
+
+    <ol className="divide-y divide-[var(--line)] border-t border-[var(--line)]">
       {round.visits.map(visit => {
         const pending = !visit.settled;
         return <li key={visit.id} className={`flex gap-3 px-5 py-3.5 ${pending ? "bg-[var(--surface-2)]" : ""}`}>

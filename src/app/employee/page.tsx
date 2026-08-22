@@ -12,6 +12,8 @@ import { dayOf, endOfDay, formatDate, shiftDay, startOfDay, todayIso, todayRange
 import { RegisterVisit } from "@/components/visits/register-visit";
 import { callTimeOn } from "@/lib/doctors/call-schedule";
 import type { EditableWindow } from "@/components/doctors/call-schedule-editor";
+import { RoundSummary } from "@/components/visits/day-in-field";
+import { loadRounds } from "@/lib/rounds-load";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +56,7 @@ export default async function TodayPage() {
   const horizon = endOfDay(shiftDay(todayIso(), 3));
   const lookback = startOfDay(shiftDay(todayIso(), -7));
 
-  const [visits, plan, upcoming, followUps, dueBills] = await Promise.all([
+  const [visits, plan, upcoming, followUps, dueBills, rounds] = await Promise.all([
     Visit.find({ employee: session.userId, plannedDate: today })
       .populate("doctor", "name clinicName area city phones fullAddress location callSchedule")
       .sort({ plannedStart: 1 }).lean() as unknown as Promise<VisitDoc[]>,
@@ -74,8 +76,12 @@ export default async function TodayPage() {
       balanceDue: { $gt: 0 },
       $or: [{ dueDate: { $lte: horizon } }, { followUpDate: { $lte: horizon } }]
     }).select("invoiceNo balanceDue dueDate followUpDate billTo.name billTo.clinicName")
-      .sort({ dueDate: 1 }).limit(8).lean() as unknown as Promise<DueBillDoc[]>
+      .sort({ dueDate: 1 }).limit(8).lean() as unknown as Promise<DueBillDoc[]>,
+    // The day as the desk reads it — worked, in clinics, distance, samples —
+    // so the rep sees the figures they are judged on before anybody else does.
+    loadRounds({ day: todayIso(), employeeId: session.userId })
   ]);
+  const round = rounds[0];
 
   /*
    * One reminder per doctor, the earliest. Three visits that each promised a
@@ -97,24 +103,24 @@ export default async function TodayPage() {
     return { text: diff === -1 ? "tomorrow" : `in ${-diff} days`, tone: "info" as const };
   };
 
-  const done = visits.filter(visit => visit.status === "Completed" || visit.status === "Missed").length;
-  const progress = visits.length ? Math.round((done / visits.length) * 100) : 0;
   const next = visits.find(visit => visit.status === "Planned" || visit.status === "In progress");
 
   return <div className="space-y-4">
     <PageTitle title={`Good day, ${session.name.split(" ")[0]}`} subtitle={formatDate(new Date())} />
 
-    {visits.length > 0 && (
-      <Card className="flex items-center justify-between p-4">
-        <div>
-          <p className="text-xs text-[var(--muted)]">Today&apos;s progress</p>
-          <p className="mt-0.5 text-lg font-semibold">{done} of {visits.length} done</p>
-          {plan && <p className="mt-0.5 text-xs text-[var(--muted)]">{plan.name} · {plan.totalDistanceKm} km</p>}
-        </div>
-        <div className="grid size-14 shrink-0 place-items-center rounded-full"
-          style={{ background: `conic-gradient(var(--brand) ${progress}%, var(--line) 0)` }}>
-          <span className="grid size-11 place-items-center rounded-full bg-[var(--surface)] text-xs font-bold">{progress}%</span>
-        </div>
+    {/*
+      * My day, first. The same round summary the desk sees on its day view —
+      * progress, hours worked, time in clinics, distance, samples, orders —
+      * rather than a bare "3 of 8 done". The route itself, in visiting order
+      * with a button to start each call, is further down where it always was.
+      */}
+    {round && (
+      <Card className="overflow-hidden">
+        <RoundSummary round={round} isToday links={{ doctor: id => `/employee/doctors/${id}` }} title="My day" />
+        <Link href="/employee/visits/day"
+          className="tap flex items-center justify-center gap-1.5 border-t border-[var(--line)] text-sm font-semibold text-[var(--brand)]">
+          See the full day<ChevronRight size={15} />
+        </Link>
       </Card>
     )}
 
@@ -284,6 +290,9 @@ export default async function TodayPage() {
       </section>
     )}
 
+    <Link href="/employee/visits/day" className="card tap flex items-center justify-center gap-2 text-sm font-semibold">
+      <CalendarCheck size={16} />My day, any date
+    </Link>
     {plan && (
       <Link href="/employee/history" className="card tap flex items-center justify-center gap-2 text-sm font-semibold">
         <Route size={16} />See past visits
