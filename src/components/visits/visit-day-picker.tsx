@@ -24,20 +24,22 @@ const chip = (active: boolean) =>
  * It also means the row works with no JavaScript and `Show` is an ordinary
  * submit.
  */
-export function VisitDayPicker({ presets, date }: {
+export function VisitDayPicker({ presets, date, basePath }: {
   presets: DayChoice[];
   /** The day the page was rendered for — already checked, never raw input. */
   date: string;
+  /** The page this picker belongs to — the desk's day view or the rep's own. */
+  basePath: string;
 }) {
   return <Card className="space-y-3 p-4">
     <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
       {presets.map(preset => (
-        <a key={preset.label} href={`/admin/visits/day?date=${preset.date}`}
+        <a key={preset.label} href={`${basePath}?date=${preset.date}`}
           className={chip(date === preset.date)}>{preset.label}</a>
       ))}
     </div>
 
-    <form action="/admin/visits/day" method="get" className="flex flex-wrap items-center gap-2">
+    <form action={basePath} method="get" className="flex flex-wrap items-center gap-2">
       <label className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
         <span className="shrink-0 text-xs font-medium text-[var(--muted)]">Day</span>
         <input type="date" name="date" defaultValue={date} aria-label="The day to show"

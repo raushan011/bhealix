@@ -34,8 +34,10 @@ const chip = (active: boolean) =>
  * is half-typed for most of the time it takes to enter, and reloading on every
  * keystroke of a date is unusable.
  */
-export function VisitDateFilter({ presets, from, to, sample, status, products }: {
+export function VisitDateFilter({ presets, from, to, anyDay, sample, status, products }: {
   presets: DayPreset[];
+  /** Whether the reader asked for the whole log rather than the default day. */
+  anyDay: boolean;
   /** The days the page was rendered for — already checked, never raw input. */
   from: string; to: string;
   /** The sample filter in force: a product name, or one of the two specials. */
@@ -45,9 +47,10 @@ export function VisitDateFilter({ presets, from, to, sample, status, products }:
   /** Every product that could have been handed out, for the dropdown. */
   products: string[];
 }) {
-  const href = (next: { from?: string; to?: string; sample?: string }) => {
+  const href = (next: { from?: string; to?: string; sample?: string; all?: boolean }) => {
     const query = new URLSearchParams({
       ...(status ? { status } : {}),
+      ...(next.all ? { all: "1" } : {}),
       ...(next.from ? { from: next.from } : {}),
       ...(next.to ? { to: next.to } : {}),
       ...(next.sample ? { sample: next.sample } : {})
@@ -55,11 +58,12 @@ export function VisitDateFilter({ presets, from, to, sample, status, products }:
     return query ? `/admin/visits?${query}` : "/admin/visits";
   };
 
-  const filtered = Boolean(from || to || sample);
+  const filtered = Boolean(anyDay || from || to || sample);
 
   return <Card className="space-y-3 p-4">
     <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
-      <a href={href({ sample })} className={chip(!from && !to)}>Any day</a>
+      {/* The log opens on today, so "any day" has to be asked for by name. */}
+      <a href={href({ sample, all: true })} className={chip(anyDay && !from && !to)}>Any day</a>
       {presets.map(preset => (
         <a key={preset.label} href={href({ from: preset.from, to: preset.to, sample })}
           className={chip(from === preset.from && to === preset.to)}>{preset.label}</a>
@@ -70,6 +74,9 @@ export function VisitDateFilter({ presets, from, to, sample, status, products }:
         box is required, and one on its own filters from or up to that day. */}
     <form action="/admin/visits" method="get" className="flex flex-wrap items-center gap-2">
       {status && <input type="hidden" name="status" value={status} />}
+      {/* Boxes left empty mean the whole log, not today — that is what
+          clearing a date in a form has always meant. */}
+      <input type="hidden" name="all" value="1" />
 
       <label className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
         <span className="shrink-0 text-xs font-medium text-[var(--muted)]">From</span>

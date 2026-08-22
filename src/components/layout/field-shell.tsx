@@ -24,7 +24,7 @@ const TABS = [
 ] as const;
 
 /** The paths More owns, so its tab stays lit while the rep is inside one. */
-const UNDER_MORE = ["/employee/more", "/employee/samples", "/employee/history", "/employee/leave", "/employee/profile"];
+const UNDER_MORE = ["/employee/more", "/employee/samples", "/employee/history", "/employee/visits/day", "/employee/leave", "/employee/profile"];
 
 function isActive(pathname: string, href: string) {
   if (href === "/employee") return pathname === "/employee";

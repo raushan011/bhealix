@@ -63,11 +63,25 @@ function sampleFilter(sample?: string) {
 const SETTLED = ["Completed", "Missed"];
 
 export default async function VisitsPage({ searchParams }: {
-  searchParams: Promise<{ status?: string; from?: string; to?: string; sample?: string }>;
+  searchParams: Promise<{ status?: string; from?: string; to?: string; sample?: string; all?: string }>;
 }) {
   await requireAdminPanel();
-  const { status, from, to, sample } = await searchParams;
+  const { status, sample, all } = await searchParams;
+  let { from, to } = await searchParams;
   await connectDb();
+
+  // Worked out here rather than in the browser: the day a rep is having is the
+  // one this page must agree with, whatever clock the reader's laptop keeps.
+  const today = todayIso();
+
+  /*
+   * Opened with nothing asked, the log shows today. The question somebody has
+   * on arriving is nearly always "what has happened so far" — the whole feed,
+   * newest first, buries this morning under last week. The wider view is one
+   * chip away and says so in the address (`all=1`), so a link to it stays one.
+   */
+  const anyDay = all === "1";
+  if (!anyDay && !from && !to) { from = today; to = today; }
 
   // Everything a rep has ever handed over — taken from the visits rather than
   // the catalogue, because a product since retired is still in this log and a
@@ -115,9 +129,6 @@ export default async function VisitsPage({ searchParams }: {
     { label: "Missed", value: "Missed" }
   ];
 
-  // Worked out here rather than in the browser: the day a rep is having is the
-  // one this page must agree with, whatever clock the reader's laptop keeps.
-  const today = todayIso();
   const yesterday = shiftDay(today, -1);
   const presets = [
     { label: "Today", from: today, to: today },
@@ -172,6 +183,7 @@ export default async function VisitsPage({ searchParams }: {
         const active = status === tab.value || (!status && !tab.value);
         const query = new URLSearchParams({
           ...(tab.value ? { status: tab.value } : {}),
+          ...(anyDay ? { all: "1" } : {}),
           ...(fromDay ? { from: fromDay } : {}), ...(toDay ? { to: toDay } : {}),
           ...(sampleChoice ? { sample: sampleChoice } : {})
         }).toString();
@@ -182,7 +194,7 @@ export default async function VisitsPage({ searchParams }: {
       })}
     </div>
 
-    <VisitDateFilter presets={presets} from={fromDay} to={toDay}
+    <VisitDateFilter presets={presets} from={fromDay} to={toDay} anyDay={anyDay}
       sample={sampleChoice} status={status} products={products} />
 
     {visits.length > 0 && chosen && (

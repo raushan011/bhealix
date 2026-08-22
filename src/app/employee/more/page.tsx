@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Boxes, CalendarOff, ChevronRight, History, LogOut, Stethoscope, UserPlus, UserRound, Wallet } from "lucide-react";
+import { Boxes, CalendarOff, ChevronRight, ClipboardList, History, LogOut, Stethoscope, UserPlus, UserRound, Wallet } from "lucide-react";
 import { requireFieldPanel } from "@/lib/auth/guard";
 import { Card, PageTitle } from "@/components/ui/kit";
 import { SignOutButton } from "@/components/layout/sign-out-button";
@@ -16,6 +16,7 @@ export const dynamic = "force-dynamic";
 const LINKS = [
   { href: "/employee/doctors/new", label: "Add a doctor", hint: "Search by name, or enter one by hand", icon: UserPlus },
   { href: "/employee/samples", label: "My samples", hint: "What you were given and what you handed over", icon: Boxes },
+  { href: "/employee/visits/day", label: "My day", hint: "Your round as it went — time worked, distance, samples", icon: ClipboardList },
   { href: "/employee/history", label: "Visit history", hint: "Everywhere you have been", icon: History },
   { href: "/employee/leave", label: "Leave", hint: "Ask for time off and see where it stands", icon: CalendarOff },
   { href: "/employee/payslips", label: "My payslips", hint: "Every month you have been paid for", icon: Wallet },
