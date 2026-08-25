@@ -5,6 +5,7 @@ import { connectDb } from "@/lib/db/mongoose";
 import { RoutePlan } from "@/models/RoutePlan";
 import { Badge, Card, EmptyState, LinkButton, PageTitle, statusTone } from "@/components/ui/kit";
 import { DeletePlanButton } from "@/components/plans/delete-plan-button";
+import { DistanceFinderButton } from "@/components/plans/distance-finder-modal";
 import { formatDate, toDisplayTime, WEEKDAYS } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +24,10 @@ export default async function PlansPage() {
 
   return <div className="space-y-5">
     <PageTitle title="Route plans" subtitle="Day plans built around doctor call timings"
-      actions={<LinkButton href="/admin/plans/new"><Plus size={16} />New plan</LinkButton>} />
+      actions={<>
+        <DistanceFinderButton />
+        <LinkButton href="/admin/plans/new"><Plus size={16} />New plan</LinkButton>
+      </>} />
 
     {plans.length ? (
       <Card className="divide-y divide-[var(--line)]">
