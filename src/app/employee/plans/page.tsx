@@ -4,6 +4,7 @@ import { requireFieldPanel } from "@/lib/auth/guard";
 import { connectDb } from "@/lib/db/mongoose";
 import { RoutePlan } from "@/models/RoutePlan";
 import { Badge, EmptyState, LinkButton, PageTitle, statusTone } from "@/components/ui/kit";
+import { DistanceFinderButton } from "@/components/plans/distance-finder-modal";
 import { formatDate, todayRange, toDisplayTime, WEEKDAYS } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
@@ -64,7 +65,10 @@ export default async function MyPlansPage() {
 
   return <div className="space-y-5">
     <PageTitle title="My plans" subtitle="Routes assigned to you, and rounds you have planned yourself"
-      actions={<LinkButton href="/employee/plans/new"><Plus size={16} />Plan a round</LinkButton>} />
+      actions={<>
+        <DistanceFinderButton />
+        <LinkButton href="/employee/plans/new"><Plus size={16} />Plan a round</LinkButton>
+      </>} />
 
     {plans.length ? <>
       <Group title="Today" plans={today} />
