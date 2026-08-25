@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Doctor } from "@/models/Doctor";
-import { planRoute, planRouteFromPoint, type RoutableDoctor, type RoutePlanResult } from "@/lib/routing";
+import { RoutePlan } from "@/models/RoutePlan";
+import { planRoute, planRouteFromPoint, haversineKm, type RoutableDoctor, type RoutePlanResult } from "@/lib/routing";
 import { slotsForWeekday } from "@/lib/doctors/call-schedule";
 import { weekdayOf } from "@/lib/time";
 import { OBJECT_ID } from "@/lib/api";
@@ -83,4 +84,54 @@ export async function buildPlan(input: PlanInput): Promise<{ result: RoutePlanRe
       { startTime: input.startTime, visitMinutes: input.visitMinutes });
 
   return { result, doctors, weekday };
+}
+
+/**
+ * Keeps a plan's saved per-leg and total distance honest after a doctor's
+ * pin moves — every screen that shows a plan's distance (the plan itself, its
+ * list, the dashboard widget) reads a figure stored on `RoutePlan` at the
+ * moment the plan was built, not a live calculation, so correcting a doctor's
+ * location would otherwise leave every plan that already visits them quietly
+ * wrong until somebody reworks it by hand.
+ *
+ * Walks each plan's stops in the order they already have — this only ever
+ * refreshes the numbers, never who is visited or when, and never reorders a
+ * route nobody asked to be reordered. Completed plans are a record of what
+ * happened and are left alone; call timing and travel minutes are untouched
+ * for the same reason a rework is a deliberate action, not a side effect —
+ * only distance, the thing the doctor's location actually determines, moves.
+ */
+export async function refreshDistancesForDoctor(doctorId: string): Promise<void> {
+  const plans = await RoutePlan.find({ "stops.doctor": doctorId, status: { $ne: "Completed" } });
+  if (!plans.length) return;
+
+  for (const plan of plans) {
+    const ordered = [...plan.stops].sort((a: { sequence: number }, b: { sequence: number }) => a.sequence - b.sequence);
+    const ids = ordered.map((stop: { doctor: unknown }) => String(stop.doctor));
+
+    const doctors = await Doctor.find({ _id: { $in: ids } }).select("location").lean() as unknown as
+      Array<{ _id: unknown; location?: { coordinates?: number[] } }>;
+    const byId = new Map(doctors.map(d => [String(d._id), d]));
+
+    // A stop whose doctor was removed, or never had a location, makes the walk
+    // unsafe — the plan is left as it was rather than writing a partial figure.
+    if (ids.some(id => (byId.get(id)?.location?.coordinates?.length ?? 0) !== 2)) continue;
+
+    const points = ids.map(id => {
+      const [longitude, latitude] = byId.get(id)!.location!.coordinates!;
+      return { latitude, longitude };
+    });
+    const origin = plan.origin
+      ? { latitude: plan.origin.location.coordinates[1], longitude: plan.origin.location.coordinates[0] }
+      : points[0];
+
+    let totalDistanceKm = 0;
+    ordered.forEach((stop: { distanceFromPreviousKm: number }, index: number) => {
+      const distance = index === 0 && !plan.origin ? 0 : Number(haversineKm(index === 0 ? origin : points[index - 1], points[index]).toFixed(2));
+      stop.distanceFromPreviousKm = distance;
+      totalDistanceKm += distance;
+    });
+    plan.totalDistanceKm = Number(totalDistanceKm.toFixed(2));
+    await plan.save();
+  }
 }

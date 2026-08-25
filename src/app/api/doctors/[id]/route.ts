@@ -5,6 +5,7 @@ import { Visit } from "@/models/Visit";
 import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
+import { refreshDistancesForDoctor } from "@/lib/plans";
 
 const updateSchema = z.object({
   name: z.string().min(2).optional(),
@@ -61,7 +62,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     const doctor = await Doctor.findByIdAndUpdate(id, update, { new: true, runValidators: true });
-    return doctor ? ok(doctor) : badRequest("Doctor not found", 404);
+    if (!doctor) return badRequest("Doctor not found", 404);
+
+    // The doctor's own record is right immediately; every plan that already
+    // visits them still shows whatever distance was true when it was built,
+    // so this brings those figures back in line with where they actually are.
+    if (update.location) await refreshDistancesForDoctor(id);
+
+    return ok(doctor);
   } catch (error) {
     return fail(error);
   }
