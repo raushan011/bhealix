@@ -43,6 +43,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const date = new Date(year, month - 1, day);
     const assignedTo = input.assignedTo === undefined ? plan.assignedTo : input.assignedTo;
 
+    // Assigned directly rather than through `.set()` below: reworking a plan to
+    // start from a doctor needs this cleared, and a plain assignment is the
+    // reliable way to drop a single nested subdocument on save.
+    plan.origin = input.origin.kind !== "doctor" ? {
+      kind: input.origin.kind, label: input.origin.label,
+      location: { type: "Point", coordinates: [input.origin.longitude, input.origin.latitude] }
+    } : undefined;
+
     plan.set({
       name: input.name,
       date,

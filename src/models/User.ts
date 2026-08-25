@@ -68,6 +68,18 @@ const UserSchema = new Schema({
   address: String,
   emergencyContact: { name: String, relation: String, phone: String },
 
+  /**
+   * Where this person's day starts when they plan a round from home rather
+   * than from a doctor — set once from the route planner and reused after.
+   * Kept as GeoJSON, matching `Doctor.location`, so the same distance and
+   * Maps-link helpers work on both without a special case.
+   */
+  homeAddress: String,
+  homeLocation: {
+    type: { type: String, enum: ["Point"] },
+    coordinates: [Number]
+  },
+
   // Identification and payroll details an HR desk is expected to hold.
   panNumber: String,
   aadhaarLastFour: String,

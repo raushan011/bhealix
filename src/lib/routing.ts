@@ -87,58 +87,31 @@ function scheduleWithin(windows: Window[], arrival: number, visitMinutes: number
 }
 
 /**
- * Orders a day's doctors so their call timings are respected first and travel
- * distance second — the order a medical rep actually needs, because a doctor who
- * only sees reps from 2–4 PM cannot be visited at 10 AM however close they are.
+ * Greedy nearest-feasible-next: from wherever the rep currently is, look at
+ * every remaining doctor, work out when the meeting could begin, and take the
+ * one that starts soonest — breaking ties by distance so nearby doctors in the
+ * same window stay together. Doctors whose window can no longer be met are
+ * appended at the end and flagged.
  *
- * Greedy nearest-feasible-next: from each stop, look at every remaining doctor,
- * work out when the meeting could begin, and take the one that starts soonest —
- * breaking ties by distance so nearby doctors in the same window stay together.
- * Doctors whose window can no longer be met are appended at the end and flagged.
+ * Shared by both entry points below: `planRoute` seeds `stops` with the
+ * starting doctor's own visit before calling this, `planRouteFromPoint` calls
+ * it with nothing seeded because the starting point is not itself a stop.
  */
-export function planRoute(doctors: RoutableDoctor[], referenceId: string, options: PlanOptions): RoutePlanResult {
-  const reference = doctors.find(doctor => doctor.id === referenceId);
-  if (!reference) throw new Error("The starting doctor is not part of the selected list");
-
-  const dayStart = toMinutes(options.startTime);
-  if (dayStart === null) throw new Error("Start time must be in HH:MM format");
+function greedyFill(remaining: RoutableDoctor[], current: Coordinates, clock: number, stops: PlannedStop[], options: PlanOptions): RoutePlanResult {
   const speedKmh = options.speedKmh ?? 25;
   const { visitMinutes } = options;
-
   const travelTime = (from: Coordinates, to: Coordinates) => (haversineKm(from, to) / speedKmh) * 60;
 
-  const remaining = doctors.filter(doctor => doctor.id !== referenceId);
-  const stops: PlannedStop[] = [];
-
-  const referenceWindows = windowsOf(reference);
-  const referenceStart = referenceWindows.length
-    ? scheduleWithin(referenceWindows, dayStart, visitMinutes) ?? dayStart
-    : dayStart;
-
-  stops.push({
-    id: reference.id,
-    sequence: 1,
-    distanceFromPreviousKm: 0,
-    travelMinutes: 0,
-    arrivalMinutes: dayStart,
-    startMinutes: referenceStart,
-    endMinutes: referenceStart + visitMinutes,
-    waitMinutes: Math.max(0, referenceStart - dayStart),
-    withinCallTime: referenceWindows.length === 0 || scheduleWithin(referenceWindows, dayStart, visitMinutes) !== null,
-    timingUnknown: referenceWindows.length === 0
-  });
-
-  let current: RoutableDoctor = reference;
-  let clock = referenceStart + visitMinutes;
+  const left = [...remaining];
   let totalDistanceKm = 0;
   let totalTravelMinutes = 0;
 
-  while (remaining.length) {
+  while (left.length) {
     type Candidate = { index: number; distanceKm: number; travel: number; arrival: number; start: number; feasible: boolean; unknown: boolean };
     let best: Candidate | null = null;
 
-    for (let index = 0; index < remaining.length; index++) {
-      const candidate = remaining[index];
+    for (let index = 0; index < left.length; index++) {
+      const candidate = left[index];
       const distanceKm = haversineKm(current, candidate);
       const travel = travelTime(current, candidate);
       const arrival = clock + travel;
@@ -161,7 +134,7 @@ export function planRoute(doctors: RoutableDoctor[], referenceId: string, option
     }
 
     if (!best) break;
-    const [chosen] = remaining.splice(best.index, 1);
+    const [chosen] = left.splice(best.index, 1);
     totalDistanceKm += best.distanceKm;
     totalTravelMinutes += best.travel;
 
@@ -190,4 +163,57 @@ export function planRoute(doctors: RoutableDoctor[], referenceId: string, option
     outsideCallTimeCount: stops.filter(stop => !stop.withinCallTime).length,
     unknownTimingCount: stops.filter(stop => stop.timingUnknown).length
   };
+}
+
+/**
+ * Orders a day's doctors so their call timings are respected first and travel
+ * distance second — the order a medical rep actually needs, because a doctor who
+ * only sees reps from 2–4 PM cannot be visited at 10 AM however close they are.
+ *
+ * The starting doctor is stop one of the day, at their own call time.
+ */
+export function planRoute(doctors: RoutableDoctor[], referenceId: string, options: PlanOptions): RoutePlanResult {
+  const reference = doctors.find(doctor => doctor.id === referenceId);
+  if (!reference) throw new Error("The starting doctor is not part of the selected list");
+
+  const dayStart = toMinutes(options.startTime);
+  if (dayStart === null) throw new Error("Start time must be in HH:MM format");
+  const { visitMinutes } = options;
+
+  const remaining = doctors.filter(doctor => doctor.id !== referenceId);
+
+  const referenceWindows = windowsOf(reference);
+  const referenceStart = referenceWindows.length
+    ? scheduleWithin(referenceWindows, dayStart, visitMinutes) ?? dayStart
+    : dayStart;
+
+  const stops: PlannedStop[] = [{
+    id: reference.id,
+    sequence: 1,
+    distanceFromPreviousKm: 0,
+    travelMinutes: 0,
+    arrivalMinutes: dayStart,
+    startMinutes: referenceStart,
+    endMinutes: referenceStart + visitMinutes,
+    waitMinutes: Math.max(0, referenceStart - dayStart),
+    withinCallTime: referenceWindows.length === 0 || scheduleWithin(referenceWindows, dayStart, visitMinutes) !== null,
+    timingUnknown: referenceWindows.length === 0
+  }];
+
+  return greedyFill(remaining, reference, referenceStart + visitMinutes, stops, options);
+}
+
+/**
+ * The same ordering, but starting from a point that is nobody's doctor — a
+ * rep's home, their current location, or anywhere else with a coordinate.
+ * Unlike `planRoute`, the starting point spends no time and is never itself a
+ * stop: the day's clock starts ticking at `startTime` and the first entry in
+ * the result is whichever doctor the greedy search reaches first from there.
+ */
+export function planRouteFromPoint(doctors: RoutableDoctor[], origin: Coordinates, options: PlanOptions): RoutePlanResult {
+  const dayStart = toMinutes(options.startTime);
+  if (dayStart === null) throw new Error("Start time must be in HH:MM format");
+  if (!doctors.length) throw new Error("Add at least one doctor to visit");
+
+  return greedyFill(doctors, origin, dayStart, [], options);
 }

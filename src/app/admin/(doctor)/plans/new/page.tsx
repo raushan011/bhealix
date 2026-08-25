@@ -3,13 +3,25 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, CalendarDays, Check, Clock, ExternalLink, MapPin, Navigation, Route, Save, TriangleAlert, Trash2, Upload, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, Check, Clock, ExternalLink, MapPin, Navigation, Route, Save, TriangleAlert, Trash2, Upload } from "lucide-react";
 import { Button, Card, Field, Notice, PageTitle, Spinner, Stat } from "@/components/ui/kit";
 import { DoctorPicker, placeOf, type PickableDoctor } from "@/components/doctors/doctor-picker";
+import { StartingPointPicker, type PlanOriginValue } from "@/components/plans/starting-point-picker";
 import { callTimeOn } from "@/lib/doctors/call-schedule";
 import { fromExcelRow } from "@/lib/doctors/discovery";
 import { directionsUrl, routeUrl } from "@/lib/maps";
 import { WEEKDAYS, formatDuration, toDateInput, todayIso, toDisplayTime, weekdayOf } from "@/lib/time";
+
+/** The request body's shape for where the day starts, from a picked origin. */
+function originPayload(origin: PlanOriginValue) {
+  return origin.kind === "doctor"
+    ? { kind: "doctor" as const, doctorId: origin.doctor._id }
+    : { kind: origin.kind, label: origin.label, latitude: origin.latitude, longitude: origin.longitude };
+}
+/** `routeUrl`/`directionsUrl` speak GeoJSON — [longitude, latitude]. */
+function originLocated(origin: PlanOriginValue | null) {
+  return origin && origin.kind !== "doctor" ? { location: { coordinates: [origin.longitude, origin.latitude] } } : null;
+}
 
 type Stop = {
   sequence: number; doctor: PickableDoctor; distanceFromPreviousKm: number;
@@ -21,10 +33,15 @@ type Preview = {
   finishTime: string; outsideCallTimeCount: number; unknownTimingCount: number;
 };
 type FieldStaff = { _id: string; name: string; employeeId: string; role: string };
-/** An existing plan being reworked. Stop one is the starting doctor. */
+/**
+ * An existing plan being reworked. When `origin` is absent the day started
+ * from a doctor and stop one *is* that doctor, same as every plan before this
+ * field existed; when present, none of the stops is the starting point.
+ */
 type LoadedPlan = {
   name: string; date: string; startTime?: string; visitMinutes?: number;
   assignedTo?: { _id?: unknown } | null;
+  origin?: { kind: "location" | "home" | "custom"; label: string; location: { coordinates: number[] } };
   stops: Array<{ sequence: number; doctor?: PickableDoctor }>;
 };
 
@@ -48,7 +65,7 @@ function PlanBuilder() {
   const [name, setName] = useState("");
   const [startTime, setStartTime] = useState("09:30");
   const [visitMinutes, setVisitMinutes] = useState(45);
-  const [reference, setReference] = useState<PickableDoctor | null>(null);
+  const [origin, setOrigin] = useState<PlanOriginValue | null>(null);
   const [selected, setSelected] = useState<PickableDoctor[]>([]);
   const [team, setTeam] = useState<FieldStaff[]>([]);
   const [assignedTo, setAssignedTo] = useState("");
@@ -89,8 +106,15 @@ function PlanBuilder() {
         setStartTime(plan.startTime ?? "09:30");
         setVisitMinutes(plan.visitMinutes ?? 45);
         setAssignedTo(plan.assignedTo?._id ? String(plan.assignedTo._id) : "");
-        setReference(doctors[0] ?? null);
-        setSelected(doctors.slice(1));
+
+        if (plan.origin) {
+          const [longitude, latitude] = plan.origin.location.coordinates;
+          setOrigin({ kind: plan.origin.kind, label: plan.origin.label, latitude, longitude });
+          setSelected(doctors);
+        } else {
+          setOrigin(doctors[0] ? { kind: "doctor", doctor: doctors[0] } : null);
+          setSelected(doctors.slice(1));
+        }
       } catch (problem) {
         if (!cancelled) setError(problem instanceof Error ? problem.message : "Could not open that plan");
       } finally {
@@ -100,7 +124,7 @@ function PlanBuilder() {
     return () => { cancelled = true; };
   }, [editingId]);
 
-  const excludeIds = new Set([reference?._id, ...selected.map(d => d._id)].filter((id): id is string => Boolean(id)));
+  const excludeIds = new Set([origin?.kind === "doctor" ? origin.doctor._id : undefined, ...selected.map(d => d._id)].filter((id): id is string => Boolean(id)));
   const reset = () => { setPreview(null); setError(""); };
 
   function addDoctor(doctor: PickableDoctor) { reset(); setSelected(current => [...current, doctor]); }
@@ -140,14 +164,14 @@ function PlanBuilder() {
   }
 
   async function calculate() {
-    if (!reference || !selected.length) return;
+    if (!origin || !selected.length) return;
     setCalculating(true); setError(""); setPreview(null);
     try {
       const response = await fetch("/api/plans/preview", {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          date, referenceDoctorId: reference._id,
-          doctorIds: [reference._id, ...selected.map(d => d._id)],
+          date, origin: originPayload(origin),
+          doctorIds: origin.kind === "doctor" ? [origin.doctor._id, ...selected.map(d => d._id)] : selected.map(d => d._id),
           startTime, visitMinutes
         })
       });
@@ -160,7 +184,7 @@ function PlanBuilder() {
   }
 
   async function save() {
-    if (!preview || !reference) return;
+    if (!preview || !origin) return;
     setSaving(true); setError("");
     try {
       // Reworking an existing plan replaces it rather than leaving a duplicate.
@@ -168,8 +192,8 @@ function PlanBuilder() {
         method: editingId ? "PUT" : "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          name, date, referenceDoctorId: reference._id,
-          doctorIds: [reference._id, ...selected.map(d => d._id)],
+          name, date, origin: originPayload(origin),
+          doctorIds: origin.kind === "doctor" ? [origin.doctor._id, ...selected.map(d => d._id)] : selected.map(d => d._id),
           startTime, visitMinutes,
           assignedTo: assignedTo || (editingId ? null : undefined)
         })
@@ -184,7 +208,8 @@ function PlanBuilder() {
     }
   }
 
-  const link = preview ? routeUrl(preview.stops.map(stop => stop.doctor)) : null;
+  const startPoint = originLocated(origin);
+  const link = preview ? routeUrl(startPoint ? [startPoint, ...preview.stops.map(stop => stop.doctor)] : preview.stops.map(stop => stop.doctor)) : null;
 
   if (loadingExisting) return <Spinner label="Opening that plan…" />;
 
@@ -218,33 +243,18 @@ function PlanBuilder() {
     </Card>
 
     <Card className="p-5">
-      <Step n={2} title="Starting doctor" hint="The day begins here." done={Boolean(reference)} />
+      <Step n={2} title="Where the day starts" hint="A doctor, a saved home, your current location, or any other place." done={Boolean(origin)} />
       <div className="mt-4 sm:pl-8">
-        {reference ? (
-          <div className="flex items-center gap-3 rounded-[10px] border border-[var(--brand)] bg-[var(--brand-soft)]/40 p-3">
-            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-[var(--on-brand)]"><Navigation size={15} /></span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">{reference.name}</p>
-              <p className="truncate text-xs text-[var(--muted)]">{placeOf(reference)}</p>
-              <p className={`mt-0.5 flex items-center gap-1 text-xs font-medium ${callTimeOn(reference, weekday) ? "text-[var(--brand)]" : "text-[var(--warn-ink)]"}`}>
-                <Clock size={11} />{callTimeOn(reference, weekday) ?? `No call time on ${WEEKDAYS[weekday]}`}
-              </p>
-            </div>
-            <button onClick={() => { setReference(null); reset(); }} aria-label="Change starting doctor"
-              className="tap grid shrink-0 place-items-center rounded-[10px] text-[var(--muted)] hover:bg-[var(--surface)]"><X size={16} /></button>
-          </div>
-        ) : (
-          <DoctorPicker weekday={weekday} excludeIds={excludeIds} onSelect={doctor => { setReference(doctor); reset(); }}
-            placeholder="Search the doctor you start the day from" />
-        )}
+        <StartingPointPicker weekday={weekday} excludeDoctorIds={excludeIds}
+          value={origin} onChange={value => { setOrigin(value); reset(); }} />
       </div>
     </Card>
 
-    <Card className={`p-5 ${reference ? "" : "pointer-events-none opacity-50"}`}>
+    <Card className={`p-5 ${origin ? "" : "pointer-events-none opacity-50"}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <Step n={3} title="Doctors to visit" hint="Search, or upload a sheet exported from Find doctors." done={selected.length > 0} />
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={uploadSheet} className="hidden" />
-        <Button tone="secondary" onClick={() => fileRef.current?.click()} disabled={!reference}><Upload size={15} />Upload sheet</Button>
+        <Button tone="secondary" onClick={() => fileRef.current?.click()} disabled={!origin}><Upload size={15} />Upload sheet</Button>
       </div>
 
       <div className="mt-4 space-y-3 sm:pl-8">
@@ -307,6 +317,16 @@ function PlanBuilder() {
         )}
 
         <ol className="space-y-2">
+          {startPoint && origin && origin.kind !== "doctor" && (
+            <li className="flex items-center gap-3 rounded-[10px] border border-[var(--line)] bg-[var(--surface-2)] p-3">
+              <span className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--ink-2)] text-[11px] font-bold text-[var(--on-brand)]">•</span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold">{origin.label}</p>
+                <p className="truncate text-xs text-[var(--muted)]">Starting point — not a visit</p>
+              </div>
+              <p className="shrink-0 text-xs font-bold text-[var(--brand)]">{toDisplayTime(startTime)}</p>
+            </li>
+          )}
           {preview.stops.map(stop => (
             <li key={stop.doctor._id} className={`flex items-center gap-3 rounded-[10px] border p-3 ${stop.withinCallTime ? "border-[var(--line)]" : "border-[var(--warn-line)] bg-[var(--warn-bg)]"}`}>
               <span className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-[11px] font-bold text-[var(--on-brand)]">{stop.sequence}</span>
@@ -319,7 +339,7 @@ function PlanBuilder() {
               </div>
               <div className="shrink-0 text-right">
                 <p className="text-xs font-bold text-[var(--brand)]">{toDisplayTime(stop.plannedStart)}</p>
-                <p className="text-[11px] text-[var(--muted)]">{stop.sequence === 1 ? "start" : `${stop.distanceFromPreviousKm} km`}</p>
+                <p className="text-[11px] text-[var(--muted)]">{stop.distanceFromPreviousKm > 0 ? `${stop.distanceFromPreviousKm} km` : "start"}</p>
               </div>
               {directionsUrl(stop.doctor) ? (
                 <a href={directionsUrl(stop.doctor)!} target="_blank" rel="noreferrer" aria-label={`Open ${stop.doctor.name} in Google Maps`}

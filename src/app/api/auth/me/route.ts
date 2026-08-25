@@ -8,7 +8,7 @@ export async function GET() {
     const auth = await apiSession();
     if ("response" in auth) return auth.response;
     await connectDb();
-    const user = await User.findById(auth.session.userId).select("name email employeeId role lastLoginAt").lean();
+    const user = await User.findById(auth.session.userId).select("name email employeeId role lastLoginAt homeAddress homeLocation").lean();
     return user ? ok(user) : Response.json({ error: "Account not found" }, { status: 404 });
   } catch (error) {
     return fail(error);

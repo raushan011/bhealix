@@ -4,13 +4,25 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Clock, ExternalLink, MapPin, Navigation, Route, Save, Trash2, TriangleAlert, X
+  ArrowLeft, Clock, ExternalLink, MapPin, Navigation, Route, Save, Trash2, TriangleAlert
 } from "lucide-react";
 import { Button, Card, Field, Notice, PageTitle, Stat } from "@/components/ui/kit";
 import { DoctorPicker, placeOf, type PickableDoctor } from "@/components/doctors/doctor-picker";
+import { StartingPointPicker, type PlanOriginValue } from "@/components/plans/starting-point-picker";
 import { callTimeOn } from "@/lib/doctors/call-schedule";
 import { directionsUrl, routeUrl } from "@/lib/maps";
 import { WEEKDAYS, formatDuration, todayIso, toDisplayTime, weekdayOf } from "@/lib/time";
+
+/** The request body's shape for where the day starts, from a picked origin. */
+function originPayload(origin: PlanOriginValue) {
+  return origin.kind === "doctor"
+    ? { kind: "doctor" as const, doctorId: origin.doctor._id }
+    : { kind: origin.kind, label: origin.label, latitude: origin.latitude, longitude: origin.longitude };
+}
+/** `routeUrl`/`directionsUrl` speak GeoJSON — [longitude, latitude]. */
+function originLocated(origin: PlanOriginValue | null) {
+  return origin && origin.kind !== "doctor" ? { location: { coordinates: [origin.longitude, origin.latitude] } } : null;
+}
 
 type Stop = {
   sequence: number; doctor: PickableDoctor; distanceFromPreviousKm: number;
@@ -35,7 +47,7 @@ export default function PlanMyRoute() {
   const [date, setDate] = useState(todayIso());
   const [startTime, setStartTime] = useState("09:30");
   const [visitMinutes, setVisitMinutes] = useState(45);
-  const [reference, setReference] = useState<PickableDoctor | null>(null);
+  const [origin, setOrigin] = useState<PlanOriginValue | null>(null);
   const [selected, setSelected] = useState<PickableDoctor[]>([]);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [calculating, setCalculating] = useState(false);
@@ -43,20 +55,20 @@ export default function PlanMyRoute() {
   const [error, setError] = useState("");
 
   const weekday = weekdayOf(date);
-  const excludeIds = new Set([reference?._id, ...selected.map(d => d._id)].filter((id): id is string => Boolean(id)));
+  const excludeIds = new Set([origin?.kind === "doctor" ? origin.doctor._id : undefined, ...selected.map(d => d._id)].filter((id): id is string => Boolean(id)));
   // Any change invalidates the route already built, so it is cleared rather
   // than left on screen describing a plan that no longer matches the inputs.
   const reset = () => { setPreview(null); setError(""); };
 
   async function calculate() {
-    if (!reference || !selected.length) return;
+    if (!origin || !selected.length) return;
     setCalculating(true); setError(""); setPreview(null);
     try {
       const response = await fetch("/api/plans/preview", {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          date, referenceDoctorId: reference._id,
-          doctorIds: [reference._id, ...selected.map(d => d._id)],
+          date, origin: originPayload(origin),
+          doctorIds: origin.kind === "doctor" ? [origin.doctor._id, ...selected.map(d => d._id)] : selected.map(d => d._id),
           startTime, visitMinutes
         })
       });
@@ -69,15 +81,15 @@ export default function PlanMyRoute() {
   }
 
   async function save() {
-    if (!preview || !reference) return;
+    if (!preview || !origin) return;
     setSaving(true); setError("");
     try {
       const response = await fetch("/api/plans", {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({
           name: `${WEEKDAYS[weekday]} round – ${date}`,
-          date, referenceDoctorId: reference._id,
-          doctorIds: [reference._id, ...selected.map(d => d._id)],
+          date, origin: originPayload(origin),
+          doctorIds: origin.kind === "doctor" ? [origin.doctor._id, ...selected.map(d => d._id)] : selected.map(d => d._id),
           startTime, visitMinutes
           // No assignedTo: the server puts the plan in the name of whoever built it.
         })
@@ -92,7 +104,8 @@ export default function PlanMyRoute() {
     }
   }
 
-  const link = preview ? routeUrl(preview.stops.map(stop => stop.doctor)) : null;
+  const startPoint = originLocated(origin);
+  const link = preview ? routeUrl(startPoint ? [startPoint, ...preview.stops.map(stop => stop.doctor)] : preview.stops.map(stop => stop.doctor)) : null;
 
   return <div className="space-y-4 pb-6">
     <Link href="/employee/plans" className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--brand)]">
@@ -118,29 +131,13 @@ export default function PlanMyRoute() {
     <Card className="space-y-3 p-4">
       <div>
         <h2 className="text-[15px] font-semibold">Where you start</h2>
-        <p className="mt-0.5 text-sm text-[var(--muted)]">The first doctor of the day.</p>
+        <p className="mt-0.5 text-sm text-[var(--muted)]">A doctor, home, your current location, or any other place.</p>
       </div>
-      {reference ? (
-        <div className="flex items-center gap-3 rounded-[10px] border border-[var(--brand)] bg-[var(--brand-soft)]/40 p-3">
-          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-[var(--on-brand)]"><Navigation size={15} /></span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">{reference.name}</p>
-            <p className="truncate text-xs text-[var(--muted)]">{placeOf(reference)}</p>
-            <p className={`mt-0.5 flex items-center gap-1 text-xs font-medium ${callTimeOn(reference, weekday) ? "text-[var(--brand)]" : "text-[var(--warn-ink)]"}`}>
-              <Clock size={11} />{callTimeOn(reference, weekday) ?? `No call time on ${WEEKDAYS[weekday]}`}
-            </p>
-          </div>
-          <button onClick={() => { setReference(null); reset(); }} aria-label="Change the starting doctor"
-            className="tap grid shrink-0 place-items-center rounded-[10px] text-[var(--muted)]"><X size={16} /></button>
-        </div>
-      ) : (
-        <DoctorPicker weekday={weekday} excludeIds={excludeIds}
-          onSelect={doctor => { setReference(doctor); reset(); }}
-          placeholder="Search the doctor you start from" />
-      )}
+      <StartingPointPicker weekday={weekday} excludeDoctorIds={excludeIds}
+        value={origin} onChange={value => { setOrigin(value); reset(); }} />
     </Card>
 
-    <Card className={`space-y-3 p-4 ${reference ? "" : "pointer-events-none opacity-50"}`}>
+    <Card className={`space-y-3 p-4 ${origin ? "" : "pointer-events-none opacity-50"}`}>
       <div>
         <h2 className="text-[15px] font-semibold">Who else you are seeing</h2>
         <p className="mt-0.5 text-sm text-[var(--muted)]">Add them in any order — the round is worked out for you.</p>
@@ -198,6 +195,16 @@ export default function PlanMyRoute() {
       )}
 
       <ol className="space-y-2">
+        {startPoint && origin && origin.kind !== "doctor" && (
+          <li className="flex items-center gap-3 rounded-[10px] border border-[var(--line)] bg-[var(--surface-2)] p-3">
+            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--ink-2)] text-[11px] font-bold text-[var(--on-brand)]">•</span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">{origin.label}</p>
+              <p className="truncate text-xs text-[var(--muted)]">Starting point — not a visit</p>
+            </div>
+            <p className="shrink-0 text-xs font-bold text-[var(--brand)]">{toDisplayTime(startTime)}</p>
+          </li>
+        )}
         {preview.stops.map(stop => (
           <li key={stop.doctor._id}
             className={`flex items-center gap-3 rounded-[10px] border p-3 ${stop.withinCallTime ? "border-[var(--line)]" : "border-[var(--warn-line)] bg-[var(--warn-bg)]"}`}>
@@ -210,7 +217,7 @@ export default function PlanMyRoute() {
             </div>
             <div className="shrink-0 text-right">
               <p className="text-xs font-bold text-[var(--brand)]">{toDisplayTime(stop.plannedStart)}</p>
-              <p className="text-[11px] text-[var(--muted)]">{stop.sequence === 1 ? "start" : `${stop.distanceFromPreviousKm} km`}</p>
+              <p className="text-[11px] text-[var(--muted)]">{stop.distanceFromPreviousKm > 0 ? `${stop.distanceFromPreviousKm} km` : "start"}</p>
             </div>
             {directionsUrl(stop.doctor) && (
               <a href={directionsUrl(stop.doctor)!} target="_blank" rel="noreferrer" aria-label={`Directions to ${stop.doctor.name}`}

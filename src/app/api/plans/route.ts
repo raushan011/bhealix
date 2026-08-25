@@ -72,6 +72,15 @@ export async function POST(request: Request) {
       weekday,
       startTime: input.startTime,
       visitMinutes: input.visitMinutes,
+      // A doctor start needs nothing extra — stop one already is the start,
+      // same as every plan before this field existed. Only a home, current
+      // location or custom place needs its own coordinate recorded.
+      ...(input.origin.kind !== "doctor" ? {
+        origin: {
+          kind: input.origin.kind, label: input.origin.label,
+          location: { type: "Point", coordinates: [input.origin.longitude, input.origin.latitude] }
+        }
+      } : {}),
       stops: result.stops.map(stop => ({
         doctor: stop.id,
         sequence: stop.sequence,
