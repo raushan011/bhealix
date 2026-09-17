@@ -4,10 +4,15 @@ import { z } from "zod";
  * A company that pressed "Book a demo".
  *
  * The product's own pipeline, as distinct from everything else in the app,
- * which is the *customer's* pipeline. A request arrives from the public site
- * with no account behind it, lands in the super administrator's control room,
- * and is worked there — rung, shown the product, sent a proposal, won or lost.
- * Pure here: the model, the two routes and the screen all import from this file.
+ * which is the *customer's* pipeline. A request arrived from the public site
+ * with no account behind it, landed in the super administrator's control room,
+ * and was worked there — rung, shown the product, sent a proposal, won or lost.
+ * Pure here: the model, the routes and the screen all import from this file.
+ *
+ * The public site itself now lives on the `marketing-site` branch, so nothing
+ * on `main` takes a new request; the control room still reads the ones already
+ * taken. The intake half of this file is kept rather than deleted — see
+ * `demoRequestSchema` below.
  */
 
 export const DEMO_LEAD_STATUSES = ["New", "Contacted", "Demo booked", "Proposal sent", "Won", "Lost"] as const;
@@ -38,7 +43,15 @@ export const TEAM_SIZES = ["1–10", "11–50", "51–200", "200+"] as const;
 
 const phone = z.string().trim().min(6, "Enter a phone number we can reach you on").max(20);
 
-/** What the public form may send. Nothing here is trusted past this schema. */
+/**
+ * What the public form may send. Nothing here is trusted past this schema.
+ *
+ * Unused on `main` since the public site moved to `marketing-site`, and kept
+ * deliberately: that branch's `/api/demo/request` imports it, and the branch
+ * never touched this file. Delete it here and the merge that brings the site
+ * back would quietly keep the deletion, handing the route an import that is
+ * not there. It is a dozen lines; leaving them costs less than that bug.
+ */
 export const demoRequestSchema = z.object({
   name: z.string().trim().min(2, "Enter your name").max(80),
   company: z.string().trim().min(2, "Enter your company's name").max(120),

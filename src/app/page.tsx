@@ -1,21 +1,20 @@
-import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { landingFor } from "@/constants/access";
-import { LandingPage } from "@/components/marketing/landing";
-
-export const metadata: Metadata = {
-  title: "BHEALIX CRM — field sales, online sales and the back office in one system",
-  description: "Plan field visits around each clinic's call hours, sync Shopify orders and pay affiliate commissions on delivery, ring every customer back, and raise GST invoices and payslips — from one system built for Indian business."
-};
 
 /**
- * Somebody signed in is sent to their panel; everybody else sees the product.
- * The chooser and the field panel are one redirect away, so a bookmark on the
- * root keeps working for staff exactly as it did when this was only a redirect.
+ * The root is a signpost, not a page.
+ *
+ * Signed in, it hands you to your own panel; signed out, to the sign-in screen
+ * — so a bookmark on the root keeps working for staff either way, and nobody
+ * without an account is shown anything but the door.
+ *
+ * It renders nothing itself, which is deliberate: one sign-in screen at
+ * `/login` means one form, one error path and one place to change it. The
+ * public marketing site that used to live here is parked on the
+ * `marketing-site` branch, along with a note on putting it back.
  */
 export default async function Home() {
   const session = await getSession();
-  if (session) redirect(landingFor(session.role));
-  return <LandingPage />;
+  redirect(session ? landingFor(session.role) : "/login");
 }
