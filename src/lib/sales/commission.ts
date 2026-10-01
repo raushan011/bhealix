@@ -324,7 +324,7 @@ export function recalculateCommission<T extends CommissionOrderLike>(
       })
     : {
         status: "Void" as CommissionStatus,
-        reason: `No commission rule is set for coupon codes ending ${order.ruleSuffix ?? "—"}. Add one under Sales settings.`
+        reason: `No commission rule is set for coupon codes ending ${order.ruleSuffix ?? "—"}. Add one under Affiliate CRM → Settings.`
       };
 
   const current = order.commission.status;

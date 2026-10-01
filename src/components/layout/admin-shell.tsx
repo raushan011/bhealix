@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BadgePercent, BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, FileArchive, HeartHandshake, Inbox, KeyRound, LayoutDashboard, LogOut, Menu, Package, PhoneCall, Plug, Receipt, Repeat, Search, Settings, ShoppingBag, Stethoscope, Tag, Truck, Users, Wallet, Warehouse, X, Zap } from "lucide-react";
+import { BadgeIndianRupee, BadgePercent, BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, FileArchive, HeartHandshake, Inbox, KeyRound, LayoutDashboard, LogOut, Menu, Package, PackagePlus, PhoneCall, Plug, Receipt, Repeat, Search, Settings, ShoppingBag, Stethoscope, Tag, Truck, UserPlus, Users, Wallet, Warehouse, X, Zap } from "lucide-react";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { NavIcon } from "@/components/layout/nav-icon";
 import { Brand, BrandMark } from "@/components/ui/brand";
@@ -34,34 +34,43 @@ const NAV = [
   { href: "/admin/products", label: "Products", icon: Package, roles: ["SUPERADMIN", "ADMIN"], group: "Trade", workspace: "doctor" },
   { href: "/admin/samples", label: "Samples", icon: Boxes, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Trade", workspace: "doctor" },
 
-  { href: "/admin/hr", label: "People", icon: HeartHandshake, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "People", workspace: "doctor" },
-  { href: "/admin/team", label: "Employees", icon: Users, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "People", workspace: "doctor" },
-  { href: "/admin/hr/attendance", label: "Attendance", icon: CalendarCheck, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "People", workspace: "doctor" },
-  { href: "/admin/hr/leave", label: "Leave", icon: ClipboardCheck, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "People", workspace: "doctor" },
-  { href: "/admin/hr/holidays", label: "Holidays", icon: CalendarDays, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "People", workspace: "doctor" },
-  { href: "/admin/hr/payroll", label: "Payroll", icon: Wallet, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "People", workspace: "doctor" },
+  // Every employee, whichever CRM they work in. Used to be the Doctor CRM's
+  // "People" heading, from when the field team was the only team there was.
+  { href: "/admin/hr", label: "Overview", icon: HeartHandshake, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "", workspace: "people" },
+  { href: "/admin/team", label: "Employees", icon: Users, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "People", workspace: "people" },
+  { href: "/admin/hr/attendance", label: "Attendance", icon: CalendarCheck, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "People", workspace: "people" },
+  { href: "/admin/hr/leave", label: "Leave", icon: ClipboardCheck, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "People", workspace: "people" },
+  { href: "/admin/hr/holidays", label: "Holidays", icon: CalendarDays, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "People", workspace: "people" },
+  { href: "/admin/hr/payroll", label: "Payroll", icon: Wallet, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Pay", workspace: "people" },
 
+  // Prospecting and re-contacting: the raw material the sales team works.
+  { href: "/admin/leads", label: "Leads", icon: Search, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "", workspace: "leads" },
+  // Every order the shop took, whoever brought it in, as a calling list.
+  { href: "/admin/leads/retarget", label: "Retarget", icon: PhoneCall, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Outreach", workspace: "leads" },
+  // Messages that go out with nobody pressing send, and what came back.
+  { href: "/admin/leads/automation", label: "Automation", icon: Zap, roles: ["SUPERADMIN", "ADMIN"], group: "Outreach", workspace: "leads" },
+
+  // The company's own sales executives. "Executives", not "Partners": these are
+  // staff on the payroll, handed leads, earning an incentive.
   { href: "/admin/sales", label: "Overview", icon: LayoutDashboard, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "", workspace: "sales" },
-  { href: "/admin/sales/leads", label: "Leads", icon: Search, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
-  // "Partners", not "Sales team". The Doctor CRM's Employees screen next door
-  // holds field sales executives, who are staff; this holds outside affiliates.
-  // Two links reading "sales …" in one application is how the two got confused.
-  { href: "/admin/sales/reps", label: "Partners", icon: Users, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
-  { href: "/admin/sales/coupons", label: "Coupons", icon: Tag, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
-  { href: "/admin/sales/orders", label: "Orders", icon: ShoppingBag, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
+  { href: "/admin/sales/executives", label: "Executives", icon: Users, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Team", workspace: "sales" },
+  { href: "/admin/sales/leads", label: "Lead assignment", icon: UserPlus, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Team", workspace: "sales" },
+  { href: "/admin/sales/orders", label: "Orders", icon: ShoppingBag, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Orders", workspace: "sales" },
+  { href: "/admin/sales/orders/new", label: "New order", icon: PackagePlus, roles: ["SUPERADMIN", "ADMIN"], group: "Orders", workspace: "sales" },
+  { href: "/admin/sales/incentives", label: "Incentives", icon: BadgeIndianRupee, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Orders", workspace: "sales" },
+  { href: "/admin/sales/settings", label: "Settings", icon: Settings, roles: ["SUPERADMIN", "ADMIN"], group: "Orders", workspace: "sales" },
+
+  { href: "/admin/affiliate", label: "Overview", icon: LayoutDashboard, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "", workspace: "affiliate" },
+  // "Partners", not "Sales team". Outside affiliates on commission, never staff.
+  { href: "/admin/affiliate/reps", label: "Partners", icon: Users, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Affiliate", workspace: "affiliate" },
+  { href: "/admin/affiliate/coupons", label: "Coupons", icon: Tag, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Affiliate", workspace: "affiliate" },
+  { href: "/admin/affiliate/orders", label: "Orders", icon: ShoppingBag, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Affiliate", workspace: "affiliate" },
   // Reading what came in and sending it are different jobs done by different
   // people at different times of day, so they are two screens rather than a mode
-  // of one. Orders answers "what did this coupon bring in"; this one is the
-  // morning's picking list.
-  { href: "/admin/sales/orders/process", label: "Process orders", icon: Truck, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
-  { href: "/admin/sales/payouts", label: "Payouts", icon: BadgePercent, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
-  // Every order the shop took, whoever brought it in, as a calling list —
-  // the one screen here that is about the whole customer base rather than
-  // the partners' slice of it.
-  { href: "/admin/sales/retarget", label: "Retarget", icon: PhoneCall, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Affiliate", workspace: "sales" },
-  // Messages that go out with nobody pressing send — and what came back.
-  { href: "/admin/sales/automation", label: "Automation", icon: Zap, roles: ["SUPERADMIN", "ADMIN"], group: "Affiliate", workspace: "sales" },
-  { href: "/admin/sales/settings", label: "Settings", icon: Settings, roles: ["SUPERADMIN", "ADMIN"], group: "Affiliate", workspace: "sales" },
+  // of one.
+  { href: "/admin/affiliate/orders/process", label: "Process orders", icon: Truck, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Affiliate", workspace: "affiliate" },
+  { href: "/admin/affiliate/payouts", label: "Payouts", icon: BadgePercent, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Affiliate", workspace: "affiliate" },
+  { href: "/admin/affiliate/settings", label: "Settings", icon: Settings, roles: ["SUPERADMIN", "ADMIN"], group: "Affiliate", workspace: "affiliate" },
 
   { href: "/admin/control", label: "Overview", icon: LayoutDashboard, roles: ["SUPERADMIN"], group: "", workspace: "control" },
   { href: "/admin/control/invoices", label: "Invoice vault", icon: FileArchive, roles: ["SUPERADMIN"], group: "Accounts", workspace: "control" },
@@ -72,15 +81,14 @@ const NAV = [
 ] as const;
 
 /**
- * Exact matching for the five that sit above others in the same path —
- * /admin/hr is the People dashboard, not an ancestor of Attendance,
- * /admin/sales is the affiliate overview rather than all of it,
- * /admin/sales/orders is the order list rather than the processing screen
- * beneath it, and /admin/control is the super admin overview rather than the
- * vault and the access screen under it. Any of them would otherwise light up
- * alongside the screen actually being looked at.
+ * Exact matching for the pages that sit above others in the same path: each
+ * panel's home, and the two order lists that have screens beneath them. Any of
+ * them would otherwise light up alongside the screen actually being looked at.
  */
-const EXACT = new Set(["/admin", "/admin/hr", "/admin/sales", "/admin/sales/orders", "/admin/control"]);
+const EXACT = new Set([
+  "/admin", "/admin/hr", "/admin/leads", "/admin/sales", "/admin/sales/orders",
+  "/admin/affiliate", "/admin/affiliate/orders", "/admin/control"
+]);
 const isActive = (pathname: string, href: string) =>
   EXACT.has(href) ? pathname === href : pathname.startsWith(href);
 const initials = (name: string) => name.trim().split(/\s+/).map(part => part[0]).slice(0, 2).join("").toUpperCase() || "?";

@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { homeFor, usesAdminPanel, usesFieldPanel, type Role } from "@/constants/access";
-import { apiWorkspaceOf, CHOOSE_PATH, WORKSPACE_HOME, WORKSPACE_LABEL, type Workspace } from "@/lib/workspace";
+import { homeFor, usesAdminPanel, usesExecutivePanel, usesFieldPanel, type Role } from "@/constants/access";
+import { apiWorkspaceOf, CHOOSE_PATH, executiveMayCall, WORKSPACE_HOME, WORKSPACE_LABEL, type Workspace } from "@/lib/workspace";
 import { PATH_HEADER } from "@/lib/auth/path-header";
 import { sessionMayEnter, storedGrantFor } from "./access";
 import { mayEnter, panelsFor } from "./grants";
@@ -39,6 +39,13 @@ export async function requireAdminPanel(): Promise<Session> {
 export async function requireFieldPanel(): Promise<Session> {
   const session = await requireSession();
   if (!usesFieldPanel(session.role)) redirect(homeFor(session.role));
+  return session;
+}
+
+/** For pages under /executive — the sales executive's own panel. */
+export async function requireExecutivePanel(): Promise<Session> {
+  const session = await requireSession();
+  if (!usesExecutivePanel(session.role)) redirect(homeFor(session.role));
   return session;
 }
 
@@ -81,7 +88,15 @@ export async function apiSession(allow?: (role: Role) => boolean):
   if (!session) return { response: Response.json({ error: "Please sign in again" }, { status: 401 }) };
   if (allow && !allow(session.role)) return { response: Response.json({ error: "You do not have access to this action" }, { status: 403 }) };
 
-  const workspace = apiWorkspaceOf((await headers()).get(PATH_HEADER) ?? "");
+  const path = (await headers()).get(PATH_HEADER) ?? "";
+
+  // A sales executive is held to the routes built for them — see
+  // `executiveMayCall` for why this is an allowlist and not a refusal list.
+  if (usesExecutivePanel(session.role) && !executiveMayCall(path)) {
+    return { response: Response.json({ error: "You do not have access to this action" }, { status: 403 }) };
+  }
+
+  const workspace = apiWorkspaceOf(path);
   if (workspace && usesAdminPanel(session.role) && !await sessionMayEnter(session, workspace)) {
     return { response: Response.json(
       { error: `Your access to the ${WORKSPACE_LABEL[workspace]} has been withdrawn. Ask a super administrator to restore it.` },

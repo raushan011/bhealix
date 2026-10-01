@@ -262,10 +262,10 @@ describe("panel access", () => {
     adminId = data.accounts.find(account => account.role === "ADMIN").id;
   });
 
-  // Left as it was found: an explicit grant of both, which behaves identically
-  // to the role default the other tests assume.
+  // Left as it was found: an explicit grant of every panel, which behaves
+  // identically to the role default the other tests assume.
   afterAll(async () => {
-    await sup.patch("/api/control/access", { userId: adminId, workspaces: ["doctor", "sales"] });
+    await sup.patch("/api/control/access", { userId: adminId, workspaces: ["doctor", "people", "leads", "sales", "affiliate"] });
   });
 
   it("is the super administrator's alone", async () => {
@@ -276,14 +276,15 @@ describe("panel access", () => {
     }
   });
 
-  it("lists desk accounts and leaves field staff out of it", async () => {
+  it("lists desk accounts and leaves field staff and sales executives out of it", async () => {
     const { data } = await sup.get("/api/control/access");
     const roles = new Set(data.accounts.map(account => account.role));
     expect(roles.has("ADMIN")).toBe(true);
     expect(roles.has("MR")).toBe(false);
     expect(roles.has("SALES")).toBe(false);
-    // Only the two CRMs can be handed out.
-    expect(data.workspaces.map(workspace => workspace.key)).toEqual(["doctor", "sales"]);
+    expect(roles.has("EXECUTIVE")).toBe(false);
+    // The five CRMs can be handed out; the super admin panel cannot.
+    expect(data.workspaces.map(workspace => workspace.key)).toEqual(["doctor", "people", "leads", "sales", "affiliate"]);
   });
 
   it("closes the API behind a withdrawn panel at once, not at the next sign-in", async () => {
@@ -296,7 +297,8 @@ describe("panel access", () => {
     // Same cookie, same session, no re-login — and the panel is shut.
     const after = await admin.get("/api/sales/overview");
     expect(after.status).toBe(403);
-    expect(after.error).toMatch(/Sales CRM/);
+    expect(after.error).toMatch(/Affiliate CRM/);
+    expect((await admin.get("/api/sales-team/overview")).status).toBe(403);
 
     // The panel they kept is untouched.
     expect((await admin.get("/api/doctors?limit=1")).status).toBe(200);
@@ -304,7 +306,7 @@ describe("panel access", () => {
 
   it("sends somebody whose panel was withdrawn to one they still hold", async () => {
     const admin = await as("ADMIN");
-    const page = await admin.get("/admin/sales", { raw: true });
+    const page = await admin.get("/admin/affiliate", { raw: true });
     expect(page.status).toBe(307);
     expect(page.headers.get("location")).toMatch(/\/admin$/);
   });
@@ -322,6 +324,6 @@ describe("panel access", () => {
   it("will not grant the super admin panel itself", async () => {
     const refused = await sup.patch("/api/control/access", { userId: adminId, workspaces: ["doctor", "control"] });
     expect(refused.status).toBe(400);
-    expect(refused.error).toMatch(/Doctor CRM and the Sales CRM/);
+    expect(refused.error).toMatch(/can be granted from here/);
   });
 });

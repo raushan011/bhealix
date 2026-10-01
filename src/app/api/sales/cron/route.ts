@@ -4,6 +4,7 @@ import { can } from "@/constants/access";
 import { badRequest, fail, ok } from "@/lib/api";
 import { IntegrationError } from "@/lib/sales/http";
 import { recalculateAll, recordedSync, syncAll } from "@/lib/sales/sync";
+import { syncTeamShipments, syncTeamShopify } from "@/lib/sales-team/server";
 
 /**
  * The nightly pass: pull what is new, then re-price everything not yet paid.
@@ -33,10 +34,19 @@ export async function GET(request: Request) {
 
     await connectDb();
 
+    /*
+     * The sales team's parcels go out through the same Shiprocket account, so
+     * the same nightly pass reads their status back — which is what turns a
+     * delivery into an incentive owed by morning. Run on its own and never
+     * allowed to fail the affiliate pass: they are separate businesses.
+     */
+    const teamShop = await syncTeamShopify().catch(() => null);
+    const team = { ...(await syncTeamShipments().catch(error => ({ error: error instanceof Error ? error.message : "Team sync failed" }))), shopify: teamShop };
+
     try {
       const report = await recordedSync(syncAll, { trigger: scheduled ? "Scheduled" : "Manual", target: "all" });
       const recalculated = await recalculateAll();
-      return ok({ ...report, commissionsRecalculated: recalculated, scheduled });
+      return ok({ ...report, commissionsRecalculated: recalculated, scheduled, team });
     } catch (error) {
       // A failed pull must not stop the re-pricing: a rule changed yesterday
       // should reach every open order whether or not Shopify answered today.

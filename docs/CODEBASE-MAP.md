@@ -45,7 +45,16 @@ operation:
 10. **Affiliate sales** — coupon-attributed Shopify orders, Shiprocket delivery status, automatic
     commission, paid one delivered order at a time.
 
-Two panels, one app: `/admin` (desktop, for ADMIN + HR) and `/employee` (mobile PWA, for MR + SALES).
+Three panels, one app: `/admin` (desktop, for SUPERADMIN + ADMIN + HR), `/employee` (mobile PWA, for MR +
+SALES) and `/executive` (the sales executive's own panel, for EXECUTIVE).
+
+> **Sales team and panel split (Oct 2026).** The old "Sales CRM" (`/admin/sales`, built for affiliates)
+> was split into the **Leads CRM** (`/admin/leads`: leads, retarget, automation) and the **Affiliate CRM**
+> (`/admin/affiliate`: partners, coupons, orders, process, payouts, settings). `/admin/sales` is now the
+> **Sales CRM** for the company's own sales executives (§6.17, §7.10, §8.10). HR and the employee directory
+> left the Doctor CRM for **HR & Employees** (`/admin/hr`, `/admin/team`, route group `(people)`). Old
+> affiliate URLs redirect (`next.config.ts`). Sections below that say "Sales CRM" about affiliates predate
+> the split — read them as Affiliate CRM.
 
 ### Three panels share the desk
 
@@ -488,9 +497,19 @@ therefore ADMIN's column plus the last three rows.
 | `processOrders` | ✓ | ✓ | | | book a parcel with the courier, print its invoice and label — spends freight, decides no commission |
 | `runSalesPayout` | ✓ | ✓ | | | prepare a week's payout and adjust its lines |
 | `approveSalesPayout` | ✓ | | | | approve, reopen, mark paid, delete a draft |
-| `manageAccess` | | | | | **SUPERADMIN only** — grant and withdraw the two CRMs |
+| `viewSalesTeam` | ✓ | ✓ | | | read the Sales CRM (executives, team orders, incentives) |
+| `manageSalesTeam` | ✓ | | | | assign leads, incentive rules and order channel, correct a delivery, move an order |
+| `placeSalesOrder` | ✓ | | | | place and book a team order (**also EXECUTIVE**, own orders only) |
+| `paySalesIncentive` | ✓ | | | | mark an incentive paid, undo a payment |
+| `manageAccess` | | | | | **SUPERADMIN only** — grant and withdraw the CRMs |
 | `viewFinance` | | | | | **SUPERADMIN only** — read the vendor invoice vault |
 | `manageFinance` | | | | | **SUPERADMIN only** — file, correct, delete, pull, close a month |
+
+**`EXECUTIVE` (sales executive)** is a sixth role with its own panel (`/executive`). It is neither a desk
+nor a field role: `usesFieldPanel` is false on purpose, because dozens of routes read it as "a rep, show
+only their own" and everything else as "the desk". Instead `apiSession` holds an executive to an
+**allowlist** (`lib/workspace.ts::executiveMayCall`: `/api/auth`, `/api/sales-team`, `/api/hr/leave`) and
+refuses everything else with 403. Ownership inside `/api/sales-team` is `lib/sales-team/access.ts`.
 
 Note `SALES` is a **field** role (a medical representative who also bills) and has nothing to do with
 the Sales CRM. An affiliate is a `SalesRep`, not a `User`, and has no login at all.
@@ -503,7 +522,8 @@ that is still `can.manageSales`.
 
 | Piece | File | What it does |
 |---|---|---|
-| `WORKSPACES` / `GRANTABLE_WORKSPACES` | `lib/workspace.ts` | `doctor`, `sales`, `control` — only the first two can be handed out |
+| `WORKSPACES` / `GRANTABLE_WORKSPACES` | `lib/workspace.ts` | `doctor`, `people`, `leads`, `sales`, `affiliate`, `control` — all but `control` can be handed out |
+| `storedGrantOf` / `GRANT_VERSION` | `lib/auth/grants.ts` | a grant without `User.workspacesVersion` was written when there were two CRMs and is read with its old meaning: `doctor` → doctor + people, `sales` → leads + affiliate + sales. The access screen stamps version 2 |
 | `workspaceOf(path)` / `apiWorkspaceOf(path)` | ″ | which panel a page or an API path belongs to |
 | `grantedWorkspaces` / `mayEnter` / `panelsFor` | `lib/auth/grants.ts` | the rules, pure and tested without a database |
 | `storedGrantFor` / `sessionMayEnter` / `panelsForSession` | `lib/auth/access.ts` | reads `User.workspaces`, memoised per request with React `cache` |
@@ -906,6 +926,29 @@ Only *exceptional* days are stored; the rest are inferred (§8.4).
 
 ---
 
+### 6.17 Sales team — `models/SalesTeam.ts`
+
+The company's own sales executives (role `EXECUTIVE`). Deliberately **not** `SalesOrder`, which is the
+affiliate operation's; the field names under `items`, `customer`, `totals`, `shipment`, `delivery` are kept
+identical so a team order goes through `lib/sales/booking.ts` unchanged.
+
+**`SalesTeamOrder`** — `name` (unique; the Shopify name `#1042` when placed through Shopify, else `ref`),
+`ref` (`BHX-SE-00042`, from `Counter` key `sales-team-order`), `channel` (`Shopify` | `Direct`),
+`shopifyOrderId` (unique sparse), `orderNumber`, `placedAt`, `executive` → User + `executiveName`
+snapshot, `lead` → SalesLead, `createdBy`, `customer{…}`, `items[{product?, variantId?, sku, title,
+quantity, price, gross, couponDiscount: 0, otherDiscount}]`, `totals{gross, discount, paid}`,
+`paymentMode` (`COD` | `Prepaid` | `Partial`), `paymentMethod` ("COD"/"Prepaid", for the booking code),
+`financialStatus`, `advancePaid`, `paymentReference`, `collectAmount`, `cancelledAt/Reason/By`,
+`shipment{…}` and `delivery{…}` as on `SalesOrder`, `incentive{enabled, type, value, base, amount, status,
+reason, needsReversal, computedAt, payment{paidAt, paidBy, paymentDate, mode, reference, note}}`, `notes`.
+
+**`SalesTeamSettings`** (`key: "sales-team"`) — `orderChannel` (default `Shopify`),
+`incentiveRules[{mode, enabled, type: Percentage|Flat, value}]`, `fulfilment` (last parcel),
+`lastShipmentSyncAt/Error`.
+
+**`SalesLead`** gained `assignedTo` → User, `assignedAt`, `assignedBy`, `convertedAt`; `LEAD_STATUSES`
+gained `Converted` (set only by placing an order from the lead). **`User`** gained `workspacesVersion`.
+
 ## 7. API reference
 
 All routes live under `src/app/api/`. Shared helpers in `lib/api.ts`:
@@ -1186,6 +1229,34 @@ somebody typed by hand.
 
 ---
 
+### 7.10 Sales team — `/api/sales-team/*` (workspace `sales`; executives allowed)
+
+| Route | Method | Guard | Notes |
+|---|---|---|---|
+| `/orders` | GET | scope (`viewSalesTeam`, or own for EXECUTIVE) | filters `q, executive, mode, delivery, incentive, status (unbooked/booked/failed/cancelled), lead, from, to`; `summary` covers the filtered set |
+| | POST | `placeSalesOrder` | totals worked out server-side; rule frozen; **Shopify channel: placed in Shopify first** (502 with the reason if it cannot be); lead → `Converted` |
+| `/orders/[id]` | GET | scope | `may{edit, cancel, book, track, documents, override, reassign, pay}`, `shopifyUrl` (desk only) |
+| | PATCH | scope, then per action | `edit` (direct, unbooked only) \| `cancel` (cancels in Shopify first) \| `override` (`manageSalesTeam`) \| `reassign` (`manageSalesTeam`, not once paid) |
+| `/orders/[id]/book` | POST | `placeSalesOrder` + owner | `processOrder()` — find before create, so a Shopify order already pushed to Shiprocket is found, not duplicated |
+| `/orders/[id]/track` | GET | scope | `trackByAwb`, written back through `applyShipmentUpdate` + `recalculateIncentive` |
+| `/orders/[id]/documents` | GET | scope | `?doc=invoice\|label`, streamed |
+| `/fulfilment` | GET / POST | `placeSalesOrder` | pickup addresses + last parcel / courier rates for one order |
+| `/incentives` | GET | scope | items + per-executive totals |
+| | POST | `paySalesIncentive` | `{action:"pay", orderIds, paymentDate, mode, reference?}` — one `updateMany` matched on `Payable`; `{action:"undo", orderId, reason}` |
+| `/overview` | GET | scope | per-executive totals, lead counts, unassigned leads, rules, last sync |
+| `/settings` | GET | desk or EXECUTIVE | rules, `orderChannel`, `shopifyRefusal` |
+| | PUT | `manageSalesTeam` | `{incentiveRules, orderChannel?, applyToUnpaid?}` |
+| `/leads` | GET | lead scope (own for EXECUTIVE) | `assigned=none\|any\|<id>`, `status`, `open=1`, `type`, `city`, `q` |
+| `/leads/assign` | POST | `manageSalesTeam` | `{leadIds, executive \| null}`; converted leads are left alone |
+| `/leads/[id]` | GET / POST | lead scope; POST desk admin or own executive | remark + status; `Converted` refused by hand |
+| `/products` | GET | place or view | Shopify variants (5-minute cache, `?fresh=1`) when the channel is Shopify, else the CRM catalogue |
+| `/customers` | GET | scope | `?phone=` → a repeat customer's last address |
+| `/executives` | GET | `viewSalesTeam` | |
+| `/sync` | POST | `viewSalesTeam` | `syncTeamShopify` (cancellations) then `syncTeamShipments`; also run by `/api/sales/cron` |
+
+`/api/team` POST now takes the whole employee record and an optional first `salary`
+(`lib/hr/employee-schema.ts`, shared with `/api/team/[id]` and `/api/hr/salary/[id]`).
+
 ## 8. Business logic
 
 ### 8.1 GST and invoice arithmetic — `lib/billing/gst.ts` (pure, tested)
@@ -1415,6 +1486,25 @@ to explain it. Every write is an upsert, so re-reading costs nothing. Shiprocket
 `auditLabel(action)` gives the human sentence. Adding an action means adding it to `AUDIT_ACTIONS`.
 
 ---
+
+### 8.10 Sales team — `lib/sales-team/*`
+
+- **Pure:** `orders.ts` (`priceOrder` spreads the discount so lines add up to the total; `collectAmountOf`;
+  `paymentProblem`; `priceIncentive`), `shopify-order.ts` (`buildShopifyOrder`), `schemas.ts`. Tested.
+- **Server:** `server.ts` (settings, numbering, `recalculateIncentive` — the only writer of
+  `incentive.status/amount`, `syncTeamShipments`, `syncTeamShopify`, `executiveSummaries`,
+  `shopifyReadiness`), `shopify-api.ts` (`sellableVariants`, `placeShopifyOrder`, `cancelShopifyOrder`),
+  `access.ts` (ownership).
+- **Incentive:** the rule for the payment mode is frozen on the order. `Pending` → `Payable` on
+  `Delivered` → `Paid` by an administrator; `Void` on cancel/RTO/return/loss; `Not eligible` when the mode is
+  switched off. A paid incentive is never restated — a later return sets `needsReversal` (§4.13a).
+- **Through Shopify:** no `customer` object (Shopify rejects a repeat phone); payment as transactions —
+  success for what was paid up front, pending COD for the balance (so Partial = `partially_paid`);
+  discount under `SALES-TEAM` (ends in no digits, so attribution ignores it, and it is marked ignored in the
+  coupon catalogue); tags `Sales team, exec-<employeeId>, <name>`; stock decremented by variant. Needs the
+  `write_orders` scope (added to `DEFAULT_SCOPES`; existing connections must Reconnect).
+- **Part payment at Shiprocket (Direct channel):** booked as COD with `total_discount` = advance, so
+  `codAmountOf()` collects the balance (`lib/sales/fulfilment.ts`).
 
 ## 9. UI layer
 

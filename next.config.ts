@@ -16,6 +16,26 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ["lucide-react"]
   },
+  /*
+   * The old "Sales CRM" was split into the Leads and Affiliate CRMs, and its
+   * address now belongs to the sales team. Old bookmarks and links in messages
+   * are sent to where the screen went rather than to a not-found page.
+   *
+   * Only addresses the new Sales CRM does not itself use. `/admin/sales`,
+   * `/admin/sales/orders`, `/admin/sales/leads` and `/admin/sales/settings` are
+   * its own screens now — redirects run before pages, so listing any of them
+   * here would make the new screen unreachable.
+   */
+  async redirects() {
+    return [
+      { source: "/admin/sales/retarget", destination: "/admin/leads/retarget", permanent: false },
+      { source: "/admin/sales/automation", destination: "/admin/leads/automation", permanent: false },
+      ...["reps", "coupons", "payouts"].map(section => ({
+        source: `/admin/sales/${section}/:path*`, destination: `/admin/affiliate/${section}/:path*`, permanent: false
+      })),
+      { source: "/admin/sales/orders/process", destination: "/admin/affiliate/orders/process", permanent: false }
+    ];
+  },
   async headers() {
     // Both files are unfingerprinted, and a cached service worker would pin the
     // browser to an old caching policy, so make them revalidate every time.

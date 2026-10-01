@@ -1,6 +1,6 @@
 import { IntegrationError } from "./http";
 import {
-  addressOf, blockedReason, buildAdhocOrder, missingFields, paymentModeOf, parcelValueOf, pickCourier,
+  addressOf, blockedReason, buildAdhocOrder, codAmountOf, missingFields, paymentModeOf, parcelValueOf, pickCourier,
   type Address, type BookableOrder, type CourierChoice, type Parcel
 } from "./fulfilment";
 import { assignAwb, createOrder, fetchShipmentFor, matchKeysFor, schedulePickup, serviceability } from "./shiprocket";
@@ -174,7 +174,7 @@ export async function processOrder(token: string, order: OrderDoc, input: Bookin
       "shipment.courierId": courierId,
       "shipment.pickupLocation": input.pickupLocation,
       "shipment.parcel": input.parcel,
-      "shipment.codAmount": cod ? parcelValueOf(order) : 0,
+      "shipment.codAmount": cod ? codAmountOf(order) : 0,
       ...(pickup ? { "shipment.pickupScheduledAt": pickup.scheduledAt, "shipment.pickupToken": pickup.token } : {}),
       "shipment.processedAt": new Date(),
       "shipment.processedBy": input.actor,

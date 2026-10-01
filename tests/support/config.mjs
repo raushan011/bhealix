@@ -63,7 +63,11 @@ export const ACCOUNTS = {
   MR: { employeeId: "TEST-MR", email: "test-mr@bhealix.test", name: "Test MR", role: "MR" },
   /** A second field account, so "can one rep read another rep's data?" is answerable. */
   MR2: { employeeId: "TEST-MR2", email: "test-mr2@bhealix.test", name: "Test MR Two", role: "MR" },
-  SALES: { employeeId: "TEST-SALES", email: "test-sales@bhealix.test", name: "Test Sales", role: "SALES" }
+  SALES: { employeeId: "TEST-SALES", email: "test-sales@bhealix.test", name: "Test Sales", role: "SALES" },
+  /** The company's own sales executive, with a panel of their own. */
+  EXECUTIVE: { employeeId: "TEST-EXEC", email: "test-exec@bhealix.test", name: "Test Executive", role: "EXECUTIVE" },
+  /** A second, so "can one executive see another's orders or leads?" is answerable. */
+  EXECUTIVE2: { employeeId: "TEST-EXEC2", email: "test-exec2@bhealix.test", name: "Test Executive Two", role: "EXECUTIVE" }
 };
 
 /** Every seeded record carries this, so cleanup can find its own litter and nothing else. */

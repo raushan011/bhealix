@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { connectDb } from "@/lib/db/mongoose";
 import { PayrollRun, Payslip } from "@/models/Payroll";
 import { requireSession } from "@/lib/auth/guard";
-import { can, homeFor, usesFieldPanel } from "@/constants/access";
+import { can, homeFor, usesExecutivePanel, usesFieldPanel } from "@/constants/access";
 import { OBJECT_ID } from "@/lib/api";
 import { loadSettings } from "@/lib/billing/invoices";
 import { loadPayrollSettings } from "@/lib/hr/payroll-run";
@@ -49,7 +49,7 @@ export default async function PayslipPrintPage({ params }: { params: Promise<{ i
   ]);
 
   const record = JSON.parse(JSON.stringify(payslip)) as PayslipRecord;
-  const back = usesFieldPanel(session.role) ? "/employee/payslips" : `/admin/hr/payroll`;
+  const back = usesFieldPanel(session.role) ? "/employee/payslips" : usesExecutivePanel(session.role) ? "/executive/payslips" : `/admin/hr/payroll`;
 
   return <div className="min-h-[100dvh] bg-[var(--surface-2)] py-4 print:bg-white print:py-0">
     <div className="no-print mx-auto mb-4 flex max-w-[210mm] flex-wrap items-center justify-between gap-3 px-4">

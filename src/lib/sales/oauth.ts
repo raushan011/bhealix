@@ -44,8 +44,14 @@ import { normaliseDomain } from "./shopify";
  * here means one handshake serves both rather than a second app existing purely
  * to read a fee.
  */
+/*
+ * `write_orders` is the sales team's: an executive's order is placed in the shop
+ * itself (see `lib/sales-team/shopify-order.ts`), so it is tracked, stocked and
+ * shipped like every other order. It grants creating and cancelling orders, and
+ * an existing connection only gains it after a Reconnect.
+ */
 export const DEFAULT_SCOPES = [
-  "read_orders", "read_products", "read_discounts", "write_discounts", "read_shopify_payments_payouts"
+  "read_orders", "write_orders", "read_products", "read_discounts", "write_discounts", "read_shopify_payments_payouts"
 ] as const;
 
 export const CALLBACK_PATH = "/api/sales/shopify/callback";

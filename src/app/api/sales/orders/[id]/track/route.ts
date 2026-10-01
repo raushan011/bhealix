@@ -42,7 +42,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
     const settings = await loadCredentials();
     const token = await shiprocketToken(settings);
-    if (!token) return badRequest("Shiprocket is not connected. Add the API user under Sales settings.", 502);
+    if (!token) return badRequest("Shiprocket is not connected. Add the API user under Affiliate CRM → Settings.", 502);
 
     try {
       const tracking = await trackByAwb(token, awb);

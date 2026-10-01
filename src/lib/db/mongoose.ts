@@ -20,6 +20,7 @@ import "@/models/Sample";
 import "@/models/HR";
 import "@/models/Payroll";
 import "@/models/Sales";
+import "@/models/SalesTeam";
 import "@/models/Finance";
 import "@/models/DemoLead";
 

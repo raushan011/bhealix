@@ -181,7 +181,24 @@ export const AUDIT_ACTIONS = {
    * being able to answer.
    */
   "finance.connection.updated": "Changed a supplier's API key",
-  "finance.connection.removed": "Removed a supplier's API key"
+  "finance.connection.removed": "Removed a supplier's API key",
+
+  /**
+   * The sales team. An order placed, booked or cancelled, a lead handed to an
+   * executive, and every incentive marked paid — the last being money leaving
+   * the company, which is always worth a line naming who said it had.
+   */
+  "team.order.created": "Placed a sales order",
+  "team.order.edited": "Edited a sales order",
+  "team.order.cancelled": "Cancelled a sales order",
+  "team.order.booked": "Booked a sales order with the courier",
+  "team.order.reassigned": "Moved a sales order to another executive",
+  "team.delivery.overridden": "Corrected a sales order's delivery",
+  "team.incentive.paid": "Marked an incentive paid",
+  "team.incentive.unpaid": "Undid an incentive payment",
+  "team.incentive.rules.updated": "Changed the incentive rules",
+  "team.leads.assigned": "Assigned leads to an executive",
+  "team.lead.remarked": "Added a remark to an assigned lead"
 } as const;
 
 export type AuditAction = keyof typeof AUDIT_ACTIONS;

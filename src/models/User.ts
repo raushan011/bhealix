@@ -36,6 +36,13 @@ const UserSchema = new Schema({
    * the database to "decided, and decided to be nothing".
    */
   workspaces: { type: [String], enum: GRANTABLE_WORKSPACES, default: undefined },
+  /**
+   * Which generation of panels `workspaces` was written against — see
+   * `lib/auth/grants.ts::storedGrantOf`. Absent on every grant recorded before
+   * the Sales CRM was split into Leads, Sales and Affiliate, and read as that
+   * older meaning.
+   */
+  workspacesVersion: Number,
   active: { type: Boolean, default: true },
   lastLoginAt: Date,
 

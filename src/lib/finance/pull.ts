@@ -89,7 +89,7 @@ export async function pullShiprocketOrderInvoices(period: string, actor: string)
   const settings = await loadCredentials();
   const token = await shiprocketToken(settings);
   if (!token) {
-    throw new IntegrationError("Shiprocket", "Shiprocket is not connected. Add the API user under Sales settings, then pull again.");
+    throw new IntegrationError("Shiprocket", "Shiprocket is not connected. Add the API user under Affiliate CRM → Settings, then pull again.");
   }
 
   const all: string[][] = [];

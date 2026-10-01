@@ -40,7 +40,7 @@ export async function POST(request: Request) {
 
     const settings = await loadCredentials();
     const token = await shiprocketToken(settings);
-    if (!token) return badRequest("Shiprocket is not connected. Add the API user under Sales settings.", 502);
+    if (!token) return badRequest("Shiprocket is not connected. Add the API user under Affiliate CRM → Settings.", 502);
 
     const address = addressOf(order, input.pinCode ? { pinCode: input.pinCode } : null);
     const deliveryPincode = String(address.pinCode ?? "");

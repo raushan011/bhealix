@@ -69,7 +69,7 @@ export async function GET(request: Request) {
 
     const settings = await loadCredentials();
     const token = await shiprocketToken(settings);
-    if (!token) return badRequest("Shiprocket is not connected. Add the API user under Sales settings.", 502);
+    if (!token) return badRequest("Shiprocket is not connected. Add the API user under Affiliate CRM → Settings.", 502);
 
     try {
       const keys = ready.map(order => String(kind === "invoice" ? order.shipment?.shiprocketOrderId : order.shipment?.shipmentId));

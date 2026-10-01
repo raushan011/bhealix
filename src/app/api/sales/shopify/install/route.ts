@@ -29,9 +29,9 @@ export async function GET() {
     const settings = await loadCredentials();
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
 
-    if (!settings.shopifyDomain) return badRequest("Add your shop address under Sales settings first.");
+    if (!settings.shopifyDomain) return badRequest("Add your shop address under Affiliate CRM → Settings first.");
     if (!settings.shopifyClientId || !settings.shopifyClientSecret) {
-      return badRequest("Add the app's Client ID and client secret under Sales settings first. Both come from the app's Settings page in the Shopify Dev Dashboard.");
+      return badRequest("Add the app's Client ID and client secret under Affiliate CRM → Settings first. Both come from the app's Settings page in the Shopify Dev Dashboard.");
     }
     if (!appUrl) return badRequest("NEXT_PUBLIC_APP_URL is not configured, so Shopify has nowhere to send the approval back to.");
 

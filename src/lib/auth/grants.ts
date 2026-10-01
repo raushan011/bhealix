@@ -1,4 +1,4 @@
-import { usesFieldPanel, type Role } from "@/constants/access";
+import { usesAdminPanel, type Role } from "@/constants/access";
 import { GRANTABLE_WORKSPACES, isGrantable, type GrantableWorkspace, type Workspace } from "@/lib/workspace";
 
 /**
@@ -26,14 +26,43 @@ export const DEFAULT_WORKSPACES: Record<Role, readonly GrantableWorkspace[]> = {
   SUPERADMIN: GRANTABLE_WORKSPACES,
   ADMIN: GRANTABLE_WORKSPACES,
   HR: GRANTABLE_WORKSPACES,
-  // Field staff have one panel and it is not one of these. They never reach a
-  // chooser and the access screen does not list them.
+  // Field staff and sales executives have one panel each and it is not one of
+  // these. They never reach a chooser and the access screen does not list them.
   MR: [],
-  SALES: []
+  SALES: [],
+  EXECUTIVE: []
 };
 
 /** The grant as it is stored: an explicit decision, or nobody has taken one. */
 export type StoredGrant = readonly GrantableWorkspace[] | undefined;
+
+/**
+ * Which generation of panels a stored grant was written against.
+ *
+ * Grants were first recorded when there were two CRMs: `doctor`, which also held
+ * HR and payroll, and `sales`, which held leads, retargeting and the affiliates.
+ * Those were split into five, and a grant somebody chose back then has to keep
+ * meaning what they chose — the person given "the Sales CRM" was given leads and
+ * affiliates, and the person given "the Doctor CRM" was given HR with it.
+ *
+ * Telling the two generations apart by the array alone is impossible
+ * (`["doctor"]` is a valid answer in both), so the access screen stamps
+ * `workspacesVersion` on everything it writes, and anything without the stamp
+ * is read as the old meaning.
+ */
+export const GRANT_VERSION = 2;
+
+const LEGACY_MEANING: Record<string, readonly GrantableWorkspace[]> = {
+  doctor: ["doctor", "people"],
+  sales: ["leads", "affiliate", "sales"]
+};
+
+/** A stored grant as the panels of today, whichever generation wrote it. */
+export function storedGrantOf(raw: unknown, version?: number | null): StoredGrant {
+  if (!Array.isArray(raw)) return undefined;
+  if ((version ?? 1) >= GRANT_VERSION) return raw.filter(isGrantable);
+  return [...new Set(raw.flatMap(key => LEGACY_MEANING[String(key)] ?? []))];
+}
 
 /**
  * The stored decision turned into the list actually in force.
@@ -56,20 +85,20 @@ export function grantedWorkspaces(role: Role, stored: StoredGrant): GrantableWor
  * 1. **The super admin panel is the role, never a grant.** Nothing on the access
  *    screen can turn it on, which is what stops an administrator granting
  *    themselves the screen that hands out grants.
- * 2. **Field roles hold no panel here.** A rep has one panel and it is not one
- *    of these; the desk guard has already sent them to it by the time this is
- *    asked.
+ * 2. **Only desk roles hold a panel here.** A rep or a sales executive has one
+ *    panel of their own and it is not one of these; the desk guard has already
+ *    sent them to it by the time this is asked.
  * 3. Otherwise, what they were granted.
  */
 export function mayEnter(role: Role, stored: StoredGrant, workspace: Workspace): boolean {
   if (workspace === "control") return role === "SUPERADMIN";
-  if (usesFieldPanel(role)) return false;
+  if (!usesAdminPanel(role)) return false;
   return grantedWorkspaces(role, stored).includes(workspace);
 }
 
 /** Every panel this account can open, the super admin one included. */
 export function panelsFor(role: Role, stored: StoredGrant): Workspace[] {
-  const panels: Workspace[] = usesFieldPanel(role) ? [] : [...grantedWorkspaces(role, stored)];
+  const panels: Workspace[] = usesAdminPanel(role) ? [...grantedWorkspaces(role, stored)] : [];
   if (role === "SUPERADMIN") panels.push("control");
   return panels;
 }

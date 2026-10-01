@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ASSIGNABLE_ROLES, can, homeFor, mayEditAccount, usesAdminPanel, usesFieldPanel } from "./access";
+import { ASSIGNABLE_ROLES, can, homeFor, landingFor, mayEditAccount, usesAdminPanel, usesExecutivePanel, usesFieldPanel } from "./access";
 
 describe("the super administrator cannot be created from inside the app", () => {
   it("is not on the list of roles the Employees screen may assign", () => {
@@ -10,7 +10,7 @@ describe("the super administrator cannot be created from inside the app", () => 
      * administrator could mint the account that is meant to be above them.
      */
     expect(ASSIGNABLE_ROLES).not.toContain("SUPERADMIN");
-    expect(ASSIGNABLE_ROLES).toEqual(["ADMIN", "HR", "MR", "SALES"]);
+    expect(ASSIGNABLE_ROLES).toEqual(["ADMIN", "HR", "MR", "SALES", "EXECUTIVE"]);
   });
 
   it("closes a super administrator's whole record to everybody below them", () => {
@@ -24,7 +24,7 @@ describe("the super administrator cannot be created from inside the app", () => 
   });
 
   it("leaves every other account editable exactly as before", () => {
-    for (const target of ["ADMIN", "HR", "MR", "SALES"] as const) {
+    for (const target of ["ADMIN", "HR", "MR", "SALES", "EXECUTIVE"] as const) {
       expect(mayEditAccount("ADMIN", target)).toBe(true);
       expect(mayEditAccount("HR", target)).toBe(true);
     }
@@ -152,5 +152,40 @@ describe("access", () => {
     expect(can.manageInventory("HR")).toBe(false);
     expect(can.viewAllStock("HR")).toBe(true);
     expect(can.manageInventory("MR")).toBe(false);
+  });
+});
+
+describe("the sales executive", () => {
+  it("has a panel of their own, and neither of the others", () => {
+    // Dozens of routes read `usesFieldPanel` as "show them only their own" and
+    // everything else as "the desk". An executive must be neither, or one of
+    // those routes would hand them the whole company's records.
+    expect(usesExecutivePanel("EXECUTIVE")).toBe(true);
+    expect(usesFieldPanel("EXECUTIVE")).toBe(false);
+    expect(usesAdminPanel("EXECUTIVE")).toBe(false);
+    expect(homeFor("EXECUTIVE")).toBe("/executive");
+    expect(landingFor("EXECUTIVE")).toBe("/executive");
+  });
+
+  it("places and books their own orders but never pays themselves", () => {
+    expect(can.placeSalesOrder("EXECUTIVE")).toBe(true);
+    expect(can.paySalesIncentive("EXECUTIVE")).toBe(false);
+    expect(can.manageSalesTeam("EXECUTIVE")).toBe(false);
+    expect(can.viewSalesTeam("EXECUTIVE")).toBe(false);
+  });
+
+  it("is kept out of the doctor, HR and affiliate operations", () => {
+    for (const permission of [can.viewSales, can.manageSales, can.processOrders, can.viewHr, can.viewAllBilling, can.manageEmployees, can.logVisits] as const) {
+      expect(permission("EXECUTIVE")).toBe(false);
+    }
+  });
+
+  it("leaves rules and payments with the administrator, and reading with HR", () => {
+    expect(can.manageSalesTeam("ADMIN")).toBe(true);
+    expect(can.paySalesIncentive("ADMIN")).toBe(true);
+    expect(can.viewSalesTeam("HR")).toBe(true);
+    expect(can.manageSalesTeam("HR")).toBe(false);
+    expect(can.paySalesIncentive("HR")).toBe(false);
+    expect(can.placeSalesOrder("MR")).toBe(false);
   });
 });

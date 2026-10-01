@@ -57,6 +57,12 @@ export type BookableOrder = {
   financialStatus?: string | null;
   cancelledAt?: string | Date | null;
   fullyRefunded?: boolean;
+  /**
+   * What the customer has already paid on a cash-on-delivery order — the token
+   * advance on a sales executive's part-paid order. Absent on every affiliate
+   * order, which is either paid in full or not at all.
+   */
+  advancePaid?: number | null;
   shipment?: {
     shiprocketOrderId?: string;
     shipmentId?: string;
@@ -124,6 +130,15 @@ export function paymentModeOf(order: BookableOrder): "COD" | "Prepaid" {
  */
 export const parcelValueOf = (order: BookableOrder): number =>
   Math.max(0, Math.round(Number(order.totals?.paid ?? 0)));
+
+/**
+ * What the courier is told to collect at the door: nothing on a prepaid order,
+ * and on a COD order whatever is still owed once any advance is taken off.
+ */
+export function codAmountOf(order: BookableOrder): number {
+  if (paymentModeOf(order) !== "COD") return 0;
+  return Math.max(0, parcelValueOf(order) - Math.max(0, Math.round(Number(order.advancePaid ?? 0))));
+}
 
 /** The address as it stands, with anything the operator typed taking precedence. */
 export function addressOf(order: BookableOrder, overrides?: Address | null): Address {
@@ -247,6 +262,13 @@ export type AdhocOrderPayload = {
   order_items: { name: string; sku: string; units: number; selling_price: number }[];
   payment_method: "COD" | "Prepaid";
   sub_total: number;
+  /**
+   * Taken off the sub-total before the courier collects. Sent only for a
+   * part-paid order, where it carries the advance already received — so the
+   * lines still add up to the order's value, and the cash asked for at the door
+   * is the balance.
+   */
+  total_discount?: number;
   length: number;
   breadth: number;
   height: number;
@@ -317,6 +339,9 @@ export function buildAdhocOrder(
     order_items: items,
     payment_method: paymentModeOf(order),
     sub_total: parcelValueOf(order),
+    ...(codAmountOf(order) < parcelValueOf(order) && paymentModeOf(order) === "COD"
+      ? { total_discount: parcelValueOf(order) - codAmountOf(order) }
+      : {}),
     ...parcel
   };
 }

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, ShieldCheck, Stethoscope, TrendingUp } from "lucide-react";
+import { ArrowRight, HeartHandshake, Megaphone, ShieldCheck, Stethoscope, TrendingUp, Users } from "lucide-react";
 import { requireSession } from "@/lib/auth/guard";
 import { panelsForSession } from "@/lib/auth/access";
 import { homeFor, usesAdminPanel } from "@/constants/access";
@@ -10,7 +10,10 @@ import { WORKSPACE_BLURB, WORKSPACE_HOME, WORKSPACE_LABEL, type Workspace } from
 
 const ICON: Record<Workspace, React.ComponentType<{ size?: number; className?: string }>> = {
   doctor: Stethoscope,
+  people: HeartHandshake,
+  leads: Megaphone,
   sales: TrendingUp,
+  affiliate: Users,
   control: ShieldCheck
 };
 
@@ -39,7 +42,7 @@ export default async function ChoosePage() {
   return <main className="grid min-h-[100dvh] place-items-center px-5 py-10">
     <Appearance className="fixed right-3 top-3" />
 
-    <div className="page-enter w-full max-w-[760px]">
+    <div className="page-enter w-full max-w-[1040px]">
       <Brand />
       <h1 className="mt-9 text-2xl">Welcome back, {first}</h1>
       <p className="mt-1 text-sm text-[var(--muted)]">
@@ -47,7 +50,7 @@ export default async function ChoosePage() {
       </p>
 
       {panels.length ? <>
-        <div className="mt-7 grid gap-4 sm:grid-cols-2">
+        <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {panels.map(workspace => <Choice key={workspace} workspace={workspace} />)}
         </div>
         <p className="mt-6 text-center text-xs text-[var(--muted)]">
@@ -55,7 +58,7 @@ export default async function ChoosePage() {
         </p>
       </> : (
         <p className="card mt-7 px-5 py-6 text-sm text-[var(--muted)]">
-          Ask a super administrator to give you the Doctor CRM, the Sales CRM, or both. Nothing is
+          Ask a super administrator to give you the panels you work in. Nothing is
           missing from your account — the panels simply have not been turned on for it yet.
         </p>
       )}

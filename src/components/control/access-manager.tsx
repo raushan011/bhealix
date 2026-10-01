@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { KeyRound, ShieldCheck, Stethoscope, TrendingUp } from "lucide-react";
+import { HeartHandshake, KeyRound, Megaphone, ShieldCheck, Stethoscope, TrendingUp, Users } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Notice, PageTitle, Spinner } from "@/components/ui/kit";
 import type { GrantableWorkspace } from "@/lib/workspace";
 
@@ -37,7 +37,10 @@ type Account = {
 
 const ICON: Record<GrantableWorkspace, React.ComponentType<{ size?: number }>> = {
   doctor: Stethoscope,
-  sales: TrendingUp
+  people: HeartHandshake,
+  leads: Megaphone,
+  sales: TrendingUp,
+  affiliate: Users
 };
 
 export function AccessManager() {

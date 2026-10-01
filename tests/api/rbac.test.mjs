@@ -17,7 +17,16 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { as, anonymous } from "../support/client.mjs";
 import { fixtures, MISSING_ID } from "../support/fixtures.mjs";
 
+/** Every staff role that is not a sales executive — the roles most routes were written for. */
 const ALL = ["ADMIN", "HR", "MR", "SALES"];
+/**
+ * Everybody, the sales executive included. The executive is refused on every
+ * route not written for them (`executiveMayCall`), so they are in the
+ * "forbidden" sweep of every row below unless a row names them.
+ */
+const EVERYONE = [...ALL, "EXECUTIVE"];
+const SALES_DESK = ["ADMIN", "HR", "EXECUTIVE"];
+const ADMIN_AND_EXECUTIVE = ["ADMIN", "EXECUTIVE"];
 const DESK = ["ADMIN", "HR"];
 const FIELD = ["MR", "SALES"];
 const ADMIN_ONLY = ["ADMIN"];
@@ -28,7 +37,7 @@ const clients = {};
 
 beforeAll(async () => {
   ids = fixtures();
-  for (const role of ALL) clients[role] = await as(role);
+  for (const role of EVERYONE) clients[role] = await as(role);
 });
 
 /**
@@ -42,7 +51,7 @@ beforeAll(async () => {
  */
 const ROUTES = [
   // ------------------------------------------------------------------ auth
-  { method: "GET", path: "/api/auth/me", allow: ALL },
+  { method: "GET", path: "/api/auth/me", allow: EVERYONE },
 
   // --------------------------------------------------------------- doctors
   { method: "GET", path: "/api/doctors", allow: ALL },
@@ -140,10 +149,10 @@ const ROUTES = [
   { method: "GET", path: "/api/hr/holidays", allow: ALL },
   { method: "POST", path: "/api/hr/holidays", allow: DESK, body: {} },
   { method: "DELETE", path: "/api/hr/holidays?id=:missing", allow: DESK },
-  { method: "GET", path: "/api/hr/leave", allow: ALL },
-  { method: "POST", path: "/api/hr/leave", allow: ALL, body: {} },
-  { method: "PATCH", path: "/api/hr/leave/:missing", allow: ALL, body: {} },
-  { method: "DELETE", path: "/api/hr/leave/:missing", allow: ALL },
+  { method: "GET", path: "/api/hr/leave", allow: EVERYONE },
+  { method: "POST", path: "/api/hr/leave", allow: EVERYONE, body: {} },
+  { method: "PATCH", path: "/api/hr/leave/:missing", allow: EVERYONE, body: {} },
+  { method: "DELETE", path: "/api/hr/leave/:missing", allow: EVERYONE },
 
   // --------------------------------------------------------------- payroll
   { method: "GET", path: "/api/hr/payroll", allow: DESK },
@@ -162,7 +171,32 @@ const ROUTES = [
   { method: "DELETE", path: "/api/hr/salary/:mrId", allow: DESK },
 
   // --------------------------------------------------------------- reports
-  { method: "GET", path: "/api/reports", allow: ADMIN_ONLY }
+  { method: "GET", path: "/api/reports", allow: ADMIN_ONLY },
+
+  // ------------------------------------------------------------ sales team
+  // The executive reads and acts on their own; the desk reads everybody's;
+  // rules, assignment and paying are the administrator's.
+  { method: "GET", path: "/api/sales-team/orders", allow: SALES_DESK },
+  { method: "POST", path: "/api/sales-team/orders", allow: ADMIN_AND_EXECUTIVE, body: {} },
+  { method: "GET", path: "/api/sales-team/orders/:missing", allow: SALES_DESK },
+  { method: "PATCH", path: "/api/sales-team/orders/:missing", allow: SALES_DESK, body: {} },
+  { method: "POST", path: "/api/sales-team/orders/:missing/book", allow: ADMIN_AND_EXECUTIVE, body: {} },
+  { method: "GET", path: "/api/sales-team/orders/:missing/track", allow: SALES_DESK },
+  { method: "GET", path: "/api/sales-team/orders/:missing/documents", allow: SALES_DESK },
+  { method: "GET", path: "/api/sales-team/fulfilment", allow: ADMIN_AND_EXECUTIVE },
+  { method: "POST", path: "/api/sales-team/fulfilment", allow: ADMIN_AND_EXECUTIVE, body: {} },
+  { method: "GET", path: "/api/sales-team/incentives", allow: SALES_DESK },
+  { method: "POST", path: "/api/sales-team/incentives", allow: ADMIN_ONLY, body: {} },
+  { method: "GET", path: "/api/sales-team/overview", allow: SALES_DESK },
+  { method: "GET", path: "/api/sales-team/settings", allow: SALES_DESK },
+  { method: "PUT", path: "/api/sales-team/settings", allow: ADMIN_ONLY, body: {} },
+  { method: "GET", path: "/api/sales-team/products", allow: SALES_DESK },
+  { method: "GET", path: "/api/sales-team/customers?phone=9876543210", allow: SALES_DESK },
+  { method: "GET", path: "/api/sales-team/executives", allow: DESK },
+  { method: "GET", path: "/api/sales-team/leads", allow: SALES_DESK },
+  { method: "POST", path: "/api/sales-team/leads/assign", allow: ADMIN_ONLY, body: {} },
+  { method: "GET", path: "/api/sales-team/leads/:missing", allow: SALES_DESK },
+  { method: "POST", path: "/api/sales-team/leads/:missing", allow: ADMIN_AND_EXECUTIVE, body: {} }
 ];
 
 /**
@@ -194,7 +228,7 @@ describe("every route refuses an anonymous caller", () => {
 
 describe("every route refuses a role outside its policy", () => {
   for (const route of ROUTES) {
-    const forbidden = ALL.filter(role => !route.allow.includes(role));
+    const forbidden = EVERYONE.filter(role => !route.allow.includes(role));
     if (!forbidden.length) continue;
 
     it(`${label(route)} — allowed: ${route.allow.join(", ")}`, async () => {

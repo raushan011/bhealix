@@ -90,7 +90,7 @@ export async function POST(request: Request) {
       if (error instanceof IntegrationError) return badRequest(error.message, 502);
       throw error;
     }
-    if (!token) return badRequest("Shiprocket is not connected. Add the API user's email and password under Sales settings.", 502);
+    if (!token) return badRequest("Shiprocket is not connected. Add the API user's email and password under Affiliate CRM → Settings.", 502);
 
     /*
      * The pickup address is resolved once for the whole batch rather than per

@@ -1,8 +1,13 @@
-export const ROLES = ["SUPERADMIN", "ADMIN", "HR", "MR", "SALES"] as const;
+export const ROLES = ["SUPERADMIN", "ADMIN", "HR", "MR", "SALES", "EXECUTIVE"] as const;
 export type Role = (typeof ROLES)[number];
 
 /**
  * What each role is called on screen.
+ *
+ * `EXECUTIVE` is the **sales executive**: an employee on the payroll, at a desk
+ * or on a phone rather than in a clinic, who is handed leads, converts them into
+ * orders, books those orders with the courier and earns an incentive on what is
+ * delivered. They have a panel of their own at `/executive`.
  *
  * `SALES` is **field sales executive**, and the word "field" is doing real work
  * there rather than decorating. This application runs two businesses that both
@@ -18,7 +23,8 @@ export const ROLE_LABEL: Record<Role, string> = {
   ADMIN: "Administrator",
   HR: "HR",
   MR: "Medical representative",
-  SALES: "Field sales executive"
+  SALES: "Field sales executive",
+  EXECUTIVE: "Sales executive"
 };
 
 /**
@@ -64,10 +70,21 @@ export const ASSIGNABLE_ROLES = ROLES.filter(role => role !== "SUPERADMIN") as E
 export const mayEditAccount = (actor: Role, target: Role) =>
   target !== "SUPERADMIN" || actor === "SUPERADMIN";
 
-/** SUPERADMIN, ADMIN and HR work at a desk; MR and SALES work from a phone in the field. */
+/**
+ * SUPERADMIN, ADMIN and HR work at the desk panel; MR and SALES work from a phone
+ * in the field; a sales executive works from the executive panel.
+ *
+ * Three panels, and each role is in exactly one of them. `usesFieldPanel` stays
+ * false for an executive on purpose: dozens of routes read it as "this person is
+ * a rep, show them only their own", and an executive is not a rep with visits
+ * and bills — they are kept to their own routes by `executiveMayCall`.
+ */
 export const usesAdminPanel = (role: Role) => admin(role) || role === "HR";
 export const usesFieldPanel = (role: Role) => role === "MR" || role === "SALES";
-export const homeFor = (role: Role) => (usesAdminPanel(role) ? "/admin" : "/employee");
+export const usesExecutivePanel = (role: Role) => role === "EXECUTIVE";
+export const EXECUTIVE_HOME = "/executive";
+export const homeFor = (role: Role) =>
+  usesAdminPanel(role) ? "/admin" : usesExecutivePanel(role) ? EXECUTIVE_HOME : "/employee";
 
 /**
  * Where somebody lands when they sign in, as opposed to where a panel guard
@@ -79,7 +96,7 @@ export const homeFor = (role: Role) => (usesAdminPanel(role) ? "/admin" : "/empl
  * answer. Kept apart from `homeFor` on purpose: a guard bouncing a rep out of
  * `/admin` wants the panel, not the chooser.
  */
-export const landingFor = (role: Role) => (usesAdminPanel(role) ? "/choose" : "/employee");
+export const landingFor = (role: Role) => (usesAdminPanel(role) ? "/choose" : homeFor(role));
 
 export const can = {
   manageDoctors: (role: Role) => admin(role),
@@ -213,6 +230,37 @@ export const can = {
    * watches deliveries can work the list too.
    */
   retargetCustomers: (role: Role) => admin(role) || role === "HR",
+
+  // ------------------------------------------------------------- sales team
+  /**
+   * Reading the Sales CRM: who on the sales team placed which order, what was
+   * delivered, and the incentive each executive has earned. HR reads it because
+   * incentives end up in somebody's pay and are asked about at the HR desk.
+   */
+  viewSalesTeam: (role: Role) => admin(role) || role === "HR",
+  /**
+   * Handing leads to an executive and setting what an incentive is worth for a
+   * COD, prepaid or part-paid order.
+   *
+   * The administrator's alone, for the reason `manageSales` is: an incentive
+   * rule is a decision about where money goes, and assigning a lead decides who
+   * gets the chance to earn on it.
+   */
+  manageSalesTeam: (role: Role) => admin(role),
+  /**
+   * Placing an order and booking it with Shiprocket.
+   *
+   * The executive does it for their own customers — that is the job. The
+   * administrator may do it on an executive's behalf, for a sale closed over the
+   * phone at the office that still belongs to the executive who found it.
+   */
+  placeSalesOrder: (role: Role) => admin(role) || role === "EXECUTIVE",
+  /**
+   * Marking an executive's incentive paid, and undoing a payment marked in error.
+   * Money leaving the company, so the administrator's — the same line as
+   * `paySalesCommission` on the affiliate side.
+   */
+  paySalesIncentive: (role: Role) => admin(role),
 
   // -------------------------------------------------------------- super admin
   /**

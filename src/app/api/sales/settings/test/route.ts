@@ -74,7 +74,10 @@ export async function POST(request: Request) {
             : visible === 0 ? "It can see 0 orders, which means read_orders was not granted."
             : `It can see ${visible} order${visible === 1 ? "" : "s"}.`,
           missing.length ? `Shopify did not grant ${missing.join(" or ")} — add ${missing.length === 1 ? "it" : "them"} to the app, release a version, and connect again.` : "",
-          visible && !scopes.includes("read_all_orders") ? "Without read_all_orders only the last 60 days are readable." : ""
+          visible && !scopes.includes("read_all_orders") ? "Without read_all_orders only the last 60 days are readable." : "",
+          // Not a failure of this connection — the affiliate side works without
+          // it — but the sales team cannot place orders in the shop until it is there.
+          scopes.length && !scopes.includes("write_orders") ? "write_orders was not granted, so sales executives cannot place orders in Shopify yet — add it to the app, release a version, and press Reconnect." : ""
         ].filter(Boolean);
 
         return ok({

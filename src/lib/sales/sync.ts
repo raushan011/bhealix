@@ -127,7 +127,7 @@ export async function syncOrders(options: { since?: Date } = {}): Promise<SyncRe
   const config = shopifyConfig(settings);
 
   if (!config) {
-    throw new IntegrationError("Shopify", "Shopify is not connected. Add the shop address and Admin API access token under Sales settings.");
+    throw new IntegrationError("Shopify", "Shopify is not connected. Add the shop address and Admin API access token under Affiliate CRM → Settings.");
   }
 
   const since = windowStart(options.since, settings.lastOrderSyncAt, backfillDaysOf(settings));
@@ -234,7 +234,7 @@ export async function syncShipments(options: { from?: string; to?: string } = {}
   const token = await shiprocketToken(settings);
 
   if (!token) {
-    throw new IntegrationError("Shiprocket", "Shiprocket is not connected. Add the API user's email and password under Sales settings.");
+    throw new IntegrationError("Shiprocket", "Shiprocket is not connected. Add the API user's email and password under Affiliate CRM → Settings.");
   }
 
   const today = todayIso();

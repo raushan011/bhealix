@@ -5,13 +5,13 @@ import { apiSession } from "@/lib/auth/guard";
 import { can, ROLE_LABEL, usesAdminPanel, type Role } from "@/constants/access";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
 import { record } from "@/lib/audit";
-import { grantedWorkspaces } from "@/lib/auth/grants";
+import { GRANT_VERSION, grantedWorkspaces, storedGrantOf } from "@/lib/auth/grants";
 import { GRANTABLE_WORKSPACES, isGrantable, WORKSPACE_LABEL, type GrantableWorkspace } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Row = { _id: unknown; name: string; email: string; employeeId: string; role: Role; active?: boolean; workspaces?: unknown; designation?: string };
+type Row = { _id: unknown; name: string; email: string; employeeId: string; role: Role; active?: boolean; workspaces?: unknown; workspacesVersion?: number; designation?: string };
 
 const toAccount = (row: Row, self: string) => ({
   id: String(row._id),
@@ -23,7 +23,7 @@ const toAccount = (row: Row, self: string) => ({
   designation: row.designation,
   active: row.active !== false,
   /** What is in force, whether or not anybody has decided it. */
-  workspaces: grantedWorkspaces(row.role, Array.isArray(row.workspaces) ? row.workspaces.filter(isGrantable) : undefined),
+  workspaces: grantedWorkspaces(row.role, storedGrantOf(row.workspaces, row.workspacesVersion)),
   /**
    * Whether the list above was decided or inherited. Worth telling apart on
    * screen: "this is what their role has always had" and "somebody sat down and
@@ -55,7 +55,7 @@ export async function GET() {
     await connectDb();
 
     const rows = await User.find({ role: { $in: ["SUPERADMIN", "ADMIN", "HR"] } })
-      .select("name email employeeId role active workspaces designation")
+      .select("name email employeeId role active workspaces workspacesVersion designation")
       .sort({ role: 1, name: 1 })
       .lean() as unknown as Row[];
 
@@ -100,21 +100,21 @@ export async function PATCH(request: Request) {
     const input = schema.parse(await request.json());
     const chosen = [...new Set(input.workspaces.filter(isGrantable))] as GrantableWorkspace[];
     if (chosen.length !== input.workspaces.length) {
-      return badRequest("Only the Doctor CRM and the Sales CRM can be granted from here.");
+      return badRequest(`Only ${GRANTABLE_WORKSPACES.map(key => WORKSPACE_LABEL[key]).join(", ")} can be granted from here.`);
     }
 
     const target = await User.findById(input.userId)
-      .select("name email employeeId role active workspaces designation")
+      .select("name email employeeId role active workspaces workspacesVersion designation")
       .lean() as Row | null;
 
     if (!target) return badRequest("That account no longer exists", 404);
     if (target.role === "SUPERADMIN") return badRequest("A super administrator holds every panel by their role, and it cannot be withdrawn here.");
     if (!usesAdminPanel(target.role)) return badRequest(`${ROLE_LABEL[target.role]}s work from the field panel, which is not granted from here.`);
 
-    const before = grantedWorkspaces(target.role, Array.isArray(target.workspaces) ? target.workspaces.filter(isGrantable) : undefined);
+    const before = grantedWorkspaces(target.role, storedGrantOf(target.workspaces, target.workspacesVersion));
     const after = GRANTABLE_WORKSPACES.filter(workspace => chosen.includes(workspace));
 
-    await User.updateOne({ _id: input.userId }, { $set: { workspaces: after } });
+    await User.updateOne({ _id: input.userId }, { $set: { workspaces: after, workspacesVersion: GRANT_VERSION } });
 
     /*
      * Both sides of the change go into the trail, not just the new state. "Who
@@ -131,10 +131,10 @@ export async function PATCH(request: Request) {
     });
 
     return ok({
-      account: toAccount({ ...target, workspaces: after }, auth.session.userId),
+      account: toAccount({ ...target, workspaces: after, workspacesVersion: GRANT_VERSION }, auth.session.userId),
       message: after.length
         ? `${target.name} can now open ${after.map(key => WORKSPACE_LABEL[key]).join(" and ")}.`
-        : `${target.name} can no longer open either CRM. They can still sign in, and will be told to ask for access.`
+        : `${target.name} can no longer open any CRM. They can still sign in, and will be told to ask for access.`
     });
   } catch (error) {
     return fail(error);

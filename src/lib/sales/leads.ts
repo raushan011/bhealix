@@ -21,11 +21,12 @@ import type { Place } from "@/lib/doctors/places";
  */
 
 /**
- * How far a lead has got. Four states rather than a workflow: this is a list to
- * work through, and the only questions asked of it are "who have we not rung
- * yet" and "who said yes".
+ * How far a lead has got. A handful of states rather than a workflow: this is a
+ * list to work through, and the only questions asked of it are "who have we not
+ * rung yet" and "who said yes". `Converted` is set by the Sales CRM when an
+ * executive places an order from the lead — the one answer better than yes.
  */
-export const LEAD_STATUSES = ["New", "Contacted", "Interested", "Not interested"] as const;
+export const LEAD_STATUSES = ["New", "Contacted", "Interested", "Not interested", "Converted"] as const;
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
 
 /**
@@ -331,6 +332,7 @@ export const leadUpdateSchema = z.object({
 /** Where a lead has got to, in the colours a status means everywhere else. */
 export function leadTone(status: string): "success" | "info" | "warn" | "danger" | "neutral" {
   switch (status) {
+    case "Converted": return "success";
     case "Interested": return "success";
     case "Contacted": return "info";
     case "Not interested": return "danger";

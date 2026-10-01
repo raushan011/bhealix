@@ -699,9 +699,26 @@ const SalesLeadSchema = new Schema({
     byName: String
   }, { _id: true })],
 
+  /**
+   * The sales executive this lead has been handed to, if anybody.
+   *
+   * A lead is worked by one person at a time, so a reference rather than a list.
+   * Absent means it is still the desk's — the Leads CRM's to prospect and the
+   * Sales CRM's to hand out. Reassigning it keeps its remarks, which is the point
+   * of reassigning rather than starting again.
+   */
+  assignedTo: { type: Schema.Types.ObjectId, ref: "User", index: true },
+  assignedAt: Date,
+  assignedBy: { type: Schema.Types.ObjectId, ref: "User" },
+  /** When an order was placed from this lead — set by the Sales CRM, alongside `status: "Converted"`. */
+  convertedAt: Date,
+
   createdBy: { type: Schema.Types.ObjectId, ref: "User" },
   updatedBy: { type: Schema.Types.ObjectId, ref: "User" }
 }, { timestamps: true });
+
+// An executive's own list: what they were given, still to be worked first.
+SalesLeadSchema.index({ assignedTo: 1, status: 1, updatedAt: -1 });
 
 // The two questions the list screen asks: this trade, alphabetically, and
 // whatever still needs ringing, newest first.

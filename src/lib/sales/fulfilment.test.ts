@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  addressOf, blockedReason, buildAdhocOrder, documentFileName, missingFields, normaliseParcel, orderCount,
+  addressOf, blockedReason, buildAdhocOrder, codAmountOf, documentFileName, missingFields, normaliseParcel, orderCount,
   parcelValueOf, paymentModeOf, pickCourier, processStateOf, shiprocketDate, tenDigitPhone,
   type BookableOrder, type CourierOption
 } from "./fulfilment";
@@ -185,6 +185,30 @@ describe("buildAdhocOrder", () => {
       pickup_location: "Warehouse", payment_method: "COD", shipping_is_billing: true,
       weight: 1, length: 25, breadth: 18, height: 9, billing_phone: "9876543210", billing_country: "India"
     });
+  });
+});
+
+describe("a part-paid order", () => {
+  // A sales executive's order where the customer paid ₹200 up front by UPI and
+  // owes the rest at the door.
+  const partPaid = order({ advancePaid: 200 });
+
+  it("asks the courier to collect only the balance", () => {
+    expect(codAmountOf(partPaid)).toBe(1299);
+    expect(codAmountOf(order())).toBe(1499);
+    expect(codAmountOf(order({ paymentMethod: "Razorpay", financialStatus: "paid" }))).toBe(0);
+  });
+
+  it("books the lines at their value and the advance as already received", () => {
+    const payload = buildAdhocOrder({ order: partPaid, address: addressOf(partPaid), parcel: normaliseParcel(null), pickupLocation: "Warehouse" });
+    expect(payload.payment_method).toBe("COD");
+    expect(payload.sub_total).toBe(1499);
+    expect(payload.total_discount).toBe(200);
+  });
+
+  it("leaves an affiliate order's booking exactly as it was", () => {
+    const payload = buildAdhocOrder({ order: order(), address: addressOf(order()), parcel: normaliseParcel(null), pickupLocation: "Warehouse" });
+    expect(payload.total_discount).toBeUndefined();
   });
 });
 

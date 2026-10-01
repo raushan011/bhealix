@@ -121,8 +121,15 @@ export async function middleware(request: NextRequest) {
      * grant lives in MongoDB and the Edge runtime has no business reading it, so
      * `app/admin/layout.tsx` asks — reading the path off the header set below.
      */
-    if (pathname.startsWith("/admin") && !deskRole) return NextResponse.redirect(new URL("/employee", request.url));
-    if (pathname.startsWith("/employee") && deskRole) return NextResponse.redirect(new URL("/admin", request.url));
+    // The sales executive has a panel of their own, and the field and desk
+    // panels are both closed to them — as theirs is to everybody else.
+    const executive = role === "EXECUTIVE";
+    const home = deskRole ? "/admin" : executive ? "/executive" : "/employee";
+    const inPanel = (prefix: string) => pathname === prefix || pathname.startsWith(`${prefix}/`);
+
+    if (inPanel("/admin") && !deskRole) return NextResponse.redirect(new URL(home, request.url));
+    if (inPanel("/employee") && (deskRole || executive)) return NextResponse.redirect(new URL(home, request.url));
+    if (inPanel("/executive") && !executive) return NextResponse.redirect(new URL(home, request.url));
 
     return pass(request, refreshed ? { kind: "staff", token: refreshed } : undefined);
   }
@@ -189,6 +196,8 @@ export const config = {
   matcher: [
     "/admin/:path*",
     "/employee/:path*",
+    "/executive",
+    "/executive/:path*",
     "/partner",
     "/partner/:path*",
     "/choose",

@@ -1,8 +1,8 @@
 import { cache } from "react";
 import { connectDb } from "@/lib/db/mongoose";
 import { User } from "@/models/User";
-import { isGrantable, type Workspace } from "@/lib/workspace";
-import { mayEnter, panelsFor, type StoredGrant } from "./grants";
+import type { Workspace } from "@/lib/workspace";
+import { mayEnter, panelsFor, storedGrantOf, type StoredGrant } from "./grants";
 import type { Session } from "./session";
 
 /**
@@ -27,8 +27,9 @@ export type { StoredGrant } from "./grants";
 /** The decision recorded against one account, or nothing if none has been. */
 export const storedGrantFor = cache(async (userId: string): Promise<StoredGrant> => {
   await connectDb();
-  const user = await User.findById(userId).select("workspaces").lean() as { workspaces?: unknown } | null;
-  return Array.isArray(user?.workspaces) ? user.workspaces.filter(isGrantable) : undefined;
+  const user = await User.findById(userId).select("workspaces workspacesVersion").lean() as
+    { workspaces?: unknown; workspacesVersion?: number } | null;
+  return storedGrantOf(user?.workspaces, user?.workspacesVersion);
 });
 
 /** The panels the signed-in account can open, ready for a sidebar or a chooser. */

@@ -34,7 +34,7 @@ import { registerWebhooks, WEBHOOK_PATH, WEBHOOK_TOPICS } from "@/lib/sales/webh
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const back = (message: string, ok = false) =>
-    Response.redirect(new URL(`/admin/sales/settings?shopify=${ok ? "connected" : "failed"}&message=${encodeURIComponent(message)}`, url.origin), 302);
+    Response.redirect(new URL(`/admin/affiliate/settings?shopify=${ok ? "connected" : "failed"}&message=${encodeURIComponent(message)}`, url.origin), 302);
 
   try {
     const auth = await apiSession(can.manageSales);

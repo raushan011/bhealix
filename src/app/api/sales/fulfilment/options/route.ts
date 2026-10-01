@@ -50,7 +50,7 @@ export async function GET() {
     if (!token) {
       return ok({
         pickupLocations: [], defaults,
-        refusal: "Shiprocket is not connected. Add the API user's email and password under Sales settings before booking anything."
+        refusal: "Shiprocket is not connected. Add the API user's email and password under Affiliate CRM → Settings before booking anything."
       } satisfies FulfilmentOptions);
     }
 

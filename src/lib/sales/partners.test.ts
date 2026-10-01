@@ -35,7 +35,10 @@ describe("sales partners are not sales employees", () => {
     // kind of addition this assertion is meant to make somebody stop and think
     // about: it is a staff role, held by one person, with an employee record
     // like any other. An affiliate role would not be.
-    expect(ROLES).toEqual(["SUPERADMIN", "ADMIN", "HR", "MR", "SALES"]);
+    //
+    // EXECUTIVE joined it when the company hired its own sales team: employees
+    // on the payroll, paid an incentive — staff, again, not affiliates.
+    expect(ROLES).toEqual(["SUPERADMIN", "ADMIN", "HR", "MR", "SALES", "EXECUTIVE"]);
   });
 
   it("names the staff role so it cannot be read as an affiliate", () => {

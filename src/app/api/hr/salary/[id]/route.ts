@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { connectDb } from "@/lib/db/mongoose";
 import { User } from "@/models/User";
 import { Payslip, SalaryStructure } from "@/models/Payroll";
@@ -8,31 +7,10 @@ import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
 import { record } from "@/lib/audit";
 import { fullGrossOf } from "@/lib/hr/payroll";
 import { componentsOf, loadPayrollSettings } from "@/lib/hr/payroll-run";
+import { salaryInputSchema } from "@/lib/hr/employee-schema";
 
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
-const amount = z.number().min(0).max(10_000_000);
-const namedAmounts = z.array(z.object({
-  name: z.string().trim().min(1).max(60),
-  amount
-})).max(12).default([]);
-
-const schema = z.object({
-  effectiveFrom: z.string().regex(MONTH, "Give the month as yyyy-mm"),
-  basic: amount,
-  hra: amount.default(0),
-  conveyance: amount.default(0),
-  medical: amount.default(0),
-  special: amount.default(0),
-  otherAllowances: namedAmounts,
-
-  pfApplicable: z.boolean().default(true),
-  pfOnFullBasic: z.boolean().default(false),
-  esiApplicable: z.boolean().default(true),
-  professionalTaxApplicable: z.boolean().default(true),
-  monthlyTds: amount.default(0),
-  recurringDeductions: namedAmounts,
-  note: z.string().trim().max(300).optional()
-});
+const schema = salaryInputSchema;
 
 /**
  * Somebody's whole salary history, newest first.
