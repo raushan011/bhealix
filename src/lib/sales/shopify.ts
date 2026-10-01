@@ -425,3 +425,20 @@ function paymentMethodOf(order: ShopifyOrder): string | undefined {
   const joined = names.join(", ");
   return /cash on delivery|\bcod\b/i.test(joined) ? "COD" : joined;
 }
+
+/**
+ * The scopes this token actually carries, read from Shopify itself.
+ *
+ * The OAuth callback is told the scopes as it completes, but a token pasted on
+ * the settings screen arrives with no such record — and keeping the scopes of
+ * whatever connection came before would describe a different token. Asking
+ * Shopify is the only answer that cannot go stale.
+ */
+export async function grantedScopes(config: ShopifyConfig): Promise<string[]> {
+  const { data } = await httpJson<{ access_scopes?: { handle?: string }[] }>({
+    service: "Shopify",
+    url: `https://${assertShopDomain(config.domain)}/admin/oauth/access_scopes.json`,
+    headers: authHeaders(config)
+  });
+  return (data.access_scopes ?? []).map(scope => String(scope.handle ?? "")).filter(Boolean);
+}

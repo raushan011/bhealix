@@ -7,8 +7,8 @@ import { fail, ok } from "@/lib/api";
 import { record } from "@/lib/audit";
 import { COMMISSION_BASES, CUSTOMER_DISCOUNT_TYPES } from "@/lib/sales/constants";
 import { redirectUri } from "@/lib/sales/oauth";
-import { clearShiprocketToken, loadCredentials, storeSecret } from "@/lib/sales/settings";
-import { normaliseDomain } from "@/lib/sales/shopify";
+import { clearShiprocketToken, loadCredentials, shopifyConfig, storeSecret } from "@/lib/sales/settings";
+import { grantedScopes, normaliseDomain } from "@/lib/sales/shopify";
 import { maskSecret } from "@/lib/sales/secrets";
 import { recalculateAll } from "@/lib/sales/sync";
 import type { SalesSettingsRecord } from "@/lib/sales/types";
@@ -123,6 +123,19 @@ export async function PUT(request: Request) {
     await storeSecret("shopifyAccessToken", input.shopifyAccessToken);
     await storeSecret("shopifyClientSecret", input.shopifyClientSecret);
     await storeSecret("shiprocketPassword", input.shiprocketPassword);
+
+    /*
+     * A pasted token brings no record of what it may do, and the scopes kept
+     * from the previous connection belong to a different token. Shopify is asked
+     * instead; if it cannot say, the record is cleared rather than left wrong —
+     * an unknown scope list is given the benefit of the doubt, a stale one would
+     * refuse the sales team's orders for a permission the new token has.
+     */
+    if (input.shopifyAccessToken || (input.shopifyDomain !== undefined && normaliseDomain(input.shopifyDomain) !== before.shopifyDomain)) {
+      const config = shopifyConfig(await loadCredentials());
+      const scopes = config ? await grantedScopes(config).catch(() => null) : null;
+      await SalesSettings.updateOne({ key: "sales" }, scopes?.length ? { $set: { shopifyScopes: scopes.join(",") } } : { $unset: { shopifyScopes: "" } });
+    }
 
     // A new password invalidates the cached bearer token, which would otherwise
     // keep working for nine days and hide the fact that the new one is wrong.

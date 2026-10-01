@@ -10,7 +10,8 @@ import { IntegrationError } from "@/lib/sales/http";
 import { shiftDay, todayIso } from "@/lib/time";
 import { priceIncentive, rulesTable, teamOrderNo, type IncentiveRule, type TeamOrderChannel } from "./orders";
 import { canWriteOrders } from "./shopify-order";
-import { fetchOrder, type ShopifyConfig } from "@/lib/sales/shopify";
+import { fetchOrder, grantedScopes, type ShopifyConfig } from "@/lib/sales/shopify";
+import { SalesSettings } from "@/models/Sales";
 
 /**
  * The database half of the sales team: numbering, settings, keeping each
@@ -328,6 +329,13 @@ export async function shopifyReadiness(): Promise<ShopifyReadiness> {
     return { config: null, refusal: "Orders are set to go through Shopify, but Shopify is not connected. An administrator connects it under Affiliate CRM → Settings, or switches the sales team to direct orders under Sales CRM → Settings." };
   }
   if (credentials.shopifyScopes && !canWriteOrders(credentials.shopifyScopes)) {
+    // The record may simply be old: scopes are re-read from Shopify before
+    // refusing, and the record corrected if the token can in fact write orders.
+    const live = await grantedScopes(config).catch(() => null);
+    if (live?.length) {
+      await SalesSettings.updateOne({ key: "sales" }, { $set: { shopifyScopes: live.join(",") } });
+      if (live.includes("write_orders")) return { config };
+    }
     return { config: null, refusal: "Shopify is connected but has not been allowed to create orders (write_orders). An administrator adds that permission to the app in the Shopify Dev Dashboard, releases it, then presses Reconnect with Shopify under Affiliate CRM → Settings." };
   }
   return { config };
