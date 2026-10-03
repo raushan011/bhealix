@@ -80,9 +80,10 @@ export type IncentiveRule = {
  * policy anybody chose.
  */
 export const DEFAULT_INCENTIVE_RULES: IncentiveRule[] = [
-  { mode: "Prepaid", enabled: true, type: "Percentage", value: 5 },
-  { mode: "Partial", enabled: true, type: "Percentage", value: 4 },
-  { mode: "COD", enabled: true, type: "Percentage", value: 3 }
+  // The Sales Team Handbook, Section 8: 10% prepaid, 10% partial, 5% COD, on the net order value.
+  { mode: "Prepaid", enabled: true, type: "Percentage", value: 10 },
+  { mode: "Partial", enabled: true, type: "Percentage", value: 10 },
+  { mode: "COD", enabled: true, type: "Percentage", value: 5 }
 ];
 
 /** The rule for a mode, filling in from the defaults for anything not stored. */

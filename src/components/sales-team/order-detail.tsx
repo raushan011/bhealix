@@ -142,13 +142,17 @@ export function OrderDetail({ id, basePath }: { id: string; basePath: string }) 
           <div className="mt-3 divide-y divide-[var(--line)]">
             {order.items.map((item, index) => (
               <div key={index} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                <span className="min-w-0">{item.title} <span className="text-[var(--muted)]">× {item.quantity}{item.price != null ? ` @ ${formatRupees(item.price)}` : ""}</span></span>
+                <span className="min-w-0">{item.title} <span className="text-[var(--muted)]">× {item.quantity}{item.price ? ` · MRP ${formatRupees(item.price)}` : item.catalogueId === "free-bag" ? " · free" : ""}</span></span>
                 <span className="shrink-0 tabular-nums">{formatRupees(item.gross ?? 0)}</span>
               </div>
             ))}
           </div>
           <div className="mt-3 space-y-1.5 border-t border-[var(--line)] pt-3 text-sm">
-            {order.totals.discount > 0 && <Line label="Discount" value={`− ${formatRupees(order.totals.discount)}`} />}
+            {order.pricing?.mrpTotal ? <>
+              {order.pricing.mrpTotal > (order.pricing.offerTotal ?? 0) && <Line label={`${order.pricing.label ?? "Handbook"} offer`} value={`− ${formatRupees(order.pricing.mrpTotal - (order.pricing.offerTotal ?? 0))}`} />}
+              {Boolean(order.pricing.prepaidOff) && <Line label="Prepaid" value={`− ${formatRupees(order.pricing.prepaidOff ?? 0)}`} />}
+              {Boolean(order.pricing.extraOff) && <Line label="Extra discount released" value={`− ${formatRupees(order.pricing.extraOff ?? 0)}`} />}
+            </> : order.totals.discount > 0 && <Line label="Discount" value={`− ${formatRupees(order.totals.discount)}`} />}
             <Line label="Order total" value={formatRupees(order.totals.paid)} strong />
             <Line label={PAYMENT_MODE_LABEL[order.paymentMode]} value={order.paymentMode === "COD" ? "Collected on delivery" : `${formatRupees(order.advancePaid ?? 0)} paid up front`} />
             <Line label="Courier collects" value={formatRupees(order.collectAmount ?? 0)} strong />

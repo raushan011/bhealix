@@ -1,6 +1,7 @@
 import { Schema, model, models } from "mongoose";
 import { COURIER_RULES, DELIVERY_STATES } from "@/lib/sales/constants";
 import { RISK_LEVELS } from "@/lib/sales-team/risk";
+import { CATALOGUE_KINDS } from "@/lib/sales-team/pricing";
 import {
   DEFAULT_INCENTIVE_RULES, INCENTIVE_PAY_MODES, INCENTIVE_STATUSES, INCENTIVE_TYPES, TEAM_ORDER_CHANNELS, TEAM_PAYMENT_MODES
 } from "@/lib/sales-team/orders";
@@ -27,6 +28,10 @@ const LineSchema = new Schema({
   product: { type: Schema.Types.ObjectId, ref: "Product" },
   /** The Shopify variant, when the line was chosen from the shop — which is what takes stock off there. */
   variantId: String,
+  /** The sales catalogue item it was priced from — see `lib/sales-team/pricing.ts`. */
+  catalogueId: String,
+  /** The printed price per unit, as it stood when the order was placed. */
+  mrp: Number,
   sku: String,
   title: { type: String, required: true, trim: true },
   quantity: { type: Number, required: true, min: 1 },
@@ -203,6 +208,20 @@ const SalesTeamOrderSchema = new Schema({
     default: []
   },
 
+  /**
+   * How the handbook priced it, kept so the order explains its own figure: the
+   * MRP, the standard offer, the ₹50 prepaid and any extra discount released.
+   */
+  pricing: {
+    label: String,
+    mrpTotal: Number,
+    offerTotal: Number,
+    prepaidOff: Number,
+    extraOff: Number,
+    extra: Boolean,
+    freeBag: Boolean
+  },
+
   notes: String
 }, { timestamps: true });
 
@@ -235,6 +254,26 @@ const SalesTeamSettingsSchema = new Schema({
    * the shop ever hearing of it, for a store that is not connected.
    */
   orderChannel: { type: String, enum: TEAM_ORDER_CHANNELS, default: "Shopify" },
+  /**
+   * What the sales team sells and at what price — the handbook's MRP list — and
+   * the discount rules applied to it. Empty means the handbook defaults apply
+   * (`DEFAULT_CATALOGUE`, `DEFAULT_RULES`), so a fresh install prices correctly.
+   */
+  catalogue: {
+    type: [new Schema({
+      id: { type: String, required: true },
+      name: { type: String, required: true },
+      kind: { type: String, enum: CATALOGUE_KINDS, required: true },
+      mrp: { type: Number, default: 0 },
+      offerPrice: Number,
+      floor: Number,
+      sku: String,
+      note: String,
+      active: { type: Boolean, default: true }
+    }, { _id: false })],
+    default: undefined
+  },
+  pricing: { singlePct: Number, comboPct: Number, prepaidOff: Number, extraPct: Number, partialAdvance: Number },
   incentiveRules: {
     type: [new Schema({
       mode: { type: String, enum: TEAM_PAYMENT_MODES, required: true },

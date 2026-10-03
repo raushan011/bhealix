@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { DELIVERY_STATES, COURIER_RULES } from "@/lib/sales/constants";
 import { INCENTIVE_PAY_MODES, INCENTIVE_TYPES, TEAM_ORDER_CHANNELS, TEAM_PAYMENT_MODES } from "./orders";
+import { CATALOGUE_KINDS } from "./pricing";
 
 /**
  * What the sales team's routes accept. Pure, so the order form can validate with
@@ -22,14 +23,14 @@ export const customerSchema = z.object({
   country: text(60)
 });
 
+/**
+ * One line of an order: a catalogue item and how many. No price — prices come
+ * from the catalogue and the handbook's rules on the server, never from the
+ * request (§4.2).
+ */
 export const lineSchema = z.object({
-  product: z.string().regex(OBJECT_ID).optional(),
-  /** A Shopify variant id — digits. */
-  variantId: z.string().regex(/^\d{1,20}$/).optional(),
-  sku: text(60),
-  title: z.string().trim().min(1, "Name the product").max(160),
-  quantity: z.number().int().min(1).max(999),
-  price: z.number().min(0).max(1_000_000)
+  catalogueId: z.string().trim().min(1).max(60),
+  quantity: z.number().int().min(1).max(99)
 });
 
 /**
@@ -41,8 +42,11 @@ export const orderInputSchema = z.object({
   executive: z.string().regex(OBJECT_ID).optional(),
   lead: z.string().regex(OBJECT_ID).optional(),
   customer: customerSchema,
-  items: z.array(lineSchema).min(1, "Add at least one product").max(30),
-  discount: z.number().min(0).max(1_000_000).default(0),
+  items: z.array(lineSchema).min(1, "Add at least one product").max(20),
+  /** The executive released the handbook's extra discount (combos and Kit, never COD). */
+  extraDiscount: z.boolean().default(false),
+  /** Add the free bag. */
+  freeBag: z.boolean().default(false),
   paymentMode: z.enum(TEAM_PAYMENT_MODES),
   advancePaid: z.number().min(0).max(1_000_000).default(0),
   paymentReference: text(120),
@@ -94,18 +98,41 @@ export const unpayIncentiveSchema = z.object({
   reason: z.string().trim().min(3, "Say why the payment is being undone").max(300)
 });
 
+const catalogueItemSchema = z.object({
+  id: z.string().trim().regex(/^[a-z0-9-]{2,40}$/, "Use lower-case letters, digits and dashes for the code"),
+  name: z.string().trim().min(2).max(80),
+  kind: z.enum(CATALOGUE_KINDS),
+  mrp: z.number().min(0).max(100_000),
+  offerPrice: z.number().min(0).max(100_000).optional(),
+  floor: z.number().min(0).max(100_000).optional(),
+  sku: z.string().trim().max(40).optional().or(z.literal("")),
+  note: z.string().trim().max(200).optional().or(z.literal("")),
+  active: z.boolean()
+});
+
 export const rulesSchema = z.object({
   /** Where executives' orders are placed. Optional, so the rules can be saved alone. */
   orderChannel: z.enum(TEAM_ORDER_CHANNELS).optional(),
+  /** The products and their prices — the handbook's MRP list. */
+  catalogue: z.array(catalogueItemSchema).min(1).max(40).optional(),
+  /** The handbook's discount rules. */
+  pricing: z.object({
+    singlePct: z.number().min(0).max(90),
+    comboPct: z.number().min(0).max(90),
+    prepaidOff: z.number().min(0).max(10_000),
+    extraPct: z.number().min(0).max(50),
+    partialAdvance: z.number().min(0).max(100_000)
+  }).optional(),
   incentiveRules: z.array(z.object({
     mode: z.enum(TEAM_PAYMENT_MODES),
     enabled: z.boolean(),
     type: z.enum(INCENTIVE_TYPES),
     value: z.number().min(0).max(100_000)
-  })).length(TEAM_PAYMENT_MODES.length),
+  })).length(TEAM_PAYMENT_MODES.length).optional(),
   /** Re-price every order not yet paid at the new rules, rather than only orders placed from now on. */
   applyToUnpaid: z.boolean().default(false)
 }).superRefine((input, context) => {
+  if (!input.incentiveRules) return;
   input.incentiveRules.forEach((rule, index) => {
     if (rule.type === "Percentage" && rule.value > 100) {
       context.addIssue({ code: "custom", path: ["incentiveRules", index, "value"], message: "A percentage cannot be more than 100" });

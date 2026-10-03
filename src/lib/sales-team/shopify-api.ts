@@ -3,64 +3,15 @@ import { assertShopDomain, fetchOrder, type ShopifyConfig } from "@/lib/sales/sh
 import type { buildShopifyOrder } from "./shopify-order";
 
 /**
- * The three calls the sales team makes to Shopify: list what can be sold, place
- * an order, cancel one. The body of the order is built, and tested, in
+ * The two calls the sales team makes to Shopify: place an order, cancel one.
+ * What can be sold, and at what price, is the handbook's catalogue — not the
+ * shop's product list. The body of the order is built, and tested, in
  * `shopify-order.ts`.
  */
 
 const endpoint = (config: ShopifyConfig, path: string, query = "") =>
   `https://${assertShopDomain(config.domain)}/admin/api/${config.apiVersion}/${path}${query ? `?${query}` : ""}`;
 const headers = (config: ShopifyConfig) => ({ "X-Shopify-Access-Token": config.accessToken });
-
-export type SellableVariant = {
-  /** The variant id — what an order line names. */
-  id: string;
-  productId: string;
-  name: string;
-  sku?: string;
-  price: number;
-  mrp?: number;
-  /** Units the shop says it holds; absent where the shop does not track stock for it. */
-  stock?: number;
-};
-
-type WireProduct = {
-  id: number | string; title?: string; status?: string;
-  variants?: { id: number | string; title?: string; sku?: string | null; price?: string; compare_at_price?: string | null; inventory_quantity?: number; inventory_management?: string | null }[];
-};
-
-/**
- * Every active product's variants, as the order form lists them — one row per
- * thing a customer can actually be sent. A product with a single "Default
- * Title" variant reads as just the product.
- */
-export async function sellableVariants(config: ShopifyConfig, maxPages = 8): Promise<SellableVariant[]> {
-  const rows: SellableVariant[] = [];
-  let next: string | null = endpoint(config, "products.json", "status=active&limit=250&fields=id,title,status,variants");
-
-  for (let page = 0; next && page < maxPages; page++) {
-    const result: { data: { products?: WireProduct[] }; headers: Headers } = await httpJson<{ products?: WireProduct[] }>({ service: "Shopify", url: next, headers: headers(config) });
-    const { data } = result;
-    for (const product of data.products ?? []) {
-      for (const variant of product.variants ?? []) {
-        const variantName = variant.title && variant.title !== "Default Title" ? ` — ${variant.title}` : "";
-        rows.push({
-          id: String(variant.id),
-          productId: String(product.id),
-          name: `${product.title ?? "Product"}${variantName}`,
-          sku: variant.sku || undefined,
-          price: Number(variant.price) || 0,
-          mrp: Number(variant.compare_at_price) || undefined,
-          stock: variant.inventory_management ? Number(variant.inventory_quantity ?? 0) : undefined
-        });
-      }
-    }
-    // Shopify pages with a Link header; the next page's URL is the cursor.
-    const link: string = result.headers.get("link") ?? "";
-    next = /<([^>]+)>;\s*rel="next"/.exec(link)?.[1] ?? null;
-  }
-  return rows.sort((left, right) => left.name.localeCompare(right.name));
-}
 
 export type PlacedOrder = { id: string; name: string; orderNumber?: number };
 

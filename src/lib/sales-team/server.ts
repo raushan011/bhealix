@@ -10,6 +10,8 @@ import { IntegrationError } from "@/lib/sales/http";
 import { shiftDay, todayIso } from "@/lib/time";
 import { priceIncentive, rulesTable, teamOrderNo, type IncentiveRule, type TeamOrderChannel } from "./orders";
 import { canWriteOrders } from "./shopify-order";
+import { catalogueOf, quote, rulesOf as pricingRulesOf, type CatalogueItem, type PricingRules, type Quote } from "./pricing";
+import { priceOrder, type PricedOrder, type TeamPaymentMode } from "./orders";
 import { fetchOrder, grantedScopes, type ShopifyConfig } from "@/lib/sales/shopify";
 import { SalesSettings } from "@/models/Sales";
 
@@ -23,6 +25,8 @@ import { SalesSettings } from "@/models/Sales";
 
 export type TeamSettings = {
   orderChannel: TeamOrderChannel;
+  catalogue: CatalogueItem[];
+  pricing: PricingRules;
   incentiveRules: IncentiveRule[];
   fulfilment?: {
     pickupLocation?: string; weight?: number; length?: number; breadth?: number; height?: number;
@@ -39,7 +43,13 @@ export async function loadTeamSettings(): Promise<TeamSettings> {
     { $setOnInsert: { key: "sales-team" } },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   ).lean() as TeamSettings | null;
-  return { ...(doc ?? {}), orderChannel: doc?.orderChannel ?? "Shopify", incentiveRules: rulesTable(doc?.incentiveRules) } as TeamSettings;
+  return {
+    ...(doc ?? {}),
+    orderChannel: doc?.orderChannel ?? "Shopify",
+    incentiveRules: rulesTable(doc?.incentiveRules),
+    catalogue: catalogueOf(doc?.catalogue),
+    pricing: pricingRulesOf(doc?.pricing)
+  } as TeamSettings;
 }
 
 /**
@@ -372,4 +382,28 @@ export async function syncTeamShopify(limit = 150): Promise<{ checked: number; c
     }
   }
   return report;
+}
+
+
+/**
+ * An order's lines and money from what was asked for, by the handbook.
+ *
+ * The lines carry the MRP — what the customer is told first and what the shop
+ * and the courier show — and the handbook's discount is spread across them, so
+ * the lines still add up to exactly what the customer pays.
+ */
+export function priceTeamOrder(
+  settings: Pick<TeamSettings, "catalogue" | "pricing">,
+  input: { items: { catalogueId: string; quantity: number }[]; paymentMode: TeamPaymentMode; extraDiscount?: boolean; freeBag?: boolean }
+): { quote: Quote; priced: PricedOrder; lines: Array<PricedOrder["lines"][number] & { catalogueId: string; mrp: number }> } {
+  const result = quote({
+    catalogue: settings.catalogue, rules: settings.pricing, items: input.items,
+    paymentMode: input.paymentMode, extra: input.extraDiscount, freeBag: input.freeBag
+  });
+  const priced = priceOrder(result.lines.map(line => ({ title: line.title, sku: line.sku, quantity: line.quantity, price: line.mrp })), result.discount);
+  return {
+    quote: result,
+    priced,
+    lines: priced.lines.map((line, index) => ({ ...line, catalogueId: result.lines[index].catalogueId, mrp: result.lines[index].mrp }))
+  };
 }

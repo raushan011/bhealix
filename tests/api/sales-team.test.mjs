@@ -27,8 +27,7 @@ const customer = (suffix) => ({
 
 const order = (suffix, over = {}) => ({
   customer: customer(suffix),
-  items: [{ title: "Skin pigmentation kit", quantity: 1, price: 1500 }, { title: "Serum", quantity: 2, price: 250 }],
-  discount: 0,
+  items: [{ catalogueId: "pigmentation-kit", quantity: 1 }],
   paymentMode: "COD",
   ...over
 });
@@ -69,16 +68,19 @@ afterAll(async () => {
 describe("placing an order", () => {
   it("works out every figure on the server, whatever the request claims", async () => {
     const created = await exec.post("/api/sales-team/orders", order("partial", {
-      paymentMode: "Partial", advancePaid: 200, discount: 100, totals: { paid: 1 }
+      paymentMode: "Partial", advancePaid: 200, extraDiscount: true, totals: { paid: 1 },
+      items: [{ catalogueId: "pigmentation-kit", quantity: 1, price: 1 }]
     }));
     expect(created.status).toBe(201);
 
     const { data } = await exec.get(`/api/sales-team/orders/${created.data._id}`);
-    expect(data.order.totals).toEqual({ gross: 2000, discount: 100, paid: 1900 });
-    expect(data.order.collectAmount).toBe(1700);
+    // The handbook's Kit: MRP ₹2,299, ₹1,499 offer, extra 10% on partial → ₹1,349.
+    expect(data.order.totals).toEqual({ gross: 2299, discount: 950, paid: 1349 });
+    expect(data.order.collectAmount).toBe(1149);
+    expect(data.order.pricing).toMatchObject({ label: "Kit", mrpTotal: 2299, offerTotal: 1499, extraOff: 150, extra: true });
     expect(data.order.name).toMatch(/^BHX-SE-\d{5}$/);
-    // 4% of 1,900, frozen from the Partial rule, pending until delivered.
-    expect(data.order.incentive).toMatchObject({ type: "Percentage", value: 4, amount: 76, status: "Pending" });
+    // 4% of 1,349, frozen from the Partial rule, pending until delivered.
+    expect(data.order.incentive).toMatchObject({ type: "Percentage", value: 4, amount: 54, status: "Pending" });
   });
 
   it("keeps an executive's order theirs, whatever executive the request names", async () => {
@@ -97,6 +99,34 @@ describe("placing an order", () => {
 
   it("refuses a part payment that is really COD", async () => {
     const refused = await exec.post("/api/sales-team/orders", order("bad", { paymentMode: "Partial", advancePaid: 0 }));
+    expect(refused.status).toBe(400);
+  });
+});
+
+describe("handbook pricing on the server", () => {
+  const priceOf = async (body) => {
+    const created = await exec.post("/api/sales-team/orders", order(`price-${Math.random()}`, body));
+    expect(created.status).toBe(201);
+    return (await exec.get(`/api/sales-team/orders/${created.data._id}`)).data.order;
+  };
+
+  it("prices a combo at 30% off and a single at 20% off MRP", async () => {
+    expect((await priceOf({ items: [{ catalogueId: "face-wash", quantity: 1 }, { catalogueId: "moisturizer", quantity: 1 }] })).totals.paid).toBe(699);
+    expect((await priceOf({ items: [{ catalogueId: "serum", quantity: 1 }], paymentMode: "Prepaid" })).totals.paid).toBe(589);
+  });
+
+  it("refuses the extra discount on cash on delivery, whatever the request says", async () => {
+    expect((await priceOf({ extraDiscount: true })).totals.paid).toBe(1499);
+  });
+
+  it("adds the free bag at no charge", async () => {
+    const placed = await priceOf({ freeBag: true });
+    expect(placed.items.find(item => item.catalogueId === "free-bag")).toMatchObject({ gross: 0, quantity: 1 });
+    expect(placed.totals.paid).toBe(1499);
+  });
+
+  it("refuses an item that is not on the price list", async () => {
+    const refused = await exec.post("/api/sales-team/orders", order("unknown", { items: [{ catalogueId: "nonsense", quantity: 1 }] }));
     expect(refused.status).toBe(400);
   });
 });
@@ -137,7 +167,7 @@ describe("from delivery to payment", () => {
     const corrected = await admin.patch(`/api/sales-team/orders/${id}`, { action: "override", state: "Delivered", reason: "Customer confirmed" });
     expect(corrected.status).toBe(200);
     const { data } = await exec.get(`/api/sales-team/orders/${id}`);
-    expect(data.order.incentive).toMatchObject({ status: "Payable", amount: 100 });
+    expect(data.order.incentive).toMatchObject({ status: "Payable", amount: 72 });
   });
 
   it("is paid by the administrator only, once", async () => {
@@ -146,7 +176,7 @@ describe("from delivery to payment", () => {
     expect((await hr.post("/api/sales-team/incentives", body)).status).toBe(403);
 
     const paid = await admin.post("/api/sales-team/incentives", body);
-    expect(paid.data).toMatchObject({ paid: 1, amount: 100 });
+    expect(paid.data).toMatchObject({ paid: 1, amount: 72 });
     const again = await admin.post("/api/sales-team/incentives", body);
     expect(again.data.paid).toBe(0);
 
@@ -157,7 +187,7 @@ describe("from delivery to payment", () => {
   it("is never restated when the parcel later comes back — only flagged", async () => {
     await admin.patch(`/api/sales-team/orders/${id}`, { action: "override", state: "RTO", reason: "Returned" });
     const { data } = await admin.get(`/api/sales-team/orders/${id}`);
-    expect(data.order.incentive).toMatchObject({ status: "Paid", amount: 100, needsReversal: true });
+    expect(data.order.incentive).toMatchObject({ status: "Paid", amount: 72, needsReversal: true });
   });
 });
 
@@ -232,7 +262,8 @@ describe("ordering through Shopify", () => {
       expect(refused.error).toMatch(/Shopify is not connected/);
 
       const products = await exec.get("/api/sales-team/products");
-      expect(products.data).toMatchObject({ source: "Shopify", items: [] });
+      // The handbook price list, never the shop's products.
+      expect(products.data.catalogue.map(item => item.id)).toEqual(expect.arrayContaining(["face-wash", "serum", "pigmentation-kit", "testing-kit"]));
     } finally {
       await admin.put("/api/sales-team/settings", { incentiveRules: originalRules, orderChannel: "Direct" });
     }

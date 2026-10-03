@@ -1249,7 +1249,7 @@ somebody typed by hand.
 | `/leads` | GET | lead scope (own for EXECUTIVE) | `assigned=none\|any\|<id>`, `status`, `open=1`, `type`, `city`, `q` |
 | `/leads/assign` | POST | `manageSalesTeam` | `{leadIds, executive \| null}`; converted leads are left alone |
 | `/leads/[id]` | GET / POST | lead scope; POST desk admin or own executive | remark + status; `Converted` refused by hand |
-| `/products` | GET | place or view | Shopify variants (5-minute cache, `?fresh=1`) when the channel is Shopify, else the CRM catalogue |
+| `/products` | GET | place or view | the handbook catalogue and pricing rules from `SalesTeamSettings` — never the shop's products |
 | `/customers` | GET | scope | `?phone=` → a repeat customer's last address |
 | `/executives` | GET | `viewSalesTeam` | |
 | `/sync` | POST | `viewSalesTeam` | `syncTeamShopify` (cancellations) then `syncTeamShipments`; also run by `/api/sales/cron` |
@@ -1514,6 +1514,16 @@ to explain it. Every write is an upsert, so re-reading costs nothing. Shiprocket
   `POST /orders/refresh` re-tracks the caller's moving parcels (≤40), storing `expectedDelivery`.
   Executives add their own customers (`POST /leads`, de-duplicated by phone) and set follow-ups
   (`SalesLead.followUpAt/followUpNote`; `PATCH /leads/[id]`, or `followUpAt` on a remark).
+- **Handbook pricing (Oct 2026):** order lines are `{catalogueId, quantity}` only — never a price. The
+  catalogue and discount rules live on `SalesTeamSettings.catalogue/pricing` (defaults = Sales Team Handbook
+  v1.0: Face Wash ₹399, Serum ₹799, Moisturizer ₹599, Sunscreen ₹499, Anti-Pigmentation Kit MRP ₹2,299 /
+  offer ₹1,499 / floor ₹1,300, Testing Kit ₹399, Free Bag ₹0) and are edited under Sales CRM → Settings.
+  `lib/sales-team/pricing.ts::quote` (pure, tested against the handbook's price sheets): single 20% off MRP,
+  combo (2+ different products) 30%, Kit fixed, Testing Kit flat, ₹50 off prepaid once per order, extra 10%
+  on the running price for combo/Kit only and never COD, Kit floor enforced. `server.ts::priceTeamOrder`
+  recomputes on POST/PATCH; lines carry MRP (`gross`) with the discount spread via `priceOrder`, and the
+  breakdown is stored on `order.pricing`. Commission defaults follow the handbook: 10% prepaid, 10% partial,
+  5% COD. Shopify's product list is no longer used for team orders (lines go to Shopify as custom items).
 - **Part payment at Shiprocket (Direct channel):** booked as COD with `total_discount` = advance, so
   `codAmountOf()` collects the balance (`lib/sales/fulfilment.ts`).
 

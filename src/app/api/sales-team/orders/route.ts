@@ -11,12 +11,12 @@ import { DELIVERY_STATES } from "@/lib/sales/constants";
 import { dayRange } from "@/lib/time";
 import { isExecutive, orderScope } from "@/lib/sales-team/access";
 import {
-  collectAmountOf, formatRupees, INCENTIVE_STATUSES, PAYMENT_MODE_LABEL, paymentProblem, priceOrder, ruleFor,
+  collectAmountOf, formatRupees, INCENTIVE_STATUSES, PAYMENT_MODE_LABEL, paymentProblem, ruleFor,
   TEAM_PAYMENT_MODES, type TeamPaymentMode
 } from "@/lib/sales-team/orders";
 import { orderInputSchema } from "@/lib/sales-team/schemas";
 import { preOrderCheck } from "@/lib/sales-team/checks";
-import { activeExecutive, applyRule, loadTeamSettings, nextTeamOrderNo, recalculateIncentive, shopifyReadiness } from "@/lib/sales-team/server";
+import { activeExecutive, applyRule, loadTeamSettings, nextTeamOrderNo, priceTeamOrder, recalculateIncentive, shopifyReadiness } from "@/lib/sales-team/server";
 import { cancelShopifyOrder, placeShopifyOrder, type PlacedOrder } from "@/lib/sales-team/shopify-api";
 import { buildShopifyOrder, TEAM_DISCOUNT_CODE } from "@/lib/sales-team/shopify-order";
 import { IntegrationError } from "@/lib/sales/http";
@@ -128,7 +128,9 @@ export async function POST(request: Request) {
     if (!executive) return badRequest("That person is not an active sales executive. Add them under HR & Employees with the Sales executive role.");
 
     const mode = input.paymentMode as TeamPaymentMode;
-    const priced = priceOrder(input.items, input.discount);
+    const settingsForPrice = await loadTeamSettings();
+    const { quote: handbook, priced, lines: pricedLines } = priceTeamOrder(settingsForPrice, { ...input, paymentMode: mode });
+    if (!pricedLines.some(line => line.mrp > 0)) return badRequest("Add at least one product from the catalogue.");
     const advance = mode === "Prepaid" ? priced.total : mode === "COD" ? 0 : input.advancePaid;
     const problem = paymentProblem(mode, priced.total, advance);
     if (problem) return badRequest(problem);
@@ -144,7 +146,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const settings = await loadTeamSettings();
+    const settings = settingsForPrice;
     const ref = await nextTeamOrderNo();
     const channel = settings.orderChannel;
 
@@ -203,7 +205,11 @@ export async function POST(request: Request) {
       lead: lead?._id,
       createdBy: auth.session.userId,
       customer: { ...input.customer, country: input.customer.country || "India" },
-      items: priced.lines.map((line, index) => ({ ...line, product: input.items[index]?.product })),
+      items: pricedLines,
+      pricing: {
+        label: handbook.label, mrpTotal: handbook.mrpTotal, offerTotal: handbook.offerTotal, prepaidOff: handbook.prepaidOff,
+        extraOff: handbook.extraOff, extra: handbook.extraOff > 0, freeBag: Boolean(input.freeBag)
+      },
       totals: { gross: priced.gross, discount: priced.discount, paid: priced.total },
       paymentMode: mode,
       paymentMethod: mode === "Prepaid" ? "Prepaid" : "COD",

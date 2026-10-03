@@ -6,9 +6,9 @@ import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
 import { record } from "@/lib/audit";
 import { processStateOf } from "@/lib/sales/fulfilment";
 import { isExecutive, mayActOn, orderScope } from "@/lib/sales-team/access";
-import { collectAmountOf, paymentProblem, priceOrder, ruleFor, type TeamPaymentMode } from "@/lib/sales-team/orders";
+import { collectAmountOf, paymentProblem, ruleFor, type TeamPaymentMode } from "@/lib/sales-team/orders";
 import { orderPatchSchema } from "@/lib/sales-team/schemas";
-import { activeExecutive, applyRule, loadTeamSettings, recalculateIncentive, shopifyReadiness } from "@/lib/sales-team/server";
+import { activeExecutive, applyRule, loadTeamSettings, priceTeamOrder, recalculateIncentive, shopifyReadiness } from "@/lib/sales-team/server";
 import { cancelShopifyOrder } from "@/lib/sales-team/shopify-api";
 import { shopifyAdminOrderUrl } from "@/lib/sales-team/shopify-order";
 import { IntegrationError } from "@/lib/sales/http";
@@ -118,7 +118,8 @@ export async function PATCH(request: Request, { params }: Params) {
 
     if (input.action === "edit") {
       const mode = input.order.paymentMode as TeamPaymentMode;
-      const priced = priceOrder(input.order.items, input.order.discount);
+      const { quote: handbook, priced, lines: pricedLines } = priceTeamOrder(await loadTeamSettings(), { ...input.order, paymentMode: mode });
+      if (!pricedLines.some(line => line.mrp > 0)) return badRequest("Add at least one product from the catalogue.");
       const advance = mode === "Prepaid" ? priced.total : mode === "COD" ? 0 : input.order.advancePaid;
       const problem = paymentProblem(mode, priced.total, advance);
       if (problem) return badRequest(problem);
@@ -129,7 +130,11 @@ export async function PATCH(request: Request, { params }: Params) {
 
       order.set({
         customer: { ...input.order.customer, country: input.order.customer.country || "India" },
-        items: priced.lines.map((line, index) => ({ ...line, product: input.order.items[index]?.product })),
+        items: pricedLines,
+        pricing: {
+          label: handbook.label, mrpTotal: handbook.mrpTotal, offerTotal: handbook.offerTotal, prepaidOff: handbook.prepaidOff,
+          extraOff: handbook.extraOff, extra: handbook.extraOff > 0, freeBag: Boolean(input.order.freeBag)
+        },
         totals: { gross: priced.gross, discount: priced.discount, paid: priced.total },
         paymentMode: mode,
         paymentMethod: mode === "Prepaid" ? "Prepaid" : "COD",

@@ -31,6 +31,8 @@ export async function GET() {
     return ok({
       incentiveRules: settings.incentiveRules,
       orderChannel: settings.orderChannel,
+      catalogue: settings.catalogue,
+      pricing: settings.pricing,
       shopifyRefusal: shopify?.refusal ?? null,
       mayEdit: can.manageSalesTeam(auth.session.role)
     });
@@ -58,14 +60,19 @@ export async function PUT(request: Request) {
     const input = rulesSchema.parse(await request.json());
     const before = (await loadTeamSettings()).incentiveRules;
     await SalesTeamSettings.updateOne({ key: "sales-team" }, {
-      $set: { incentiveRules: input.incentiveRules, ...(input.orderChannel ? { orderChannel: input.orderChannel } : {}) }
+      $set: {
+        ...(input.incentiveRules ? { incentiveRules: input.incentiveRules } : {}),
+        ...(input.orderChannel ? { orderChannel: input.orderChannel } : {}),
+        ...(input.catalogue ? { catalogue: input.catalogue } : {}),
+        ...(input.pricing ? { pricing: input.pricing } : {})
+      }
     }, { upsert: true });
 
     let repriced = 0;
-    if (input.applyToUnpaid) {
+    if (input.applyToUnpaid && input.incentiveRules) {
       const orders = await SalesTeamOrder.find({ "incentive.status": { $ne: "Paid" } });
       for (const order of orders) {
-        applyRule(order, ruleFor(input.incentiveRules, order.paymentMode as TeamPaymentMode));
+        applyRule(order, ruleFor(input.incentiveRules!, order.paymentMode as TeamPaymentMode));
         recalculateIncentive(order);
         await order.save();
         repriced++;
@@ -78,10 +85,10 @@ export async function PUT(request: Request) {
     });
 
     return ok({
-      incentiveRules: input.incentiveRules,
+      incentiveRules: input.incentiveRules ?? before,
       orderChannel: input.orderChannel ?? (await loadTeamSettings()).orderChannel,
       repriced,
-      message: input.applyToUnpaid
+      message: input.applyToUnpaid && input.incentiveRules
         ? `Rules saved. ${repriced} unpaid order${repriced === 1 ? " was" : "s were"} re-priced at the new rules.`
         : "Rules saved. They apply to orders placed from now on."
     });

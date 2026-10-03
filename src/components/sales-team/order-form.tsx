@@ -2,18 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2 } from "lucide-react";
+import { Gift, Minus, Plus } from "lucide-react";
 import { Button, Card, Field, Notice, Spinner } from "@/components/ui/kit";
 import {
-  collectAmountOf, describeRule, formatRupees, incentiveAmountOf, PAYMENT_MODE_LABEL, paymentProblem, priceOrder,
+  collectAmountOf, describeRule, formatRupees, incentiveAmountOf, PAYMENT_MODE_LABEL, paymentProblem,
   ruleFor, TEAM_PAYMENT_MODES, type IncentiveRule, type TeamPaymentMode
 } from "@/lib/sales-team/orders";
+import { DEFAULT_RULES, FREE_BAG_ID, quote, type CatalogueItem, type PricingRules } from "@/lib/sales-team/pricing";
 import { call, INDIAN_STATES, messageOf, type TeamOrderRow } from "./shared";
 
-type Product = { id: string; name: string; price: number; mrp?: number; sku?: string; stock?: number };
-type Catalogue = { source: "Shopify" | "Catalogue"; items: Product[]; refusal?: string };
 type Executive = { _id: string; name: string; employeeId?: string };
-type Line = { key: number; product?: string; variantId?: string; sku?: string; title: string; quantity: number; price: number };
 type Known = { customer: Record<string, string> | null; lastOrder: { name: string; placedAt: string } | null; orders: number };
 
 const blankCustomer = { name: "", phone: "", email: "", address1: "", address2: "", city: "", state: "", pinCode: "" };
@@ -21,9 +19,12 @@ const blankCustomer = { name: "", phone: "", email: "", address1: "", address2: 
 /**
  * Placing — or, before it goes to the courier, correcting — a sales order.
  *
- * Totals, what the courier will collect and the incentive are worked out as the
- * form is filled in, by the same functions the server uses to store them
- * (§4.1), so what the executive sees on the right is exactly what is saved.
+ * Products come from the Sales Team Handbook's catalogue and are priced by its
+ * rules (`lib/sales-team/pricing.ts`): the executive chooses what and how many,
+ * the payment mode, and whether to release the extra discount where it is
+ * allowed. They never type a price. The same function prices the order on the
+ * server before it is saved (§4.1, §4.2), so the figure read out to the customer
+ * is the figure stored.
  *
  * `admin` adds the one field an executive never sees: whose sale this is.
  */
@@ -34,8 +35,8 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
   existing?: TeamOrderRow;
 }) {
   const router = useRouter();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [source, setSource] = useState<Catalogue["source"]>("Catalogue");
+  const [catalogue, setCatalogue] = useState<CatalogueItem[]>([]);
+  const [pricing, setPricing] = useState<PricingRules>(DEFAULT_RULES);
   const [refusal, setRefusal] = useState("");
   const [known, setKnown] = useState<Known | null>(null);
   const [executives, setExecutives] = useState<Executive[]>([]);
@@ -46,10 +47,11 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
 
   const [executive, setExecutive] = useState("");
   const [customer, setCustomer] = useState(blankCustomer);
-  const [lines, setLines] = useState<Line[]>([{ key: 1, title: "", quantity: 1, price: 0 }]);
-  const [discount, setDiscount] = useState(0);
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [extra, setExtra] = useState(false);
+  const [freeBag, setFreeBag] = useState(false);
   const [mode, setMode] = useState<TeamPaymentMode>("COD");
-  const [advance, setAdvance] = useState(0);
+  const [advance, setAdvance] = useState(DEFAULT_RULES.partialAdvance);
   const [reference, setReference] = useState("");
   const [notes, setNotes] = useState("");
   const [leadName, setLeadName] = useState("");
@@ -57,15 +59,16 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
   useEffect(() => {
     (async () => {
       try {
-        const [catalogue, settings, team, lead] = await Promise.all([
-          call<Catalogue>("/api/sales-team/products"),
-          call<{ incentiveRules: IncentiveRule[] }>("/api/sales-team/settings"),
+        const [products, settings, team, lead] = await Promise.all([
+          call<{ catalogue: CatalogueItem[]; pricing: PricingRules }>("/api/sales-team/products"),
+          call<{ incentiveRules: IncentiveRule[]; shopifyRefusal: string | null }>("/api/sales-team/settings"),
           admin && !existing ? call<{ items: Executive[] }>("/api/sales-team/executives") : Promise.resolve({ items: [] }),
           leadId && !existing ? call<{ lead: { name: string; phone?: string; address?: string; city?: string; assignedTo?: { _id: string } | null } }>(`/api/sales-team/leads/${leadId}`) : Promise.resolve(null)
         ]);
-        setProducts(catalogue.items);
-        setSource(catalogue.source);
-        setRefusal(catalogue.refusal ?? "");
+        setCatalogue(products.catalogue);
+        setPricing(products.pricing);
+        setAdvance(products.pricing.partialAdvance);
+        setRefusal(settings.shopifyRefusal ?? "");
         setRules(settings.incentiveRules);
         setExecutives(team.items);
         if (lead) {
@@ -75,10 +78,15 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
         }
         if (existing) {
           setCustomer({ ...blankCustomer, ...Object.fromEntries(Object.entries(existing.customer).map(([key, value]) => [key, value ?? ""])) });
-          setLines(existing.items.map((item, index) => ({ key: index + 1, product: item.product, variantId: item.variantId, sku: item.sku, title: item.title, quantity: item.quantity, price: item.price ?? 0 })));
-          setDiscount(existing.totals.discount);
+          const picked: Record<string, number> = {};
+          for (const item of existing.items) {
+            if (item.catalogueId && item.catalogueId !== FREE_BAG_ID) picked[item.catalogueId] = (picked[item.catalogueId] ?? 0) + item.quantity;
+          }
+          setQuantities(picked);
+          setFreeBag(existing.items.some(item => item.catalogueId === FREE_BAG_ID));
+          setExtra(Boolean(existing.pricing?.extra));
           setMode(existing.paymentMode);
-          setAdvance(existing.paymentMode === "Partial" ? existing.advancePaid ?? 0 : 0);
+          if (existing.paymentMode === "Partial") setAdvance(existing.advancePaid ?? products.pricing.partialAdvance);
           setReference(existing.paymentReference ?? "");
           setNotes(existing.notes ?? "");
         }
@@ -90,12 +98,22 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
     })();
   }, [admin, leadId, existing]);
 
-  const priced = useMemo(() => priceOrder(lines, discount), [lines, discount]);
+  const items = useMemo(() => Object.entries(quantities).filter(([, quantity]) => quantity > 0).map(([catalogueId, quantity]) => ({ catalogueId, quantity })), [quantities]);
+  const priced = useMemo(() => quote({ catalogue, rules: pricing, items, paymentMode: mode, extra, freeBag }), [catalogue, pricing, items, mode, extra, freeBag]);
+  // What the same basket costs in each mode, for the executive to read out.
+  const byMode = useMemo(() => Object.fromEntries(TEAM_PAYMENT_MODES.map(value =>
+    [value, quote({ catalogue, rules: pricing, items, paymentMode: value, extra: value === "COD" ? false : extra, freeBag }).total])) as Record<TeamPaymentMode, number>,
+  [catalogue, pricing, items, extra, freeBag]);
+
   const effectiveAdvance = mode === "Prepaid" ? priced.total : mode === "COD" ? 0 : advance;
   const collect = collectAmountOf(mode, priced.total, effectiveAdvance);
   const problem = paymentProblem(mode, priced.total, effectiveAdvance);
   const rule = ruleFor(rules, mode);
   const incentive = incentiveAmountOf(rule, priced.total);
+  const hasExistingWithoutCatalogue = Boolean(existing?.items.some(item => !item.catalogueId));
+
+  // A COD order cannot carry the extra discount; switching to COD takes it back.
+  useEffect(() => { if (mode === "COD" && extra) setExtra(false); }, [mode, extra]);
 
   /*
    * The live check: can a courier deliver here, and how likely is this parcel
@@ -125,20 +143,8 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
     return () => clearTimeout(timer);
   }, [pinReady, customer.pinCode, customer.phone, customer.address1, customer.address2, customer.city, mode, priced.total, effectiveAdvance]);
 
-  const setLine = (key: number, patch: Partial<Line>) =>
-    setLines(current => current.map(line => line.key === key ? { ...line, ...patch } : line));
-
-  /** A line points at a Shopify variant or a catalogue product, depending on where orders go. */
-  const pickedId = (line: Line) => (source === "Shopify" ? line.variantId : line.product) ?? "";
-
-  function pickProduct(key: number, id: string) {
-    const product = products.find(item => item.id === id);
-    if (!product) { setLine(key, { product: undefined, variantId: undefined, sku: undefined }); return; }
-    setLine(key, {
-      ...(source === "Shopify" ? { variantId: product.id, product: undefined } : { product: product.id, variantId: undefined }),
-      sku: product.sku, title: product.name, price: product.price || product.mrp || 0
-    });
-  }
+  const setQuantity = (id: string, quantity: number) =>
+    setQuantities(current => ({ ...current, [id]: Math.max(0, Math.min(99, quantity)) }));
 
   /**
    * A repeat customer, recognised by phone. Their last delivered-to address is
@@ -172,19 +178,12 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
     event.preventDefault();
     setError("");
     if (admin && !existing && !executive) { setError("Choose the sales executive this order belongs to."); return; }
+    if (!items.length) { setError("Add at least one product."); return; }
     if (problem) { setError(problem); return; }
 
     const order = {
-      customer,
-      items: lines.filter(line => line.title.trim()).map(line => ({
-        product: line.product, variantId: line.variantId, sku: line.sku || undefined,
-        title: line.title.trim(), quantity: Number(line.quantity), price: Number(line.price)
-      })),
-      discount: Number(discount) || 0,
-      paymentMode: mode,
-      advancePaid: Number(effectiveAdvance) || 0,
-      paymentReference: reference,
-      notes
+      customer, items, extraDiscount: extra && priced.extraAllowed, freeBag,
+      paymentMode: mode, advancePaid: Number(effectiveAdvance) || 0, paymentReference: reference, notes
     };
 
     setBusy(true);
@@ -205,12 +204,16 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
     }
   }
 
-  if (loading) return <Spinner label="Loading the catalogue…" />;
+  if (loading) return <Spinner label="Loading the price list…" />;
 
-  return <form onSubmit={submit} className="grid gap-5 pb-20 lg:grid-cols-[1fr_320px] lg:items-start lg:pb-0">
+  const sellable = catalogue.filter(item => item.kind !== "Gift");
+  const bag = catalogue.find(item => item.id === FREE_BAG_ID);
+  const blocked = (Boolean(problem) && priced.total > 0) || (Boolean(refusal) && !existing) || !items.length;
+
+  return <form onSubmit={submit} className="grid gap-5 pb-20 lg:grid-cols-[1fr_340px] lg:items-start lg:pb-0">
     <div className="space-y-5">
       {refusal && !existing && <Notice tone="error">{refusal}</Notice>}
-      {source === "Shopify" && !refusal && !existing && <Notice>This order is placed in your Shopify store, tagged with the executive&rsquo;s name, and its stock comes off Shopify.</Notice>}
+      {hasExistingWithoutCatalogue && <Notice tone="warning">This order was placed before the handbook price list. Choose its products again below.</Notice>}
       {leadName && <Notice>Converting the lead <strong>{leadName}</strong>. Placing this order marks the lead Converted.</Notice>}
 
       {admin && !existing && (
@@ -225,7 +228,94 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
         </Card>
       )}
 
-      <Card className="space-y-4 p-5">
+      <Card className="space-y-3 p-4 sm:p-5">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-[15px] font-semibold">Products</h2>
+          <span className="text-xs text-[var(--muted)]">MRP · handbook price list</span>
+        </div>
+        <div className="divide-y divide-[var(--line)] rounded-[12px] border border-[var(--line)]">
+          {sellable.map(item => {
+            const quantity = quantities[item.id] ?? 0;
+            return <div key={item.id} className={`flex items-center gap-3 px-3 py-3 ${quantity ? "bg-[var(--brand-soft)]" : ""}`}>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold">{item.name}</p>
+                <p className="text-xs text-[var(--muted)]">
+                  MRP {formatRupees(item.mrp)}
+                  {item.kind === "Kit" && item.offerPrice ? ` · offer ${formatRupees(item.offerPrice)}` : ""}
+                  {item.kind === "Testing kit" ? " · flat price" : ""}
+                </p>
+                {item.note && <p className="mt-0.5 hidden text-[11px] text-[var(--muted)] sm:block">{item.note}</p>}
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <button type="button" aria-label={`One less ${item.name}`} disabled={!quantity} onClick={() => setQuantity(item.id, quantity - 1)}
+                  className="tap grid place-items-center rounded-full border border-[var(--line-2)] disabled:opacity-30"><Minus size={15} /></button>
+                <span className="w-7 text-center text-sm font-semibold tabular-nums">{quantity}</span>
+                <button type="button" aria-label={`One more ${item.name}`} onClick={() => setQuantity(item.id, quantity + 1)}
+                  className="tap grid place-items-center rounded-full bg-[var(--brand)] text-[var(--on-brand)]"><Plus size={15} /></button>
+              </div>
+            </div>;
+          })}
+        </div>
+
+        {items.length > 0 && <p className="text-xs text-[var(--muted)]">
+          {priced.label}: {formatRupees(priced.mrpTotal)} MRP → {formatRupees(priced.offerTotal)} offer.
+          {" "}Quote the MRP first, then the offer.
+        </p>}
+
+        {bag?.active && (
+          <label className={`flex cursor-pointer items-center gap-3 rounded-[12px] border px-3 py-3 ${freeBag ? "border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--line-2)]"}`}>
+            <input type="checkbox" checked={freeBag} onChange={event => setFreeBag(event.target.checked)} />
+            <Gift size={17} className="text-[var(--brand)]" />
+            <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Add a free bag</span>
+              <span className="block text-xs text-[var(--muted)]">{bag.note || "Free of charge."}</span></span>
+          </label>
+        )}
+
+        {items.length > 0 && (
+          <label className={`flex items-start gap-3 rounded-[12px] border px-3 py-3 ${!priced.extraAllowed ? "opacity-60" : extra ? "border-[var(--warn-line)] bg-[var(--warn-bg)]" : "border-[var(--line-2)]"}`}>
+            <input type="checkbox" className="mt-1" disabled={!priced.extraAllowed} checked={extra && priced.extraAllowed} onChange={event => setExtra(event.target.checked)} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold">Release the extra {pricing.extraPct}%{extra && priced.extraOff ? ` (−${formatRupees(priced.extraOff)})` : ""}</span>
+              <span className="block text-xs text-[var(--muted)]">
+                {priced.extraAllowed ? "Only if the customer is about to walk away. Present it as a one-time approval." : priced.extraReason}
+              </span>
+            </span>
+          </label>
+        )}
+        {priced.warnings.map(warning => <Notice key={warning} tone="warning">{warning}</Notice>)}
+      </Card>
+
+      <Card className="space-y-4 p-4 sm:p-5">
+        <h2 className="text-[15px] font-semibold">Payment</h2>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {TEAM_PAYMENT_MODES.map(value => {
+            const option = ruleFor(rules, value);
+            return <label key={value} className={`cursor-pointer rounded-[12px] border p-3 transition-colors ${mode === value ? "border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--line-2)] hover:bg-[var(--surface-2)]"}`}>
+              <input type="radio" name="mode" value={value} checked={mode === value} onChange={() => setMode(value)} className="sr-only" />
+              <span className="flex items-baseline justify-between gap-2">
+                <span className="text-sm font-semibold">{PAYMENT_MODE_LABEL[value]}</span>
+                {items.length > 0 && <span className="text-sm font-semibold tabular-nums">{formatRupees(byMode[value])}</span>}
+              </span>
+              <span className="mt-0.5 block text-xs text-[var(--muted)]">
+                {value === "Prepaid" ? `₹${pricing.prepaidOff} off · ` : value === "Partial" ? `₹${pricing.partialAdvance} now · ` : ""}You earn {describeRule(option).replace(" of the order", "")}
+              </span>
+            </label>;
+          })}
+        </div>
+        <p className="text-xs text-[var(--muted)]">Push Prepaid first, then Partial, and only then COD.</p>
+        {mode === "Partial" && (
+          <Field label="Advance received (₹)" hint={`The handbook's booking advance is ₹${pricing.partialAdvance}. The courier collects the rest.`}>
+            <input className="input sm:max-w-[200px]" type="number" min={0} step="1" value={advance} onChange={event => setAdvance(Math.max(0, Number(event.target.value) || 0))} />
+          </Field>
+        )}
+        {mode !== "COD" && (
+          <Field label="Payment reference" hint="The UPI or bank transaction id for what was paid up front.">
+            <input className="input" value={reference} onChange={event => setReference(event.target.value)} />
+          </Field>
+        )}
+      </Card>
+
+      <Card className="space-y-4 p-4 sm:p-5">
         <h2 className="text-[15px] font-semibold">Customer</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Name"><input className="input" required value={customer.name} onChange={event => setCustomer({ ...customer, name: event.target.value })} /></Field>
@@ -239,7 +329,7 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
             <Button type="button" tone="secondary" className="!min-h-[34px] text-xs" onClick={useKnownAddress}>Use this address</Button>
           </div>
         )}
-        <Field label="Address"><input className="input" required value={customer.address1} onChange={event => setCustomer({ ...customer, address1: event.target.value })} placeholder="House, street, area" /></Field>
+        <Field label="Address"><input className="input" required value={customer.address1} onChange={event => setCustomer({ ...customer, address1: event.target.value })} placeholder="House / flat no., street, area" /></Field>
         <Field label="Landmark"><input className="input" value={customer.address2} onChange={event => setCustomer({ ...customer, address2: event.target.value })} placeholder="Optional" /></Field>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="City"><input className="input" required value={customer.city} onChange={event => setCustomer({ ...customer, city: event.target.value })} /></Field>
@@ -248,91 +338,34 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
             <datalist id="team-states">{INDIAN_STATES.map(state => <option key={state} value={state} />)}</datalist>
           </Field>
         </div>
+        <Field label="Notes"><textarea className="textarea" rows={2} value={notes} onChange={event => setNotes(event.target.value)} placeholder="Anything the person packing or delivering should know" /></Field>
       </Card>
 
       <DeliveryCheckCard check={check} checking={checking} pinReady={pinReady} mode={mode} onPrepaid={() => setMode("Prepaid")} />
-
-      <Card className="space-y-4 p-5">
-        <div className="flex items-center justify-between">
-          <h2 className="text-[15px] font-semibold">Products</h2>
-          <Button type="button" tone="ghost" className="!min-h-[36px] text-xs"
-            onClick={() => setLines(current => [...current, { key: Math.max(0, ...current.map(line => line.key)) + 1, title: "", quantity: 1, price: 0 }])}>
-            <Plus size={14} />Add line
-          </Button>
-        </div>
-        {lines.map(line => (
-          <div key={line.key} className="grid gap-3 rounded-[10px] border border-[var(--line)] p-3 sm:grid-cols-[1fr_90px_120px_auto] sm:items-end">
-            <Field label="Product">
-              <select className="select" value={pickedId(line)} onChange={event => pickProduct(line.key, event.target.value)}>
-                <option value="">{source === "Shopify" ? "Choose a product…" : "Type a product below…"}</option>
-                {products.map(product => (
-                  <option key={product.id} value={product.id} disabled={product.stock !== undefined && product.stock <= 0}>
-                    {product.name}{product.price ? ` — ${formatRupees(product.price)}` : ""}
-                    {product.stock !== undefined ? (product.stock > 0 ? ` (${product.stock} in stock)` : " (out of stock)") : ""}
-                  </option>
-                ))}
-              </select>
-              {!pickedId(line) && <input className="input mt-2" placeholder={source === "Shopify" ? "Or type a product Shopify does not list" : "Product name"} value={line.title} onChange={event => setLine(line.key, { title: event.target.value })} />}
-            </Field>
-            <Field label="Qty"><input className="input" type="number" min={1} max={999} value={line.quantity} onChange={event => setLine(line.key, { quantity: Math.max(1, Number(event.target.value) || 1) })} /></Field>
-            <Field label="Price each (₹)"><input className="input" type="number" min={0} step="0.01" value={line.price} onChange={event => setLine(line.key, { price: Math.max(0, Number(event.target.value) || 0) })} /></Field>
-            <button type="button" aria-label="Remove line" disabled={lines.length === 1}
-              onClick={() => setLines(current => current.filter(item => item.key !== line.key))}
-              className="tap grid place-items-center rounded-[10px] text-[var(--danger-ink)] hover:bg-[var(--danger-bg)] disabled:opacity-30">
-              <Trash2 size={16} />
-            </button>
-          </div>
-        ))}
-        <Field label="Discount on the order (₹)" hint="Taken off the order before anything else, and shared across the lines.">
-          <input className="input sm:max-w-[200px]" type="number" min={0} step="0.01" value={discount} onChange={event => setDiscount(Math.max(0, Number(event.target.value) || 0))} />
-        </Field>
-      </Card>
-
-      <Card className="space-y-4 p-5">
-        <h2 className="text-[15px] font-semibold">Payment</h2>
-        <div className="grid gap-2 sm:grid-cols-3">
-          {TEAM_PAYMENT_MODES.map(value => {
-            const option = ruleFor(rules, value);
-            return <label key={value} className={`cursor-pointer rounded-[12px] border p-3 transition-colors ${mode === value ? "border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--line-2)] hover:bg-[var(--surface-2)]"}`}>
-              <input type="radio" name="mode" value={value} checked={mode === value} onChange={() => setMode(value)} className="sr-only" />
-              <span className="block text-sm font-semibold">{PAYMENT_MODE_LABEL[value]}</span>
-              <span className="mt-0.5 block text-xs text-[var(--muted)]">Incentive: {describeRule(option)}</span>
-            </label>;
-          })}
-        </div>
-        {mode === "Partial" && (
-          <Field label="Advance received (₹)" hint="What the customer has already paid. The courier collects the rest.">
-            <input className="input sm:max-w-[200px]" type="number" min={0} step="0.01" value={advance} onChange={event => setAdvance(Math.max(0, Number(event.target.value) || 0))} />
-          </Field>
-        )}
-        {mode !== "COD" && (
-          <Field label="Payment reference" hint="The UPI or bank transaction id for what was paid up front.">
-            <input className="input" value={reference} onChange={event => setReference(event.target.value)} />
-          </Field>
-        )}
-        <Field label="Notes"><textarea className="textarea" rows={2} value={notes} onChange={event => setNotes(event.target.value)} placeholder="Anything the person packing or delivering should know" /></Field>
-      </Card>
     </div>
 
     <Card className="space-y-3 p-5 lg:sticky lg:top-6">
       <h2 className="text-[15px] font-semibold">Summary</h2>
-      <Row label="Products" value={formatRupees(priced.gross)} />
-      {priced.discount > 0 && <Row label="Discount" value={`− ${formatRupees(priced.discount)}`} />}
-      <Row label="Order total" value={formatRupees(priced.total)} strong />
+      <Row label="MRP" value={formatRupees(priced.mrpTotal)} />
+      {priced.mrpTotal > priced.offerTotal && <Row label={`${priced.label} offer`} value={`− ${formatRupees(priced.mrpTotal - priced.offerTotal)}`} />}
+      {priced.prepaidOff > 0 && <Row label="Prepaid" value={`− ${formatRupees(priced.prepaidOff)}`} />}
+      {priced.extraOff > 0 && <Row label={`Extra ${pricing.extraPct}%`} value={`− ${formatRupees(priced.extraOff)}`} />}
+      {freeBag && <Row label="Free bag" value="₹0" />}
+      <Row label="Customer pays" value={formatRupees(priced.total)} strong />
       <div className="border-t border-[var(--line)] pt-3" />
       {mode !== "COD" && <Row label="Paid up front" value={formatRupees(effectiveAdvance)} />}
       <Row label="Courier collects" value={formatRupees(collect)} strong />
       <div className="rounded-[10px] bg-[var(--surface-2)] p-3 text-sm">
-        <p className="text-xs text-[var(--muted)]">Incentive once delivered</p>
+        <p className="text-xs text-[var(--muted)]">You earn once delivered</p>
         <p className="mt-0.5 text-lg font-semibold">{rule.enabled ? formatRupees(incentive) : "None"}</p>
         <p className="text-xs text-[var(--muted)]">{describeRule(rule)}</p>
       </div>
       {error && <Notice tone="error">{error}</Notice>}
-      <Button type="submit" busy={busy} className="w-full" disabled={(Boolean(problem) && priced.total > 0) || (Boolean(refusal) && !existing)}>
+      <Button type="submit" busy={busy} className="w-full" disabled={blocked}>
         {existing ? "Save changes" : "Place order"}
       </Button>
       {problem && priced.total > 0 && <p className="text-xs text-[var(--warn-ink)]">{problem}</p>}
-      <p className="text-xs text-[var(--muted)]">{source === "Shopify" ? "The order goes into Shopify straight away. Booking the courier is the next step, from the order." : "Placing the order does not book the courier yet — you do that from the order, once you have checked it."}</p>
+      <p className="text-xs text-[var(--muted)]">The order is recorded straight away. Booking the courier is the next step, from the order.</p>
     </Card>
 
     {/*
@@ -343,13 +376,13 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
     <div className={`fixed inset-x-0 z-20 border-t border-[var(--line)] bg-[var(--surface)] px-3 py-2.5 lg:hidden ${admin ? "bottom-0 pb-[max(0.625rem,env(safe-area-inset-bottom))]" : "bottom-[calc(60px+env(safe-area-inset-bottom))]"}`}>
       <div className="mx-auto flex max-w-[520px] items-center gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-base font-semibold tabular-nums">{formatRupees(priced.total)}</p>
+          <p className="text-base font-semibold tabular-nums">{formatRupees(priced.total)}{priced.mrpTotal > priced.total ? <span className="ml-1.5 text-xs font-normal text-[var(--muted)] line-through">{formatRupees(priced.mrpTotal)}</span> : null}</p>
           <p className="truncate text-[11px] text-[var(--muted)]">
             Collect {formatRupees(collect)}{rule.enabled && incentive ? ` · earn ${formatRupees(incentive)}` : ""}
             {check?.risk ? ` · ${check.risk.level} risk` : ""}
           </p>
         </div>
-        <Button type="submit" busy={busy} className="shrink-0 !px-5" disabled={(Boolean(problem) && priced.total > 0) || (Boolean(refusal) && !existing)}>
+        <Button type="submit" busy={busy} className="shrink-0 !px-5" disabled={blocked}>
           {existing ? "Save" : "Place order"}
         </Button>
       </div>
@@ -377,7 +410,6 @@ export function OrderEditor({ id, admin, basePath }: { id: string; admin: boolea
   if (!order) return <Spinner label="Loading the order…" />;
   return <OrderForm admin={admin} basePath={basePath} existing={order} />;
 }
-
 
 type CheckResult = {
   delivery: { deliverable: boolean; cod: boolean; couriers: number; fastestDays?: number; cheapestRate?: number; etd?: string; refusal?: string } | null;
