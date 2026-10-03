@@ -97,6 +97,34 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
   const rule = ruleFor(rules, mode);
   const incentive = incentiveAmountOf(rule, priced.total);
 
+  /*
+   * The live check: can a courier deliver here, and how likely is this parcel
+   * to come back. Asked a moment after the pin code, phone, payment or total
+   * settle — not on every keystroke — while the customer is still on the line.
+   */
+  const [check, setCheck] = useState<CheckResult | null>(null);
+  const [checking, setChecking] = useState(false);
+  const pinReady = /^\d{6}$/.test(customer.pinCode);
+  useEffect(() => {
+    if (!pinReady) { setCheck(null); return; }
+    const timer = setTimeout(async () => {
+      setChecking(true);
+      try {
+        setCheck(await call<CheckResult>("/api/sales-team/check", {
+          body: {
+            pinCode: customer.pinCode, phone: customer.phone, paymentMode: mode, total: priced.total, advance: effectiveAdvance,
+            address1: customer.address1, address2: customer.address2, city: customer.city
+          }
+        }));
+      } catch {
+        setCheck(null);
+      } finally {
+        setChecking(false);
+      }
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [pinReady, customer.pinCode, customer.phone, customer.address1, customer.address2, customer.city, mode, priced.total, effectiveAdvance]);
+
   const setLine = (key: number, patch: Partial<Line>) =>
     setLines(current => current.map(line => line.key === key ? { ...line, ...patch } : line));
 
@@ -179,7 +207,7 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
 
   if (loading) return <Spinner label="Loading the catalogue…" />;
 
-  return <form onSubmit={submit} className="grid gap-5 lg:grid-cols-[1fr_320px] lg:items-start">
+  return <form onSubmit={submit} className="grid gap-5 pb-20 lg:grid-cols-[1fr_320px] lg:items-start lg:pb-0">
     <div className="space-y-5">
       {refusal && !existing && <Notice tone="error">{refusal}</Notice>}
       {source === "Shopify" && !refusal && !existing && <Notice>This order is placed in your Shopify store, tagged with the executive&rsquo;s name, and its stock comes off Shopify.</Notice>}
@@ -221,6 +249,8 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
           </Field>
         </div>
       </Card>
+
+      <DeliveryCheckCard check={check} checking={checking} pinReady={pinReady} mode={mode} onPrepaid={() => setMode("Prepaid")} />
 
       <Card className="space-y-4 p-5">
         <div className="flex items-center justify-between">
@@ -304,6 +334,26 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
       {problem && priced.total > 0 && <p className="text-xs text-[var(--warn-ink)]">{problem}</p>}
       <p className="text-xs text-[var(--muted)]">{source === "Shopify" ? "The order goes into Shopify straight away. Booking the courier is the next step, from the order." : "Placing the order does not book the courier yet — you do that from the order, once you have checked it."}</p>
     </Card>
+
+    {/*
+     * On a phone the summary sits at the very bottom of a long form, so the
+     * total and the button travel with the thumb instead — just above the
+     * executive panel's tab bar.
+     */}
+    <div className={`fixed inset-x-0 z-20 border-t border-[var(--line)] bg-[var(--surface)] px-3 py-2.5 lg:hidden ${admin ? "bottom-0 pb-[max(0.625rem,env(safe-area-inset-bottom))]" : "bottom-[calc(60px+env(safe-area-inset-bottom))]"}`}>
+      <div className="mx-auto flex max-w-[520px] items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-base font-semibold tabular-nums">{formatRupees(priced.total)}</p>
+          <p className="truncate text-[11px] text-[var(--muted)]">
+            Collect {formatRupees(collect)}{rule.enabled && incentive ? ` · earn ${formatRupees(incentive)}` : ""}
+            {check?.risk ? ` · ${check.risk.level} risk` : ""}
+          </p>
+        </div>
+        <Button type="submit" busy={busy} className="shrink-0 !px-5" disabled={(Boolean(problem) && priced.total > 0) || (Boolean(refusal) && !existing)}>
+          {existing ? "Save" : "Place order"}
+        </Button>
+      </div>
+    </div>
   </form>;
 }
 
@@ -326,4 +376,54 @@ export function OrderEditor({ id, admin, basePath }: { id: string; admin: boolea
   if (error) return <Notice tone="error">{error}</Notice>;
   if (!order) return <Spinner label="Loading the order…" />;
   return <OrderForm admin={admin} basePath={basePath} existing={order} />;
+}
+
+
+type CheckResult = {
+  delivery: { deliverable: boolean; cod: boolean; couriers: number; fastestDays?: number; cheapestRate?: number; etd?: string; refusal?: string } | null;
+  risk: { score: number; level: "Low" | "Medium" | "High"; reasons: string[]; advice?: string };
+  history: { phone: { delivered: number; returned: number } | null; pin: { delivered: number; returned: number } | null };
+};
+
+/**
+ * What the courier network and the company's own delivery record say about
+ * this order, shown while it can still be changed: a COD order to a pin code
+ * no courier collects cash in is switched to prepaid now, not refused at the
+ * counter tomorrow.
+ */
+function DeliveryCheckCard({ check, checking, pinReady, mode, onPrepaid }: {
+  check: CheckResult | null; checking: boolean; pinReady: boolean; mode: TeamPaymentMode; onPrepaid: () => void;
+}) {
+  if (!pinReady) return <Card className="p-4 text-sm text-[var(--muted)]">Enter the 6-digit pin code to check delivery and the RTO risk.</Card>;
+  if (!check) return <Card className="p-4 text-sm text-[var(--muted)]">{checking ? "Checking delivery to this pin code…" : "Could not check this pin code right now."}</Card>;
+
+  const delivery = check.delivery;
+  const risk = check.risk;
+  const tone = risk.level === "High" ? "border-[var(--danger-line)] bg-[var(--danger-bg)]" : risk.level === "Medium" ? "border-[var(--warn-line)] bg-[var(--warn-bg)]" : "border-[var(--ok-line)] bg-[var(--ok-bg)]";
+  const ink = risk.level === "High" ? "text-[var(--danger-ink)]" : risk.level === "Medium" ? "text-[var(--warn-ink)]" : "text-[var(--ok-ink)]";
+
+  return <Card className="space-y-3 p-4">
+    <div className="flex items-center justify-between gap-2">
+      <h2 className="text-[15px] font-semibold">Delivery check</h2>
+      {checking && <span className="text-xs text-[var(--muted)]">Updating…</span>}
+    </div>
+    {delivery?.refusal ? <p className="text-sm text-[var(--muted)]">{delivery.refusal}</p> : delivery && (
+      delivery.deliverable
+        ? <p className="text-sm"><span className="font-semibold text-[var(--ok-ink)]">Deliverable</span> — {delivery.couriers} courier{delivery.couriers === 1 ? "" : "s"}
+            {delivery.fastestDays ? `, fastest in ${delivery.fastestDays} day${delivery.fastestDays === 1 ? "" : "s"}` : ""}
+            {delivery.cheapestRate ? `, from ${formatRupees(delivery.cheapestRate)}` : ""}.
+            {" "}{delivery.cod ? "Cash on delivery available." : <span className="font-semibold text-[var(--danger-ink)]">No cash on delivery here.</span>}</p>
+        : <p className="text-sm font-semibold text-[var(--danger-ink)]">No courier delivers to this pin code. Check the pin code with the customer.</p>
+    )}
+    {delivery && !delivery.refusal && delivery.deliverable && !delivery.cod && mode !== "Prepaid" && (
+      <Button type="button" tone="secondary" className="w-full !min-h-[38px] text-xs" onClick={onPrepaid}>Switch to prepaid</Button>
+    )}
+    <div className={`rounded-[10px] border p-3 ${tone}`}>
+      <p className={`text-sm font-semibold ${ink}`}>RTO risk: {risk.level} <span className="font-normal">({risk.score}/100)</span></p>
+      <ul className={`mt-1 list-disc space-y-0.5 pl-4 text-xs ${ink}`}>
+        {risk.reasons.slice(0, 5).map(reason => <li key={reason}>{reason}</li>)}
+      </ul>
+      {risk.advice && <p className={`mt-1.5 text-xs font-semibold ${ink}`}>{risk.advice}</p>}
+    </div>
+  </Card>;
 }

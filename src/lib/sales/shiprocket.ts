@@ -352,6 +352,8 @@ export type Tracking = {
   status?: string;
   statusCode?: number;
   deliveredAt?: Date;
+  /** The courier's own estimate of the delivery day, verbatim — "2026-10-03 23:59:59". */
+  expectedDelivery?: string;
   /** The courier's public page, for handing to a customer who rings up. */
   trackUrl?: string;
   scans: TrackingScan[];
@@ -399,6 +401,7 @@ export async function trackByAwb(token: string, awb: string): Promise<Tracking> 
     status: shipment?.current_status ?? undefined,
     statusCode: tracking.shipment_status ?? undefined,
     deliveredAt: parseDate(shipment?.delivered_date),
+    expectedDelivery: shipment?.edd || undefined,
     trackUrl: tracking.track_url || `https://shiprocket.co/tracking/${encodeURIComponent(awb)}`,
     scans,
     note: scans.length ? undefined : tracking.error
@@ -485,3 +488,45 @@ export function matchKeysFor(order: { name?: string | null; orderNumber?: number
 
 /** The same normalisation on the key an update arrived under. */
 export const matchKey = (value: string) => value.trim().toUpperCase();
+
+
+// ------------------------------------------------------------ failed attempts
+
+export type NdrAction = {
+  /** Deliver again — on a later day when `deferredDate` is given. Or send it back. */
+  action: "re-attempt" | "return";
+  comments: string;
+  /** `yyyy-mm-dd`, when the customer asked for a particular day. */
+  deferredDate?: string;
+  phone?: string;
+  address1?: string;
+  address2?: string;
+};
+
+/**
+ * Tells Shiprocket what to do about a parcel the courier could not deliver —
+ * the "NDR" queue that otherwise sits in Shiprocket's panel until somebody
+ * there acts on it, and turns into a return by default if nobody does.
+ *
+ * The executive who spoke to the customer is the person who knows the answer
+ * ("come back on Saturday, ring this number instead"), so it is sent from their
+ * panel. Shiprocket only accepts it while the shipment is in its NDR state;
+ * anything else is refused, and the refusal comes back in Shiprocket's words.
+ */
+export async function ndrAction(token: string, awb: string, input: NdrAction): Promise<{ message?: string }> {
+  const { data } = await httpJson<{ message?: string; status?: boolean | number }>({
+    service: "Shiprocket",
+    url: `${BASE}/ndr/${encodeURIComponent(awb)}/action`,
+    method: "POST",
+    headers: auth(token),
+    body: {
+      action: input.action,
+      comments: input.comments,
+      ...(input.deferredDate ? { deferred_date: input.deferredDate } : {}),
+      ...(input.phone ? { phone: input.phone } : {}),
+      ...(input.address1 ? { address1: input.address1 } : {}),
+      ...(input.address2 ? { address2: input.address2 } : {})
+    }
+  });
+  return { message: data.message };
+}

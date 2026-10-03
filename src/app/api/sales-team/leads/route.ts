@@ -4,13 +4,18 @@ import { SalesLead } from "@/models/Sales";
 import { apiSession } from "@/lib/auth/guard";
 import { badRequest, fail, ok, OBJECT_ID, pageParams } from "@/lib/api";
 import { LEAD_STATUSES, like } from "@/lib/sales/leads";
+import { todayIso } from "@/lib/time";
 import { isExecutive, leadScope } from "@/lib/sales-team/access";
+import { can } from "@/constants/access";
+import { record } from "@/lib/audit";
+import { tenDigitPhone } from "@/lib/sales/fulfilment";
+import { ownLeadSchema } from "@/lib/sales-team/schemas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const FIELDS = "name type status phone website address area city googleMapsUrl rating notes assignedTo assignedAt "
-  + "lastContactedAt contactCount convertedAt updatedAt createdAt";
+  + "lastContactedAt contactCount convertedAt followUpAt followUpNote source updatedAt createdAt";
 
 /**
  * Leads as the sales team sees them.
@@ -40,6 +45,10 @@ export async function GET(request: Request) {
       if (assigned === "none") and.push({ assignedTo: null });
       else if (assigned === "any") and.push({ assignedTo: { $ne: null } });
       else if (assigned && OBJECT_ID.test(assigned)) and.push({ assignedTo: new Types.ObjectId(assigned) });
+    }
+    switch (params.get("followUp")) {
+      case "due": and.push({ followUpAt: { $lte: todayIso() } }); break;
+      case "any": and.push({ followUpAt: { $nin: [null, ""] } }); break;
     }
     const type = params.get("type");
     if (type) and.push({ type });
@@ -71,6 +80,47 @@ export async function GET(request: Request) {
       counts: Object.fromEntries((counts as Array<{ _id: string; count: number }>).map(row => [row._id, row.count])),
       types: (types as string[]).filter(Boolean).sort()
     });
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/**
+ * A customer the executive found themselves — a referral, a walk-in, somebody
+ * who rang the number on a parcel — added to their own list so the follow-up is
+ * kept. Assigned to whoever adds it.
+ *
+ * A phone number already in that executive's list is not added twice; the
+ * existing lead is returned with the new follow-up applied, because two rows
+ * for one customer is how a call gets made twice and a remark gets lost.
+ */
+export async function POST(request: Request) {
+  try {
+    const auth = await apiSession();
+    if ("response" in auth) return auth.response;
+    if (!isExecutive(auth.session) && !can.manageSalesTeam(auth.session.role)) return badRequest("You do not have access to this action", 403);
+    await connectDb();
+
+    const input = ownLeadSchema.parse(await request.json());
+    const digits = tenDigitPhone(input.phone);
+    if (!digits) return badRequest("Enter a 10-digit mobile number.");
+
+    const followUp = input.followUpAt ? { followUpAt: input.followUpAt, followUpNote: input.followUpNote || undefined } : {};
+    const existing = await SalesLead.findOne({ assignedTo: auth.session.userId, phone: { $regex: `${digits}$` } }).select("_id name").lean() as { _id: unknown; name: string } | null;
+    if (existing) {
+      if (input.followUpAt) await SalesLead.updateOne({ _id: existing._id }, { $set: { ...followUp, updatedBy: auth.session.userId } });
+      return ok({ _id: existing._id, existed: true, message: `${existing.name} is already in your list${input.followUpAt ? " — the follow-up was updated" : ""}.` });
+    }
+
+    const lead = await SalesLead.create({
+      name: input.name, phone: digits, city: input.city || undefined, address: input.address || undefined,
+      type: input.type || "Customer", notes: input.notes || undefined, source: "Manual", status: "New",
+      assignedTo: auth.session.userId, assignedAt: new Date(), assignedBy: auth.session.userId,
+      createdBy: auth.session.userId, updatedBy: auth.session.userId, ...followUp,
+      remarks: input.notes ? [{ text: input.notes, channel: "Note", at: new Date(), by: auth.session.userId, byName: auth.session.name || undefined }] : []
+    });
+    await record({ actor: auth.session.userId, action: "team.lead.added", entityType: "SalesLead", entityId: lead._id, metadata: { name: input.name, followUpAt: input.followUpAt } });
+    return ok({ _id: lead._id, existed: false, message: `${input.name} added to your list.` }, 201);
   } catch (error) {
     return fail(error);
   }

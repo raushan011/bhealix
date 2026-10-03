@@ -12,10 +12,12 @@ import {
 import { formatRupees, PAYMENT_MODE_LABEL, type TeamPaymentMode } from "@/lib/sales-team/orders";
 import { formatDate, formatDateTime } from "@/lib/time";
 import { call, messageOf } from "./shared";
+import { AddCustomerModal, FollowUpPicker } from "./follow-ups";
 
 type Lead = {
   _id: string; name: string; type: string; status: LeadStatus; phone?: string; address?: string; area?: string; city?: string;
   notes?: string; googleMapsUrl?: string; lastContactedAt?: string; contactCount?: number; assignedAt?: string;
+  followUpAt?: string; followUpNote?: string;
 };
 type Page = { items: Lead[]; total: number; page: number; pages: number; counts: Partial<Record<LeadStatus, number>> };
 type Remark = { _id: string; text: string; channel: RemarkChannel; status?: LeadStatus; at: string; byName?: string };
@@ -38,6 +40,8 @@ export function LeadDesk({ orderPath }: { orderPath: string }) {
   const [data, setData] = useState<Page | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [notice, setNotice] = useState("");
 
   const load = useCallback(async () => {
     const query = new URLSearchParams({ page: String(page), limit: "25" });
@@ -59,7 +63,11 @@ export function LeadDesk({ orderPath }: { orderPath: string }) {
         </button>
       ))}
     </div>
-    <input className="input" placeholder="Search by name, phone, area or city" value={q} onChange={event => { setQ(event.target.value); setPage(1); }} />
+    <div className="flex gap-2">
+      <input className="input flex-1" placeholder="Search by name, phone, area or city" value={q} onChange={event => { setQ(event.target.value); setPage(1); }} />
+      <Button className="shrink-0" onClick={() => setAdding(true)}>+ Customer</Button>
+    </div>
+    {notice && <Notice tone="success">{notice}</Notice>}
 
     {error && <Notice tone="error">{error}</Notice>}
     {!data && !error && <Spinner label="Loading your leads…" />}
@@ -81,6 +89,7 @@ export function LeadDesk({ orderPath }: { orderPath: string }) {
                 {[lead.area, lead.city].filter(Boolean).join(", ")}
                 {lead.lastContactedAt ? ` · last contacted ${formatDate(lead.lastContactedAt)}` : " · not contacted yet"}
                 {lead.contactCount ? ` · ${lead.contactCount}×` : ""}
+                {lead.followUpAt ? ` · follow up ${formatDate(lead.followUpAt)}` : ""}
               </p>
             </button>
             <div className="flex items-center gap-1">
@@ -102,6 +111,7 @@ export function LeadDesk({ orderPath }: { orderPath: string }) {
     )}
 
     {open && <LeadDialog id={open} orderPath={orderPath} onClose={() => setOpen(null)} onChanged={load} />}
+    {adding && <AddCustomerModal onClose={() => setAdding(false)} onSaved={message => { setAdding(false); setNotice(message); load(); }} />}
   </div>;
 }
 
@@ -110,18 +120,26 @@ function LeadDialog({ id, orderPath, onClose, onChanged }: { id: string; orderPa
   const [text, setText] = useState("");
   const [channel, setChannel] = useState<RemarkChannel>("Call");
   const [status, setStatus] = useState<LeadStatus | "">("");
+  const [next, setNext] = useState("");
+  const [nextNote, setNextNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    try { setDetail(await call<Detail>(`/api/sales-team/leads/${id}`)); } catch (problem) { setError(messageOf(problem)); }
+    try {
+      const loaded = await call<Detail>(`/api/sales-team/leads/${id}`);
+      setDetail(loaded);
+      // Opens on the follow-up already set, so saving a remark never clears it by accident.
+      setNext(loaded.lead.followUpAt ?? "");
+      setNextNote(loaded.lead.followUpNote ?? "");
+    } catch (problem) { setError(messageOf(problem)); }
   }, [id]);
   useEffect(() => { load(); }, [load]);
 
   async function save() {
     setBusy(true); setError("");
     try {
-      await call(`/api/sales-team/leads/${id}`, { body: { text, channel, status: status || undefined } });
+      await call(`/api/sales-team/leads/${id}`, { body: { text, channel, status: status || undefined, followUpAt: next || null, followUpNote: nextNote || undefined } });
       setText(""); setStatus("");
       await load();
       onChanged();
@@ -173,6 +191,7 @@ function LeadDialog({ id, orderPath, onClose, onChanged }: { id: string; orderPa
             </select>
           </Field>
         </div>
+        <FollowUpPicker value={next} onChange={setNext} note={nextNote} onNote={setNextNote} />
         {error && <Notice tone="error">{error}</Notice>}
         <Button className="w-full" busy={busy} disabled={text.trim().length < 2} onClick={save}>Save remark</Button>
       </div>

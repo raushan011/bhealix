@@ -1,5 +1,6 @@
 import { Schema, model, models } from "mongoose";
 import { COURIER_RULES, DELIVERY_STATES } from "@/lib/sales/constants";
+import { RISK_LEVELS } from "@/lib/sales-team/risk";
 import {
   DEFAULT_INCENTIVE_RULES, INCENTIVE_PAY_MODES, INCENTIVE_STATUSES, INCENTIVE_TYPES, TEAM_ORDER_CHANNELS, TEAM_PAYMENT_MODES
 } from "@/lib/sales-team/orders";
@@ -110,6 +111,8 @@ const SalesTeamOrderSchema = new Schema({
     status: String,
     statusCode: Number,
     deliveredAt: Date,
+    /** The courier's estimate of the delivery day, `yyyy-mm-dd`, for the "delivering today" reminder. */
+    expectedDelivery: String,
     checkedAt: Date,
     pickupLocation: String,
     courierId: Number,
@@ -165,6 +168,41 @@ const SalesTeamOrderSchema = new Schema({
     }
   },
 
+  /**
+   * How likely the parcel was to come back, as assessed when the order was
+   * placed — kept so the executive and the desk can see what was known at the
+   * time, and so returns can later be checked against the score.
+   */
+  rtoRisk: {
+    level: { type: String, enum: RISK_LEVELS },
+    score: Number,
+    reasons: { type: [String], default: undefined },
+    advice: String
+  },
+
+  /**
+   * Every instruction sent to Shiprocket about a failed delivery — reattempt,
+   * reschedule or return — with who sent it and what Shiprocket answered. Kept
+   * as a list because a parcel can fail twice, and "we already asked for Saturday"
+   * is worth knowing on the second call.
+   */
+  ndr: {
+    type: [new Schema({
+      action: { type: String, enum: ["re-attempt", "return"], required: true },
+      deferredDate: String,
+      phone: String,
+      address1: String,
+      address2: String,
+      comments: String,
+      ok: Boolean,
+      response: String,
+      at: { type: Date, default: Date.now },
+      by: { type: Schema.Types.ObjectId, ref: "User" },
+      byName: String
+    }, { _id: true })],
+    default: []
+  },
+
   notes: String
 }, { timestamps: true });
 
@@ -174,6 +212,8 @@ SalesTeamOrderSchema.index({ executive: 1, placedAt: -1 });
 SalesTeamOrderSchema.index({ "incentive.status": 1, executive: 1 });
 SalesTeamOrderSchema.index({ "delivery.state": 1, placedAt: -1 });
 SalesTeamOrderSchema.index({ "shipment.awb": 1, placedAt: -1 });
+// The executive's "today" screen: their parcels still moving, by expected day.
+SalesTeamOrderSchema.index({ executive: 1, "delivery.state": 1, "shipment.expectedDelivery": 1 });
 
 export const SalesTeamOrder = models.SalesTeamOrder ?? model("SalesTeamOrder", SalesTeamOrderSchema);
 

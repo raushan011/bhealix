@@ -51,7 +51,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       courier: tracking.courier,
       status: tracking.status,
       statusCode: tracking.statusCode,
-      deliveredAt: tracking.deliveredAt
+      deliveredAt: tracking.deliveredAt,
+      expectedDelivery: tracking.expectedDelivery
     });
     recalculateIncentive(order);
     await order.save();

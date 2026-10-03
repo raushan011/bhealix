@@ -8,6 +8,7 @@ import { record } from "@/lib/audit";
 import { isOutreach, remarkSchema } from "@/lib/sales/leads";
 import { advancesOnSend } from "@/lib/sales/outreach";
 import { isExecutive, leadScope, orderScope } from "@/lib/sales-team/access";
+import { followUpSchema } from "@/lib/sales-team/schemas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,7 +59,10 @@ export async function POST(request: Request, { params }: Params) {
     if (!OBJECT_ID.test(id)) return badRequest("Unknown lead");
     await connectDb();
 
-    const input = remarkSchema.parse(await request.json());
+    const body = await request.json() as Record<string, unknown>;
+    const input = remarkSchema.parse(body);
+    // The next call, decided on this one: a day sets it, null clears it, absent leaves it.
+    const next = "followUpAt" in body ? followUpSchema.parse({ followUpAt: body.followUpAt ?? null, followUpNote: body.followUpNote }) : null;
     if (input.status === "Converted") return badRequest("A lead becomes Converted when an order is placed from it. Use New order instead.");
 
     const lead = await SalesLead.findOne({ _id: id, ...scope }).select("name status").lean() as { name: string; status: string } | null;
@@ -70,7 +74,11 @@ export async function POST(request: Request, { params }: Params) {
 
     await SalesLead.updateOne({ _id: id }, {
       $push: { remarks: remark },
-      $set: { updatedBy: auth.session.userId, ...(status ? { status } : {}), ...(reached ? { lastContactedAt: remark.at } : {}) },
+      $set: {
+        updatedBy: auth.session.userId, ...(status ? { status } : {}), ...(reached ? { lastContactedAt: remark.at } : {}),
+        ...(next?.followUpAt ? { followUpAt: next.followUpAt, followUpNote: next.followUpNote || undefined } : {})
+      },
+      ...(next && !next.followUpAt ? { $unset: { followUpAt: "", followUpNote: "" } } : {}),
       ...(reached ? { $inc: { contactCount: 1 } } : {})
     });
 
@@ -79,6 +87,33 @@ export async function POST(request: Request, { params }: Params) {
       metadata: { name: lead.name, channel: input.channel, status, text: input.text }
     });
     return ok({ status: status ?? lead.status }, 201);
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/**
+ * Sets, moves or clears the next follow-up without writing a remark — "move it
+ * to Monday" from the dashboard is one tap, not a conversation to log.
+ */
+export async function PATCH(request: Request, { params }: Params) {
+  try {
+    const auth = await apiSession();
+    if ("response" in auth) return auth.response;
+    const scope = leadScope(auth.session);
+    if (!scope || (!isExecutive(auth.session) && !can.manageSalesTeam(auth.session.role))) return badRequest("You do not have access to this action", 403);
+    const { id } = await params;
+    if (!OBJECT_ID.test(id)) return badRequest("Unknown lead");
+    await connectDb();
+
+    const input = followUpSchema.parse(await request.json());
+    const result = await SalesLead.updateOne({ _id: id, ...scope }, input.followUpAt
+      ? { $set: { followUpAt: input.followUpAt, followUpNote: input.followUpNote || undefined, updatedBy: auth.session.userId } }
+      : { $unset: { followUpAt: "", followUpNote: "" }, $set: { updatedBy: auth.session.userId } });
+    if (!result.matchedCount) return badRequest("That lead is not in your list", 404);
+
+    await record({ actor: auth.session.userId, action: "team.lead.followup", entityType: "SalesLead", entityId: id, metadata: input });
+    return ok({ followUpAt: input.followUpAt });
   } catch (error) {
     return fail(error);
   }

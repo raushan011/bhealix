@@ -169,7 +169,7 @@ export async function syncTeamShipments(): Promise<TeamSyncReport> {
 
 type ShipmentFields = {
   shiprocketOrderId?: string; shipmentId?: string; awb?: string; courier?: string;
-  status?: string; statusCode?: number; deliveredAt?: Date;
+  status?: string; statusCode?: number; deliveredAt?: Date; expectedDelivery?: string;
 };
 
 /**
@@ -191,6 +191,8 @@ export function applyShipmentUpdate(
   if (update.status) order.set("shipment.status", update.status);
   if (update.statusCode != null) order.set("shipment.statusCode", update.statusCode);
   order.set("shipment.deliveredAt", update.deliveredAt ?? order.shipment?.deliveredAt);
+  // The courier's estimate moves as the parcel does; the latest one is the one to plan the call around.
+  if (update.expectedDelivery && /^\d{4}-\d{2}-\d{2}/.test(update.expectedDelivery)) order.set("shipment.expectedDelivery", update.expectedDelivery.slice(0, 10));
   order.set("shipment.checkedAt", new Date());
   if (update.status) {
     order.set("delivery.reported", reported);

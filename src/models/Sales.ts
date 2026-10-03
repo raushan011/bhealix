@@ -712,6 +712,14 @@ const SalesLeadSchema = new Schema({
   assignedBy: { type: Schema.Types.ObjectId, ref: "User" },
   /** When an order was placed from this lead — set by the Sales CRM, alongside `status: "Converted"`. */
   convertedAt: Date,
+  /**
+   * When to ring this lead next (`yyyy-mm-dd`), and what about. Set by whoever
+   * holds the lead; a lead whose day has come appears on that executive's
+   * dashboard by itself, so a promise to "call back on the 15th" is not left to
+   * anybody's memory. Cleared when it is done.
+   */
+  followUpAt: { type: String, index: true },
+  followUpNote: { type: String, trim: true },
 
   createdBy: { type: Schema.Types.ObjectId, ref: "User" },
   updatedBy: { type: Schema.Types.ObjectId, ref: "User" }
@@ -719,6 +727,8 @@ const SalesLeadSchema = new Schema({
 
 // An executive's own list: what they were given, still to be worked first.
 SalesLeadSchema.index({ assignedTo: 1, status: 1, updatedAt: -1 });
+// The dashboard's follow-up list: this executive's leads whose day has come.
+SalesLeadSchema.index({ assignedTo: 1, followUpAt: 1 });
 
 // The two questions the list screen asks: this trade, alphabetically, and
 // whatever still needs ringing, newest first.

@@ -1503,6 +1503,17 @@ to explain it. Every write is an upsert, so re-reading costs nothing. Shiprocket
   discount under `SALES-TEAM` (ends in no digits, so attribution ignores it, and it is marked ignored in the
   coupon catalogue); tags `Sales team, exec-<employeeId>, <name>`; stock decremented by variant. Needs the
   `write_orders` scope (added to `DEFAULT_SCOPES`; existing connections must Reconnect).
+- **Executive self-service (Oct 2026):** `/executive` is phone-first (bottom tab bar). `/api/sales-team/today`
+  (executive only) lists parcels delivering today/tomorrow (`isOutForDelivery` or `shipment.expectedDelivery`),
+  failed deliveries (`needsAction`), unbooked orders and due follow-ups. `POST /api/sales-team/check` runs
+  `lib/sales-team/checks.ts::preOrderCheck` — Shiprocket serviceability (COD and prepaid) from the default
+  pickup, plus delivery history by phone and pin code across team and affiliate orders — into
+  `lib/sales-team/risk.ts::assessRto` (pure, tested; Low/Medium/High with reasons). The score is frozen on
+  the order as `rtoRisk`. `POST /orders/[id]/ndr` sends a reattempt (optional `deferredDate`, phone,
+  address) or return to Shiprocket's NDR action and logs every attempt on `order.ndr[]`.
+  `POST /orders/refresh` re-tracks the caller's moving parcels (≤40), storing `expectedDelivery`.
+  Executives add their own customers (`POST /leads`, de-duplicated by phone) and set follow-ups
+  (`SalesLead.followUpAt/followUpNote`; `PATCH /leads/[id]`, or `followUpAt` on a remark).
 - **Part payment at Shiprocket (Direct channel):** booked as COD with `total_discount` = advance, so
   `codAmountOf()` collects the balance (`lib/sales/fulfilment.ts`).
 

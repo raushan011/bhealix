@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, ExternalLink, FileText, MapPin, MessageCircle, Pencil, RefreshCw, StickyNote, Tag, Truck, Undo2, Wallet, XCircle } from "lucide-react";
-import { whatsappUrl } from "@/lib/sales/leads";
+import { ArrowLeft, CalendarClock, ExternalLink, Phone, ShieldAlert, FileText, MapPin, MessageCircle, Pencil, RefreshCw, StickyNote, Tag, Truck, Undo2, Wallet, XCircle } from "lucide-react";
+import { telUrl, whatsappUrl } from "@/lib/sales/leads";
+import { needsAction, riskTone } from "@/lib/sales-team/risk";
 import { Badge, Button, Card, Field, Notice, Spinner } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import { DELIVERY_STATES, type CourierRule, type DeliveryState } from "@/lib/sales/constants";
@@ -13,14 +14,14 @@ import { processTone, type CourierOption, type PickupLocation } from "@/lib/sale
 import type { ProcessState } from "@/lib/sales/constants";
 import type { Tracking } from "@/lib/sales/shiprocket";
 import { describeRule, formatRupees, incentiveTone, PAYMENT_MODE_LABEL } from "@/lib/sales-team/orders";
-import { formatDate, formatDateTime } from "@/lib/time";
+import { formatDate, formatDateTime, shiftDay, todayIso } from "@/lib/time";
 import { call, executiveNameOf, messageOf, paymentLine, PayIncentiveModal, type TeamOrderRow } from "./shared";
 
 type Payload = {
   order: TeamOrderRow;
   processState: ProcessState;
   shopifyUrl?: string;
-  may: { edit: boolean; cancel: boolean; book: boolean; track: boolean; documents: boolean; override: boolean; reassign: boolean; pay: boolean };
+  may: { edit: boolean; cancel: boolean; book: boolean; track: boolean; documents: boolean; override: boolean; reassign: boolean; pay: boolean; ndr?: boolean };
 };
 
 /**
@@ -36,7 +37,7 @@ export function OrderDetail({ id, basePath }: { id: string; basePath: string }) 
   const [data, setData] = useState<Payload | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState<{ tone: "success" | "error"; text: string } | null>(placed ? { tone: "success", text: "Order placed. Check the details, then book it with the courier." } : null);
-  const [dialog, setDialog] = useState<"book" | "cancel" | "override" | "reassign" | "pay" | "undo" | null>(null);
+  const [dialog, setDialog] = useState<"book" | "cancel" | "override" | "reassign" | "pay" | "undo" | "ndr" | null>(null);
   const [tracking, setTracking] = useState<Tracking | null>(null);
   const [trackingBusy, setTrackingBusy] = useState(false);
 
@@ -68,6 +69,9 @@ export function OrderDetail({ id, basePath }: { id: string; basePath: string }) 
   if (!data) return <Spinner label="Loading the order…" />;
 
   const { order, may, processState, shopifyUrl } = data;
+  // A failed delivery waiting on an instruction — the one state a phone call today can rescue.
+  const failedAttempt = Boolean(order.shipment?.awb) && needsAction(order.shipment?.status, order.delivery.state);
+  const mayAct = Boolean(may.ndr);
   // The courier's public page, shareable with the customer the moment an airway bill exists.
   const trackUrl = tracking?.trackUrl ?? (order.shipment?.awb ? `https://shiprocket.co/tracking/${encodeURIComponent(order.shipment.awb)}` : undefined);
   const shareUrl = trackUrl && whatsappUrl(order.customer.phone)
@@ -104,6 +108,17 @@ export function OrderDetail({ id, basePath }: { id: string; basePath: string }) 
     {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
     {cancelled && <Notice tone="error">Cancelled {order.cancelledAt ? formatDate(order.cancelledAt) : ""}{order.cancelledBy ? ` by ${order.cancelledBy.name}` : ""}: {order.cancelReason}</Notice>}
     {shipment.lastError && !shipment.awb && <Notice tone="error">The last booking attempt failed: {shipment.lastError}</Notice>}
+
+    {failedAttempt && may.book === false && !cancelled && (
+      <Card className="space-y-3 border-[var(--danger-line)] p-4">
+        <p className="text-sm font-semibold text-[var(--danger-ink)]">The courier could not deliver this parcel{shipment.status ? ` (${shipment.status})` : ""}.</p>
+        <p className="text-xs text-[var(--muted)]">Ring the customer, agree a day, then send the courier back — or have it returned. Left alone, it goes back as a return.</p>
+        <div className="grid grid-cols-2 gap-2">
+          {telUrl(order.customer.phone) && <a href={telUrl(order.customer.phone)!} className="tap inline-flex items-center justify-center gap-1.5 rounded-[10px] border border-[var(--line-2)] text-sm font-semibold"><Phone size={15} />Call customer</a>}
+          {mayAct && <Button onClick={() => setDialog("ndr")}><CalendarClock size={15} />Reattempt / reschedule</Button>}
+        </div>
+      </Card>
+    )}
 
     <div className="grid gap-5 lg:grid-cols-[1fr_340px] lg:items-start">
       <div className="space-y-5">
@@ -186,6 +201,37 @@ export function OrderDetail({ id, basePath }: { id: string; basePath: string }) 
         </Card>
       </div>
 
+      <div className="space-y-5">
+      {order.rtoRisk?.level && (
+        <Card className="space-y-2 p-5">
+          <div className="flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-[15px] font-semibold"><ShieldAlert size={16} />RTO risk</h2>
+            <Badge tone={riskTone(order.rtoRisk.level)}>{order.rtoRisk.level}{order.rtoRisk.score != null ? ` · ${order.rtoRisk.score}/100` : ""}</Badge>
+          </div>
+          <ul className="list-disc space-y-0.5 pl-4 text-xs text-[var(--ink-2)]">{(order.rtoRisk.reasons ?? []).map(reason => <li key={reason}>{reason}</li>)}</ul>
+          {order.rtoRisk.advice && <p className="text-xs font-semibold text-[var(--ink-2)]">{order.rtoRisk.advice}</p>}
+          <p className="text-[11px] text-[var(--muted)]">As assessed when the order was placed.</p>
+        </Card>
+      )}
+
+      {Boolean(order.ndr?.length) && (
+        <Card className="space-y-2 p-5">
+          <h2 className="flex items-center gap-2 text-[15px] font-semibold"><CalendarClock size={16} />Delivery instructions sent</h2>
+          {[...(order.ndr ?? [])].reverse().map(entry => (
+            <div key={entry._id} className="rounded-[10px] bg-[var(--surface-2)] px-3 py-2 text-xs">
+              <p className="font-semibold">{entry.action === "return" ? "Return to us" : `Reattempt${entry.deferredDate ? ` on ${formatDate(entry.deferredDate)}` : ""}`}
+                {" "}<span className={entry.ok ? "text-[var(--ok-ink)]" : "text-[var(--danger-ink)]"}>{entry.ok ? "· accepted" : "· refused"}</span></p>
+              <p className="text-[var(--ink-2)]">{entry.comments}</p>
+              {entry.response && <p className="text-[var(--muted)]">Shiprocket: {entry.response}</p>}
+              <p className="text-[var(--muted)]">{formatDateTime(entry.at)}{entry.byName ? ` · ${entry.byName}` : ""}</p>
+            </div>
+          ))}
+          {mayAct && !cancelled && shipment.awb && !["Delivered", "RTO", "Returned"].includes(order.delivery.state) && !failedAttempt && (
+            <button onClick={() => setDialog("ndr")} className="text-xs font-semibold text-[var(--brand)]">Send another instruction</button>
+          )}
+        </Card>
+      )}
+
       <Card className="space-y-3 p-5">
         <h2 className="flex items-center gap-2 text-[15px] font-semibold"><Wallet size={16} />Incentive</h2>
         <div className="flex items-center justify-between">
@@ -204,8 +250,10 @@ export function OrderDetail({ id, basePath }: { id: string; basePath: string }) 
         {may.pay && order.incentive.status === "Payable" && <Button className="w-full" onClick={() => setDialog("pay")}><Wallet size={16} />Mark paid</Button>}
         {may.pay && order.incentive.status === "Paid" && <Button tone="secondary" className="w-full" onClick={() => setDialog("undo")}><Undo2 size={16} />Undo payment</Button>}
       </Card>
+      </div>
     </div>
 
+    {dialog === "ndr" && <NdrDialog order={order} onClose={() => setDialog(null)} onSent={text => done(text)} />}
     {dialog === "book" && <BookDialog order={order} onClose={() => setDialog(null)} onBooked={text => done(text)} />}
     {dialog === "cancel" && <ReasonDialog title={`Cancel ${order.name}`} label="Why is it being cancelled?" action="Cancel order" danger
       onClose={() => setDialog(null)}
@@ -430,6 +478,75 @@ function ReassignDialog({ order, onClose, onSaved }: { order: TeamOrderRow; onCl
           <option value="">Choose…</option>
           {people.map(person => <option key={person._id} value={person._id}>{person.name}</option>)}
         </select>
+      </Field>
+      {error && <Notice tone="error">{error}</Notice>}
+    </div>
+  </Modal>;
+}
+
+
+/**
+ * What to tell the courier about a failed delivery, as agreed with the
+ * customer: come back (on a day they chose, to a corrected phone or address),
+ * or bring it back to us.
+ */
+function NdrDialog({ order, onClose, onSent }: { order: TeamOrderRow; onClose: () => void; onSent: (text: string) => void }) {
+  const today = todayIso();
+  const [action, setAction] = useState<"re-attempt" | "return">("re-attempt");
+  const [day, setDay] = useState(shiftDay(today, 1));
+  const [phone, setPhone] = useState("");
+  const [address1, setAddress1] = useState("");
+  const [address2, setAddress2] = useState("");
+  const [comments, setComments] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function send() {
+    setBusy(true); setError("");
+    try {
+      const result = await call<{ message: string }>(`/api/sales-team/orders/${order._id}/ndr`, {
+        body: { action, comments, ...(action === "re-attempt" ? { deferredDate: day || undefined, phone, address1, address2 } : {}) }
+      });
+      onSent(action === "return" ? `Return requested. ${result.message}` : `Reattempt requested${day ? ` for ${formatDate(day)}` : ""}. ${result.message}`);
+    } catch (problem) { setError(messageOf(problem)); setBusy(false); }
+  }
+
+  return <Modal title={`Failed delivery — ${order.name}`} description={`${order.customer.name} · ${order.customer.phone}`} onClose={onClose}
+    footer={<div className="flex gap-2">
+      <Button tone="secondary" className="flex-1" onClick={onClose}>Back</Button>
+      <Button tone={action === "return" ? "danger" : "primary"} className="flex-1" busy={busy} disabled={comments.trim().length < 3} onClick={send}>
+        {action === "return" ? "Return it" : "Send courier again"}
+      </Button>
+    </div>}>
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-2">
+        {([["re-attempt", "Deliver again"], ["return", "Return to us"]] as const).map(([value, label]) => (
+          <button key={value} type="button" onClick={() => setAction(value)}
+            className={`tap rounded-[10px] border text-sm font-semibold ${action === value ? "border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--line-2)]"}`}>{label}</button>
+        ))}
+      </div>
+      {action === "re-attempt" && <>
+        <Field label="Deliver on" hint="The day the customer asked for. Clear it for the courier's next round.">
+          <div className="flex flex-wrap gap-1.5">
+            {[0, 1, 2].map(offset => {
+              const value = shiftDay(today, offset);
+              return <button key={value} type="button" onClick={() => setDay(value)}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${day === value ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--on-brand)]" : "border-[var(--line-2)]"}`}>
+                {offset === 0 ? "Today" : offset === 1 ? "Tomorrow" : formatDate(value)}
+              </button>;
+            })}
+          </div>
+          <input type="date" className="input mt-2" min={today} value={day} onChange={event => setDay(event.target.value)} />
+        </Field>
+        <Field label="New phone (if the customer gave another)"><input className="input" inputMode="tel" value={phone} onChange={event => setPhone(event.target.value)} /></Field>
+        <Field label="Corrected address (only if it was wrong)">
+          <input className="input" value={address1} onChange={event => setAddress1(event.target.value)} placeholder="House, street" />
+          <input className="input mt-2" value={address2} onChange={event => setAddress2(event.target.value)} placeholder="Landmark" />
+        </Field>
+      </>}
+      <Field label="What the customer said" hint="Sent to the courier with the request.">
+        <textarea className="textarea" rows={2} value={comments} onChange={event => setComments(event.target.value)}
+          placeholder={action === "return" ? "Customer refused — no longer wants it." : "Customer was out; will be home after 4 pm."} />
       </Field>
       {error && <Notice tone="error">{error}</Notice>}
     </div>

@@ -198,7 +198,10 @@ export const AUDIT_ACTIONS = {
   "team.incentive.unpaid": "Undid an incentive payment",
   "team.incentive.rules.updated": "Changed the incentive rules",
   "team.leads.assigned": "Assigned leads to an executive",
-  "team.lead.remarked": "Added a remark to an assigned lead"
+  "team.lead.remarked": "Added a remark to an assigned lead",
+  "team.lead.added": "Added a customer to follow up",
+  "team.lead.followup": "Set a follow-up",
+  "team.order.ndr": "Sent a failed delivery back to the courier"
 } as const;
 
 export type AuditAction = keyof typeof AUDIT_ACTIONS;

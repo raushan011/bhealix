@@ -9,6 +9,7 @@ import { DELIVERY_STATES } from "@/lib/sales/constants";
 import { deliveryTone } from "@/lib/sales/delivery";
 import { formatRupees, INCENTIVE_STATUSES, incentiveTone, PAYMENT_MODE_LABEL, TEAM_PAYMENT_MODES } from "@/lib/sales-team/orders";
 import { formatDate } from "@/lib/time";
+import { riskTone } from "@/lib/sales-team/risk";
 import { call, executiveNameOf, messageOf, type TeamOrderRow } from "./shared";
 
 type Page = {
@@ -39,6 +40,7 @@ export function OrderTable({ basePath, showExecutive }: { basePath: string; show
   const [data, setData] = useState<Page | null>(null);
   const [executives, setExecutives] = useState<Array<{ _id: string; name: string }>>([]);
   const [error, setError] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
     if (showExecutive) call<{ items: Array<{ _id: string; name: string }> }>("/api/sales-team/executives?active=all").then(result => setExecutives(result.items)).catch(() => undefined);
@@ -59,8 +61,13 @@ export function OrderTable({ basePath, showExecutive }: { basePath: string; show
   const set = (key: keyof typeof filters, value: string) => { setPage(1); setFilters(current => ({ ...current, [key]: value })); };
 
   return <div className="space-y-4">
-    <Card className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
-      <input className="input lg:col-span-2" placeholder="Order, customer, phone, city or AWB" value={filters.q} onChange={event => set("q", event.target.value)} />
+    {/* On a phone the search stays and the rest of the filters fold away behind one button. */}
+    <div className="flex gap-2 sm:hidden">
+      <input className="input flex-1" placeholder="Order, customer, phone or AWB" value={filters.q} onChange={event => set("q", event.target.value)} />
+      <button type="button" onClick={() => setShowFilters(value => !value)} className="tap rounded-[10px] border border-[var(--line-2)] px-3 text-sm font-semibold">Filters</button>
+    </div>
+    <Card className={`${showFilters ? "grid" : "hidden"} gap-3 p-4 sm:grid sm:grid-cols-2 lg:grid-cols-4`}>
+      <input className="input hidden sm:block lg:col-span-2" placeholder="Order, customer, phone, city or AWB" value={filters.q} onChange={event => set("q", event.target.value)} />
       {showExecutive && (
         <select className="select" value={filters.executive} onChange={event => set("executive", event.target.value)} aria-label="Executive">
           <option value="">Every executive</option>
@@ -111,6 +118,7 @@ export function OrderTable({ basePath, showExecutive }: { basePath: string; show
                   {!order.cancelledAt && !order.shipment?.awb && <Badge tone={order.shipment?.lastError ? "danger" : "warn"}>{order.shipment?.lastError ? "Booking failed" : "Not booked"}</Badge>}
                   <Badge>{PAYMENT_MODE_LABEL[order.paymentMode]}</Badge>
                   {order.channel === "Shopify" && <Badge tone="info">Shopify</Badge>}
+                  {order.rtoRisk?.level && order.rtoRisk.level !== "Low" && !order.cancelledAt && <Badge tone={riskTone(order.rtoRisk.level)}>{order.rtoRisk.level} risk</Badge>}
                   {order.incentive.needsReversal && <Badge tone="danger">Needs recovery</Badge>}
                 </div>
                 <p className="mt-0.5 truncate text-xs text-[var(--muted)]">

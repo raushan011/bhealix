@@ -37,10 +37,12 @@ export type TeamOrderRow = {
   cancelledBy?: { name: string } | null;
   createdBy?: { name: string } | null;
   notes?: string;
+  rtoRisk?: { level?: "Low" | "Medium" | "High"; score?: number; reasons?: string[]; advice?: string };
+  ndr?: Array<{ _id: string; action: "re-attempt" | "return"; deferredDate?: string; phone?: string; comments?: string; ok?: boolean; response?: string; at: string; byName?: string }>;
   shipment?: {
     shiprocketOrderId?: string; shipmentId?: string; awb?: string; courier?: string; status?: string;
     deliveredAt?: string; checkedAt?: string; pickupLocation?: string; codAmount?: number;
-    pickupScheduledAt?: string; processedAt?: string; processedBy?: { name: string } | null; lastError?: string;
+    pickupScheduledAt?: string; processedAt?: string; expectedDelivery?: string; processedBy?: { name: string } | null; lastError?: string;
     parcel?: { weight?: number; length?: number; breadth?: number; height?: number };
   };
   delivery: { state: DeliveryState; reported?: DeliveryState; override?: DeliveryState; overrideReason?: string; at?: string };

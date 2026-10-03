@@ -15,6 +15,7 @@ import {
   TEAM_PAYMENT_MODES, type TeamPaymentMode
 } from "@/lib/sales-team/orders";
 import { orderInputSchema } from "@/lib/sales-team/schemas";
+import { preOrderCheck } from "@/lib/sales-team/checks";
 import { activeExecutive, applyRule, loadTeamSettings, nextTeamOrderNo, recalculateIncentive, shopifyReadiness } from "@/lib/sales-team/server";
 import { cancelShopifyOrder, placeShopifyOrder, type PlacedOrder } from "@/lib/sales-team/shopify-api";
 import { buildShopifyOrder, TEAM_DISCOUNT_CODE } from "@/lib/sales-team/shopify-order";
@@ -27,7 +28,7 @@ export const dynamic = "force-dynamic";
 const LIST_FIELDS = "name ref channel shopifyOrderId placedAt executive executiveName lead customer.name customer.phone customer.city customer.pinCode "
   + "totals paymentMode advancePaid collectAmount cancelledAt shipment.awb shipment.courier shipment.shiprocketOrderId "
   + "shipment.status shipment.lastError shipment.pickupScheduledAt delivery.state incentive.amount incentive.status "
-  + "incentive.needsReversal items.title items.quantity";
+  + "incentive.needsReversal items.title items.quantity rtoRisk.level shipment.expectedDelivery";
 
 /**
  * The sales team's orders — an executive's own, or everybody's for the desk.
@@ -214,6 +215,22 @@ export async function POST(request: Request) {
     });
     applyRule(order, ruleFor(settings.incentiveRules, mode));
     recalculateIncentive(order);
+
+    /*
+     * The RTO risk as it stood when the order was placed. The courier check is
+     * given a few seconds and no more — a slow Shiprocket must not hold up a sale
+     * — and without it the score is worked out from the delivery history alone.
+     */
+    const riskInput = {
+      pinCode: input.customer.pinCode, phone: input.customer.phone, paymentMode: mode, total: priced.total, advance,
+      address1: input.customer.address1, address2: input.customer.address2 || undefined, city: input.customer.city
+    };
+    const assessed = await Promise.race([
+      preOrderCheck(riskInput),
+      new Promise<null>(resolve => setTimeout(() => resolve(null), 6000))
+    ]).catch(() => null) ?? await preOrderCheck({ ...riskInput, askCourier: false }).catch(() => null);
+    if (assessed) order.set("rtoRisk", assessed.risk);
+
     try {
       await order.save();
     } catch (error) {

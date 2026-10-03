@@ -196,7 +196,13 @@ const ROUTES = [
   { method: "GET", path: "/api/sales-team/leads", allow: SALES_DESK },
   { method: "POST", path: "/api/sales-team/leads/assign", allow: ADMIN_ONLY, body: {} },
   { method: "GET", path: "/api/sales-team/leads/:missing", allow: SALES_DESK },
-  { method: "POST", path: "/api/sales-team/leads/:missing", allow: ADMIN_AND_EXECUTIVE, body: {} }
+  { method: "POST", path: "/api/sales-team/leads/:missing", allow: ADMIN_AND_EXECUTIVE, body: {} },
+  { method: "PATCH", path: "/api/sales-team/leads/:missing", allow: ADMIN_AND_EXECUTIVE, body: {} },
+  { method: "POST", path: "/api/sales-team/leads", allow: ADMIN_AND_EXECUTIVE, body: {} },
+  { method: "POST", path: "/api/sales-team/check", allow: ADMIN_AND_EXECUTIVE, body: {} },
+  { method: "POST", path: "/api/sales-team/orders/:missing/ndr", allow: ADMIN_AND_EXECUTIVE, body: {} },
+  // The "today" screen is the executive's own and nobody else's.
+  { method: "GET", path: "/api/sales-team/today", allow: ["EXECUTIVE"] }
 ];
 
 /**

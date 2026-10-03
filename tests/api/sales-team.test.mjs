@@ -249,6 +249,81 @@ describe("a repeat customer", () => {
   });
 });
 
+describe("before an order is placed", () => {
+  it("scores the RTO risk and says why, even without a courier to ask", async () => {
+    const { data, status } = await exec.post("/api/sales-team/check", {
+      pinCode: "800001", phone: "9000000001", paymentMode: "COD", total: 4000, address1: "Near temple"
+    });
+    expect(status).toBe(200);
+    expect(data.risk.level).toBe("High");
+    expect(data.risk.reasons.join(" ")).toMatch(/Cash on delivery/);
+    expect(data.delivery.refusal).toMatch(/Shiprocket/);
+  });
+
+  it("keeps the score on the order", async () => {
+    const created = await exec.post("/api/sales-team/orders", order("risk"));
+    const { data } = await exec.get(`/api/sales-team/orders/${created.data._id}`);
+    expect(["Low", "Medium", "High"]).toContain(data.order.rtoRisk.level);
+    expect(data.order.rtoRisk.reasons.length).toBeGreaterThan(0);
+  });
+});
+
+describe("customers the executive adds, and their follow-ups", () => {
+  let leadId;
+  const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
+
+  it("adds a customer to the executive's own list, once per phone", async () => {
+    const added = await exec.post("/api/sales-team/leads", { name: `${PREFIX} Walk-in`, phone: "+91 98111 22334", followUpAt: today, followUpNote: "Send price list" });
+    expect(added.status).toBe(201);
+    leadId = added.data._id;
+    const again = await exec.post("/api/sales-team/leads", { name: `${PREFIX} Walk-in again`, phone: "9811122334" });
+    expect(again.data).toMatchObject({ existed: true, _id: leadId });
+  });
+
+  it("puts a follow-up that is due on the executive's Today screen", async () => {
+    const { data } = await exec.get("/api/sales-team/today");
+    expect(data.followUps.map(lead => lead._id)).toContain(leadId);
+    expect((await admin.get("/api/sales-team/today")).status).toBe(403);
+  });
+
+  it("moves and clears a follow-up, for its own executive only", async () => {
+    expect((await exec2.patch(`/api/sales-team/leads/${leadId}`, { followUpAt: null })).status).toBe(404);
+    expect((await exec.patch(`/api/sales-team/leads/${leadId}`, { followUpAt: "2099-01-01" })).status).toBe(200);
+    expect((await exec.get("/api/sales-team/today")).data.followUps.map(lead => lead._id)).not.toContain(leadId);
+    // A remark can set the next one in the same breath.
+    expect((await exec.post(`/api/sales-team/leads/${leadId}`, { text: "Sent prices, call back", channel: "Call", followUpAt: today })).status).toBe(201);
+    expect((await exec.get("/api/sales-team/today")).data.followUps.map(lead => lead._id)).toContain(leadId);
+    expect((await exec.patch(`/api/sales-team/leads/${leadId}`, { followUpAt: null })).status).toBe(200);
+  });
+});
+
+describe("a failed delivery", () => {
+  it("cannot be reattempted before the parcel has shipped", async () => {
+    const id = (await exec.post("/api/sales-team/orders", order("ndr"))).data._id;
+    const refused = await exec.post(`/api/sales-team/orders/${id}/ndr`, { action: "re-attempt", comments: "Customer out" });
+    expect(refused.status).toBe(400);
+    expect(refused.error).toMatch(/not been shipped/);
+  });
+
+  it("is sent to Shiprocket once shipped, and refused by a colleague", async () => {
+    const id = (await exec.post("/api/sales-team/orders", order("ndr2"))).data._id;
+    const db = (await connect()).db;
+    const { ObjectId } = await import("mongodb");
+    await db.collection("salesteamorders").updateOne({ _id: new ObjectId(id) }, { $set: { "shipment.awb": "TESTAWB1", "delivery.state": "Undelivered", "shipment.status": "UNDELIVERED" } });
+
+    expect((await exec2.post(`/api/sales-team/orders/${id}/ndr`, { action: "re-attempt", comments: "Not mine" })).status).toBe(404);
+    const detail = await exec.get(`/api/sales-team/orders/${id}`);
+    expect(detail.data.may.ndr).toBe(true);
+    const today = (await exec.get("/api/sales-team/today")).data;
+    expect(today.problems.map(row => row._id)).toContain(id);
+
+    // No courier account in the test database: the answer is a plain sentence, not a crash.
+    const result = await exec.post(`/api/sales-team/orders/${id}/ndr`, { action: "re-attempt", comments: "Customer home after 4 pm", deferredDate: "2099-01-02" });
+    expect(result.status).toBe(502);
+    expect(result.error).toMatch(/Shiprocket/);
+  });
+});
+
 describe("the overview", () => {
   it("gives each executive their own figures and the desk everybody's", async () => {
     const own = await exec.get("/api/sales-team/overview");

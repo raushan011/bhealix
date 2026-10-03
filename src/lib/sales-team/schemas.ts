@@ -121,3 +121,46 @@ export const assignSchema = z.object({
   /** Null hands the leads back to the desk. */
   executive: z.string().regex(OBJECT_ID).nullable()
 });
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The order form's live check: can a courier reach this, and how risky is it. */
+export const checkSchema = z.object({
+  pinCode: z.string().trim().max(10).optional(),
+  phone: z.string().trim().max(20).optional(),
+  paymentMode: z.enum(TEAM_PAYMENT_MODES),
+  total: z.number().min(0).max(10_000_000).default(0),
+  advance: z.number().min(0).max(10_000_000).default(0),
+  address1: z.string().trim().max(200).optional(),
+  address2: z.string().trim().max(200).optional(),
+  city: z.string().trim().max(80).optional()
+});
+
+/** What to tell the courier about a failed delivery. */
+export const ndrSchema = z.object({
+  action: z.enum(["re-attempt", "return"]),
+  /** A particular day the customer asked for; omitted means the courier's next round. */
+  deferredDate: z.string().regex(DAY, "Choose the day").optional().or(z.literal("")),
+  phone: z.string().trim().max(20).optional().or(z.literal("")),
+  address1: z.string().trim().max(200).optional().or(z.literal("")),
+  address2: z.string().trim().max(200).optional().or(z.literal("")),
+  comments: z.string().trim().min(3, "Say what the customer told you").max(300)
+});
+
+/** A customer an executive adds themselves, to follow up. */
+export const ownLeadSchema = z.object({
+  name: z.string().trim().min(2, "Enter the name").max(120),
+  phone: z.string().trim().min(10, "Enter a 10-digit phone number").max(20),
+  city: z.string().trim().max(80).optional().or(z.literal("")),
+  address: z.string().trim().max(300).optional().or(z.literal("")),
+  type: z.string().trim().max(60).optional().or(z.literal("")),
+  notes: z.string().trim().max(1000).optional().or(z.literal("")),
+  followUpAt: z.string().regex(DAY).optional().or(z.literal("")),
+  followUpNote: z.string().trim().max(300).optional().or(z.literal(""))
+});
+
+/** Setting, moving or clearing a lead's next follow-up. */
+export const followUpSchema = z.object({
+  followUpAt: z.string().regex(DAY, "Choose the day").nullable(),
+  followUpNote: z.string().trim().max(300).optional().or(z.literal(""))
+});

@@ -39,7 +39,7 @@ export async function GET(_: Request, { params }: Params) {
       .populate("cancelledBy", "name")
       .populate("incentive.payment.paidBy", "name")
       .lean() as Record<string, unknown> & {
-        executive?: { _id: unknown } | null; cancelledAt?: Date; incentive?: { status?: string }; shopifyOrderId?: string;
+        executive?: { _id: unknown } | null; cancelledAt?: Date; incentive?: { status?: string }; shopifyOrderId?: string; delivery?: { state?: string };
         shipment?: { shiprocketOrderId?: string; awb?: string; pickupScheduledAt?: Date };
       } | null;
     if (!order) return badRequest("That order could not be found", 404);
@@ -64,7 +64,9 @@ export async function GET(_: Request, { params }: Params) {
         documents: atCourier,
         override: can.manageSalesTeam(auth.session.role),
         reassign: can.manageSalesTeam(auth.session.role) && order.incentive?.status !== "Paid",
-        pay: can.paySalesIncentive(auth.session.role)
+        pay: can.paySalesIncentive(auth.session.role),
+        // A delivery instruction (reattempt, reschedule, return) — for a parcel that is shipped and not yet settled.
+        ndr: acts && live && Boolean(order.shipment?.awb) && !["Delivered", "RTO", "Returned", "Lost", "Cancelled"].includes(String(order.delivery?.state ?? ""))
       }
     });
   } catch (error) {
