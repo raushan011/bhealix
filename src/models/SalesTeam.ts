@@ -2,6 +2,7 @@ import { Schema, model, models } from "mongoose";
 import { COURIER_RULES, DELIVERY_STATES } from "@/lib/sales/constants";
 import { RISK_LEVELS } from "@/lib/sales-team/risk";
 import { CATALOGUE_KINDS } from "@/lib/sales-team/pricing";
+import { WEIGHT_BASES } from "@/lib/sales-team/packaging";
 import {
   DEFAULT_INCENTIVE_RULES, INCENTIVE_PAY_MODES, INCENTIVE_STATUSES, INCENTIVE_TYPES, TEAM_ORDER_CHANNELS, TEAM_PAYMENT_MODES
 } from "@/lib/sales-team/orders";
@@ -282,6 +283,20 @@ const SalesTeamSettingsSchema = new Schema({
       value: { type: Number, min: 0, default: 0 }
     }, { _id: false })],
     default: () => DEFAULT_INCENTIVE_RULES
+  },
+  /**
+   * The one carton every parcel goes out in, and what goes into it — set once by
+   * the administrator, and the weight and size every booking is made at (see
+   * `lib/sales-team/packaging.ts`). Absent means the defaults there apply.
+   */
+  packaging: {
+    unitGrams: Number,
+    packagingGrams: Number,
+    length: Number,
+    breadth: Number,
+    height: Number,
+    basis: { type: String, enum: WEIGHT_BASES },
+    unitsPerKind: { type: Schema.Types.Mixed }
   },
   /** What the last team parcel was booked as, so the next one is not typed again. */
   fulfilment: {

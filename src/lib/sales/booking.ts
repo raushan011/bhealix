@@ -3,7 +3,7 @@ import {
   addressOf, blockedReason, buildAdhocOrder, codAmountOf, missingFields, paymentModeOf, parcelValueOf, pickCourier,
   type Address, type BookableOrder, type CourierChoice, type Parcel
 } from "./fulfilment";
-import { assignAwb, createOrder, fetchShipmentFor, matchKeysFor, schedulePickup, serviceability } from "./shiprocket";
+import { assignAwb, createOrder, fetchShipmentFor, matchKeysFor, schedulePickup, serviceability, updateOrder } from "./shiprocket";
 import type { ProcessResult } from "./types";
 
 /**
@@ -59,6 +59,12 @@ export type BookingInput = {
    * this system kept one (§ address.ts). Absent when Shopify is not connected.
    */
   resolveAddress?: ((order: OrderDoc) => Promise<Address | null>) | null;
+  /**
+   * Rewrite the size and weight of an order a connected shop already pushed to
+   * Shiprocket, so it ships at `parcel` rather than at the shop's product
+   * weights. The sales team's parcels, whose carton is fixed by the administrator.
+   */
+  enforceParcel?: boolean;
   actor: string;
 };
 
@@ -114,6 +120,7 @@ export async function processOrder(token: string, order: OrderDoc, input: Bookin
     }
 
     const booked = await ensureBooked(token, order, input, address);
+    const warning = booked.warning;
     const cod = paymentModeOf(order) === "COD";
 
     /*
@@ -184,7 +191,7 @@ export async function processOrder(token: string, order: OrderDoc, input: Bookin
     });
     await order.save();
 
-    return result({ ok: true, awb, courier: courierName });
+    return result({ ok: true, awb, courier: courierName, ...(warning ? { warning } : {}) });
   } catch (error) {
     const message = error instanceof IntegrationError || error instanceof Error
       ? error.message
@@ -213,7 +220,9 @@ function write(order: OrderDoc, values: Record<string, unknown>) {
  * The order as Shiprocket knows it — found if it is already there, raised if it
  * is not. See the note on "find before create" above.
  */
-async function ensureBooked(token: string, order: OrderDoc, input: BookingInput, address: Address) {
+async function ensureBooked(
+  token: string, order: OrderDoc, input: BookingInput, address: Address
+): Promise<{ shiprocketOrderId: string; shipmentId: string; warning?: string }> {
   const known = {
     shiprocketOrderId: String(order.shipment?.shiprocketOrderId ?? "").trim(),
     shipmentId: String(order.shipment?.shipmentId ?? "").trim()
@@ -223,7 +232,24 @@ async function ensureBooked(token: string, order: OrderDoc, input: BookingInput,
   for (const key of matchKeysFor(order)) {
     const found = await fetchShipmentFor(token, key);
     if (!found) continue;
-    if (found.shipmentId) return { shiprocketOrderId: found.shiprocketOrderId, shipmentId: found.shipmentId };
+    if (found.shipmentId) {
+      const booked = { shiprocketOrderId: found.shiprocketOrderId, shipmentId: found.shipmentId };
+      if (!input.enforceParcel || found.awb) return booked;
+      /*
+       * The shop pushed this order across at its own product weights. Rewritten
+       * to the real carton before a courier is assigned, which is the last
+       * moment Shiprocket allows it. A refusal does not stop the booking — the
+       * parcel still has to go — but it is said, so somebody corrects it in
+       * Shiprocket before the courier re-weighs it.
+       */
+      try {
+        await updateOrder(token, buildAdhocOrder({ order, address, parcel: input.parcel, pickupLocation: input.pickupLocation }));
+        return booked;
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "Shiprocket would not update the parcel.";
+        return { ...booked, warning: `${reason} Check that it reads ${input.parcel.weight} kg, ${input.parcel.length} × ${input.parcel.breadth} × ${input.parcel.height} cm in Shiprocket.` };
+      }
+    }
 
     /*
      * Shiprocket has the order but nothing to ship against it. Creating it again

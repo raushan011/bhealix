@@ -2,6 +2,7 @@ import { z } from "zod";
 import { DELIVERY_STATES, COURIER_RULES } from "@/lib/sales/constants";
 import { INCENTIVE_PAY_MODES, INCENTIVE_TYPES, TEAM_ORDER_CHANNELS, TEAM_PAYMENT_MODES } from "./orders";
 import { CATALOGUE_KINDS } from "./pricing";
+import { WEIGHT_BASES } from "./packaging";
 
 /**
  * What the sales team's routes accept. Pure, so the order form can validate with
@@ -67,12 +68,13 @@ export const orderPatchSchema = z.discriminatedUnion("action", [
 
 export const bookSchema = z.object({
   pickupLocation: z.string().trim().min(1, "Choose the pickup address"),
+  /** Ignored: the parcel is worked out from the order and the packaging settings. Kept so older screens still post. */
   parcel: z.object({
     weight: z.number().positive().max(50),
     length: z.number().positive().max(200),
     breadth: z.number().positive().max(200),
     height: z.number().positive().max(200)
-  }),
+  }).optional(),
   courierId: z.number().int().positive().optional(),
   courierName: z.string().trim().max(80).optional(),
   courierRule: z.enum(COURIER_RULES).default("recommended"),
@@ -82,7 +84,8 @@ export const bookSchema = z.object({
 export const ratesSchema = z.object({
   orderId: z.string().regex(OBJECT_ID),
   pickupLocation: z.string().trim().min(1),
-  weight: z.number().positive().max(50)
+  /** Ignored: the weight comes from the order and the packaging settings. */
+  weight: z.number().positive().max(50).optional()
 });
 
 export const payIncentiveSchema = z.object({
@@ -122,6 +125,17 @@ export const rulesSchema = z.object({
     prepaidOff: z.number().min(0).max(10_000),
     extraPct: z.number().min(0).max(50),
     partialAdvance: z.number().min(0).max(100_000)
+  }).optional(),
+  /** The carton and the weights every parcel is booked at. */
+  packaging: z.object({
+    unitGrams: z.number().min(1, "Give what one product weighs").max(20_000),
+    packagingGrams: z.number().min(0).max(20_000),
+    length: z.number().min(1).max(200),
+    breadth: z.number().min(1).max(200),
+    height: z.number().min(1).max(200),
+    basis: z.enum(WEIGHT_BASES),
+    unitsPerKind: z.object(Object.fromEntries(CATALOGUE_KINDS.map(kind => [kind, z.number().min(0).max(50)])) as
+      Record<(typeof CATALOGUE_KINDS)[number], z.ZodNumber>)
   }).optional(),
   incentiveRules: z.array(z.object({
     mode: z.enum(TEAM_PAYMENT_MODES),

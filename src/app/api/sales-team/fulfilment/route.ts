@@ -2,52 +2,54 @@ import { connectDb } from "@/lib/db/mongoose";
 import { SalesTeamOrder } from "@/models/SalesTeam";
 import { apiSession } from "@/lib/auth/guard";
 import { can } from "@/constants/access";
-import { badRequest, fail, ok } from "@/lib/api";
-import { DEFAULT_PARCEL } from "@/lib/sales/constants";
+import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
 import { codAmountOf, parcelValueOf, paymentModeOf, type BookableOrder } from "@/lib/sales/fulfilment";
 import { IntegrationError } from "@/lib/sales/http";
 import { loadCredentials, shiprocketToken } from "@/lib/sales/settings";
 import { pickupLocations, serviceability } from "@/lib/sales/shiprocket";
 import { mayActOn, orderScope } from "@/lib/sales-team/access";
 import { ratesSchema } from "@/lib/sales-team/schemas";
-import { loadTeamSettings } from "@/lib/sales-team/server";
+import { loadTeamSettings, parcelOfOrder } from "@/lib/sales-team/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * What the booking dialog opens with: the company's pickup addresses and the
- * carton the last team parcel went out in.
+ * What the booking dialog opens with: the company's pickup addresses, and the
+ * parcel this order will be booked as — the administrator's carton at the
+ * weight its products come to (`?orderId=`).
  *
  * A Shiprocket account that is not connected, or that refuses the credentials,
  * is a 200 with a `refusal` sentence rather than an error — the order screen
  * still works without it, and the sentence says who can fix it.
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const auth = await apiSession(can.placeSalesOrder);
     if ("response" in auth) return auth.response;
     await connectDb();
 
-    const defaults = (await loadTeamSettings()).fulfilment ?? {};
-    const parcel = {
-      weight: defaults.weight ?? DEFAULT_PARCEL.weight,
-      length: defaults.length ?? DEFAULT_PARCEL.length,
-      breadth: defaults.breadth ?? DEFAULT_PARCEL.breadth,
-      height: defaults.height ?? DEFAULT_PARCEL.height
-    };
+    const settings = await loadTeamSettings();
+    const defaults = settings.fulfilment ?? {};
+    const orderId = new URL(request.url).searchParams.get("orderId") ?? "";
+    const order = OBJECT_ID.test(orderId)
+      ? await SalesTeamOrder.findOne({ _id: orderId, ...(orderScope(auth.session) ?? {}) }).select("items").lean() as
+        { items?: { catalogueId?: string; quantity?: number }[] } | null
+      : null;
+    const { parcel, units } = parcelOfOrder(order ?? { items: [{ quantity: 1 }] }, settings);
+    const packaging = { ...settings.packaging, units };
 
     const token = await shiprocketToken(await loadCredentials()).catch(error => {
       if (error instanceof IntegrationError) return error;
       throw error;
     });
-    if (!token) return ok({ locations: [], parcel, defaults, refusal: "Shiprocket is not connected yet. An administrator adds it under Affiliate CRM → Settings." });
-    if (token instanceof IntegrationError) return ok({ locations: [], parcel, defaults, refusal: token.message });
+    if (!token) return ok({ locations: [], parcel, packaging, defaults, refusal: "Shiprocket is not connected yet. An administrator adds it under Affiliate CRM → Settings." });
+    if (token instanceof IntegrationError) return ok({ locations: [], parcel, packaging, defaults, refusal: token.message });
 
     try {
-      return ok({ locations: await pickupLocations(token), parcel, defaults });
+      return ok({ locations: await pickupLocations(token), parcel, packaging, defaults });
     } catch (error) {
-      if (error instanceof IntegrationError) return ok({ locations: [], parcel, defaults, refusal: error.message });
+      if (error instanceof IntegrationError) return ok({ locations: [], parcel, packaging, defaults, refusal: error.message });
       throw error;
     }
   } catch (error) {
@@ -82,7 +84,7 @@ export async function POST(request: Request) {
       const couriers = await serviceability(token, {
         pickupPincode: from.pinCode,
         deliveryPincode: String(order.customer?.pinCode ?? ""),
-        weight: input.weight,
+        weight: parcelOfOrder(order as { items?: { catalogueId?: string; quantity?: number }[] }, await loadTeamSettings()).parcel.weight,
         cod: paymentModeOf(order) === "COD",
         declaredValue: parcelValueOf(order)
       });

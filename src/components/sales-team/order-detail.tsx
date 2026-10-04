@@ -289,14 +289,19 @@ function Detail({ label, value }: { label: string; value: string }) {
  *
  * The rates are fetched as the dialog opens and listed cheapest first, because
  * freight is money — the same reasoning as the Affiliate CRM's processing
- * screen. They are asked for again when the warehouse or weight changes, by a
- * button rather than a keystroke.
+ * screen. They are asked for again when the warehouse changes, by a button
+ * rather than a keystroke.
+ *
+ * The parcel is not typed here. Its size and weight come from the package the
+ * administrator set under Sales settings, at the weight this order's products
+ * come to, so Shiprocket is never told a lighter parcel than the courier weighs.
  */
 function BookDialog({ order, onClose, onBooked }: { order: TeamOrderRow; onClose: () => void; onBooked: (text: string) => void }) {
   const [locations, setLocations] = useState<PickupLocation[]>([]);
   const [refusal, setRefusal] = useState("");
   const [pickup, setPickup] = useState("");
-  const [parcel, setParcel] = useState({ weight: 0.5, length: 20, breadth: 15, height: 8 });
+  const [parcel, setParcel] = useState<{ weight: number; length: number; breadth: number; height: number } | null>(null);
+  const [packing, setPacking] = useState<{ units: number; basis: string } | null>(null);
   const [couriers, setCouriers] = useState<CourierOption[] | null>(null);
   const [choice, setChoice] = useState<string>("recommended");
   const [schedule, setSchedule] = useState(false);
@@ -305,11 +310,11 @@ function BookDialog({ order, onClose, onBooked }: { order: TeamOrderRow; onClose
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const rates = useCallback(async (location: string, weight: number) => {
+  const rates = useCallback(async (location: string) => {
     if (!location) return;
     setRating(true); setError("");
     try {
-      const result = await call<{ couriers: CourierOption[] }>("/api/sales-team/fulfilment", { body: { orderId: order._id, pickupLocation: location, weight } });
+      const result = await call<{ couriers: CourierOption[] }>("/api/sales-team/fulfilment", { body: { orderId: order._id, pickupLocation: location } });
       setCouriers(result.couriers);
     } catch (problem) {
       setCouriers([]);
@@ -322,33 +327,37 @@ function BookDialog({ order, onClose, onBooked }: { order: TeamOrderRow; onClose
   useEffect(() => {
     (async () => {
       try {
-        const options = await call<{ locations: PickupLocation[]; parcel: typeof parcel; defaults: { pickupLocation?: string; courierRule?: string; courierId?: number }; refusal?: string }>("/api/sales-team/fulfilment");
+        const options = await call<{
+          locations: PickupLocation[]; parcel: NonNullable<typeof parcel>; packaging: { units: number; basis: string };
+          defaults: { pickupLocation?: string; courierRule?: string; courierId?: number }; refusal?: string;
+        }>(`/api/sales-team/fulfilment?orderId=${order._id}`);
         setLocations(options.locations);
         setRefusal(options.refusal ?? "");
         setParcel(options.parcel);
+        setPacking(options.packaging);
         const start = options.locations.find(location => location.name === options.defaults.pickupLocation)?.name ?? options.locations[0]?.name ?? "";
         setPickup(start);
-        if (start) await rates(start, options.parcel.weight);
+        if (start) await rates(start);
       } catch (problem) {
         setError(messageOf(problem));
       } finally {
         setLoading(false);
       }
     })();
-  }, [rates]);
+  }, [rates, order._id]);
 
   async function book() {
     setBusy(true); setError("");
     const named = Number(choice);
     const courier = Number.isFinite(named) && named > 0 ? couriers?.find(option => option.id === named) : undefined;
     try {
-      const result = await call<{ awb?: string; courier?: string }>(`/api/sales-team/orders/${order._id}/book`, {
+      const result = await call<{ awb?: string; courier?: string; warning?: string }>(`/api/sales-team/orders/${order._id}/book`, {
         body: {
-          pickupLocation: pickup, parcel, schedulePickup: schedule,
+          pickupLocation: pickup, schedulePickup: schedule,
           ...(courier ? { courierId: courier.id, courierName: courier.name } : { courierRule: choice as CourierRule })
         }
       });
-      onBooked(`Booked on ${result.courier ?? "the courier"} — AWB ${result.awb ?? ""}.`);
+      onBooked(`Booked on ${result.courier ?? "the courier"} — AWB ${result.awb ?? ""}.${result.warning ? ` ${result.warning}` : ""}`);
     } catch (problem) {
       setError(messageOf(problem));
       setBusy(false);
@@ -366,20 +375,20 @@ function BookDialog({ order, onClose, onBooked }: { order: TeamOrderRow; onClose
       {refusal && <Notice tone="error">{refusal}</Notice>}
       {!refusal && <>
         <Field label="Ships from">
-          <select className="select" value={pickup} onChange={event => { setPickup(event.target.value); rates(event.target.value, parcel.weight); }}>
+          <select className="select" value={pickup} onChange={event => { setPickup(event.target.value); rates(event.target.value); }}>
             {locations.map(location => <option key={location.name} value={location.name}>{location.name}{location.city ? ` — ${location.city}` : ""}</option>)}
           </select>
         </Field>
-        <div className="grid grid-cols-4 gap-2">
-          {(["weight", "length", "breadth", "height"] as const).map(key => (
-            <Field key={key} label={key === "weight" ? "kg" : `${key[0].toUpperCase()}${key.slice(1)} cm`}>
-              <input className="input" type="number" min={0.1} step="0.1" value={parcel[key]} onChange={event => setParcel({ ...parcel, [key]: Number(event.target.value) || 0 })} />
-            </Field>
-          ))}
-        </div>
+        {parcel && <div className="rounded-[10px] bg-[var(--surface-2)] px-3 py-2 text-sm">
+          <p className="font-semibold tabular-nums">{parcel.weight} kg · {parcel.length} × {parcel.breadth} × {parcel.height} cm</p>
+          <p className="text-xs text-[var(--muted)]">
+            {packing ? `${packing.units} product${packing.units === 1 ? "" : "s"}, ` : ""}
+            {packing?.basis === "dead" ? "dead weight" : "higher of dead and volumetric weight"} — set by the administrator under Sales settings.
+          </p>
+        </div>}
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold">Courier</p>
-          <button onClick={() => rates(pickup, parcel.weight)} className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand)]"><RefreshCw size={12} className={rating ? "animate-spin" : ""} />Refresh rates</button>
+          <button onClick={() => rates(pickup)} className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand)]"><RefreshCw size={12} className={rating ? "animate-spin" : ""} />Refresh rates</button>
         </div>
         <div className="max-h-[260px] space-y-1.5 overflow-y-auto">
           {(["recommended", "cheapest", "fastest"] as const).map(rule => (

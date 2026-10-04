@@ -5,12 +5,12 @@ import { can } from "@/constants/access";
 import { badRequest, fail, ok, OBJECT_ID } from "@/lib/api";
 import { record } from "@/lib/audit";
 import { processOrder, type OrderDoc } from "@/lib/sales/booking";
-import { normaliseParcel } from "@/lib/sales/fulfilment";
 import { IntegrationError } from "@/lib/sales/http";
 import { loadCredentials, shiprocketToken } from "@/lib/sales/settings";
 import { pickupLocations } from "@/lib/sales/shiprocket";
 import { mayActOn, orderScope } from "@/lib/sales-team/access";
 import { bookSchema } from "@/lib/sales-team/schemas";
+import { loadTeamSettings, parcelOfOrder } from "@/lib/sales-team/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -63,7 +63,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!from) return badRequest(`Shiprocket has no pickup address called "${input.pickupLocation}".`, 502);
     if (!from.pinCode) return badRequest(`The pickup address "${from.name}" has no pin code on it in Shiprocket.`, 502);
 
-    const parcel = normaliseParcel(input.parcel);
+    // The administrator's carton at the weight this order's products come to —
+    // never what the screen sent, so no booking can declare a lighter parcel.
+    const { parcel } = parcelOfOrder(order, await loadTeamSettings());
     const result = await processOrder(token, order as unknown as OrderDoc, {
       pickupLocation: from.name,
       pickupPincode: from.pinCode,
@@ -74,6 +76,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       // fetch from the shop; an incomplete one reports what it is missing.
       resolveAddress: null,
       address: null,
+      enforceParcel: true,
       actor: auth.session.userId
     });
 

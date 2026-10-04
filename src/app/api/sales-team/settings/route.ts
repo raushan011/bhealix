@@ -33,6 +33,7 @@ export async function GET() {
       orderChannel: settings.orderChannel,
       catalogue: settings.catalogue,
       pricing: settings.pricing,
+      packaging: settings.packaging,
       shopifyRefusal: shopify?.refusal ?? null,
       mayEdit: can.manageSalesTeam(auth.session.role)
     });
@@ -64,7 +65,8 @@ export async function PUT(request: Request) {
         ...(input.incentiveRules ? { incentiveRules: input.incentiveRules } : {}),
         ...(input.orderChannel ? { orderChannel: input.orderChannel } : {}),
         ...(input.catalogue ? { catalogue: input.catalogue } : {}),
-        ...(input.pricing ? { pricing: input.pricing } : {})
+        ...(input.pricing ? { pricing: input.pricing } : {}),
+        ...(input.packaging ? { packaging: input.packaging } : {})
       }
     }, { upsert: true });
 
@@ -81,14 +83,16 @@ export async function PUT(request: Request) {
 
     await record({
       actor: auth.session.userId, action: "team.incentive.rules.updated", entityType: "SalesTeamSettings", entityId: "sales-team",
-      metadata: { before, after: input.incentiveRules, repriced, orderChannel: input.orderChannel }
+      metadata: { before, after: input.incentiveRules, repriced, orderChannel: input.orderChannel, packaging: input.packaging }
     });
 
     return ok({
       incentiveRules: input.incentiveRules ?? before,
       orderChannel: input.orderChannel ?? (await loadTeamSettings()).orderChannel,
       repriced,
-      message: input.applyToUnpaid && input.incentiveRules
+      message: input.packaging && !input.incentiveRules
+        ? "Package saved. Every sales order booked from now on goes to Shiprocket at this size and weight."
+        : input.applyToUnpaid && input.incentiveRules
         ? `Rules saved. ${repriced} unpaid order${repriced === 1 ? " was" : "s were"} re-priced at the new rules.`
         : "Rules saved. They apply to orders placed from now on."
     });

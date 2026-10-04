@@ -10,6 +10,7 @@ import { IntegrationError } from "@/lib/sales/http";
 import { shiftDay, todayIso } from "@/lib/time";
 import { priceIncentive, rulesTable, teamOrderNo, type IncentiveRule, type TeamOrderChannel } from "./orders";
 import { canWriteOrders } from "./shopify-order";
+import { packagingOf, parcelFor, unitsIn, type PackagingRules } from "./packaging";
 import { catalogueOf, quote, rulesOf as pricingRulesOf, type CatalogueItem, type PricingRules, type Quote } from "./pricing";
 import { priceOrder, type PricedOrder, type TeamPaymentMode } from "./orders";
 import { fetchOrder, grantedScopes, type ShopifyConfig } from "@/lib/sales/shopify";
@@ -28,6 +29,7 @@ export type TeamSettings = {
   catalogue: CatalogueItem[];
   pricing: PricingRules;
   incentiveRules: IncentiveRule[];
+  packaging: PackagingRules;
   fulfilment?: {
     pickupLocation?: string; weight?: number; length?: number; breadth?: number; height?: number;
     courierRule?: string; courierId?: number; courierName?: string;
@@ -48,8 +50,22 @@ export async function loadTeamSettings(): Promise<TeamSettings> {
     orderChannel: doc?.orderChannel ?? "Shopify",
     incentiveRules: rulesTable(doc?.incentiveRules),
     catalogue: catalogueOf(doc?.catalogue),
-    pricing: pricingRulesOf(doc?.pricing)
+    pricing: pricingRulesOf(doc?.pricing),
+    packaging: packagingOf(doc?.packaging)
   } as TeamSettings;
+}
+
+/**
+ * The parcel an order is booked as: the administrator's carton, at the weight
+ * its products come to. Decided here and never taken from the booking screen,
+ * so every executive's parcel reaches Shiprocket at the same honest figures.
+ */
+export function parcelOfOrder(
+  order: { items?: { catalogueId?: string | null; quantity?: number | null }[] },
+  settings: Pick<TeamSettings, "catalogue" | "packaging">
+) {
+  const units = unitsIn(order.items, settings.catalogue, settings.packaging);
+  return { units, parcel: parcelFor(units, settings.packaging) };
 }
 
 /**

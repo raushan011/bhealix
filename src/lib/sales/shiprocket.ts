@@ -209,6 +209,22 @@ export async function createOrder(token: string, payload: AdhocOrderPayload): Pr
   return { shiprocketOrderId, shipmentId, status: data.status ?? undefined };
 }
 
+/**
+ * Rewrites an order Shiprocket already holds — used for the size and weight of
+ * one a connected shop pushed across before anybody here booked it, which
+ * arrives at whatever the shop's product weights say rather than the carton it
+ * actually goes out in. Takes the same body as `createOrder`, keyed by
+ * `order_id`. Only possible until an airway bill is assigned.
+ */
+export async function updateOrder(token: string, payload: AdhocOrderPayload): Promise<void> {
+  const { data } = await httpJson<{ status_code?: number; message?: string; order_id?: number | string }>({
+    service: "Shiprocket", url: `${BASE}/orders/update/adhoc`, method: "POST", headers: auth(token), body: payload
+  });
+  if (data.status_code && data.status_code >= 400) {
+    throw new IntegrationError("Shiprocket", data.message ? `Shiprocket would not update the parcel: ${data.message}` : "Shiprocket would not update the parcel.");
+  }
+}
+
 type ServiceableCourier = {
   courier_company_id?: number | string;
   courier_name?: string;

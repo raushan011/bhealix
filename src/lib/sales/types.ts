@@ -238,6 +238,8 @@ export type ProcessResult = {
   courier?: string;
   /** Set when the parcel could not be booked, in the words to put on the screen. */
   error?: string;
+  /** Booked, but with something worth checking in Shiprocket — said beside the success. */
+  warning?: string;
 };
 
 /** What one rep has done, over whatever window the screen asked for. */
