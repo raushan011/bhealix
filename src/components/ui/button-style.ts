@@ -18,4 +18,10 @@ export const buttonTone: Record<ButtonTone, string> = {
   danger: "bg-[var(--surface)] text-[var(--danger-ink)] border border-[var(--danger-line)] hover:bg-[var(--danger-bg)] disabled:opacity-50"
 };
 
-export const buttonBase = "inline-flex items-center justify-center gap-2 rounded-[10px] px-4 min-h-[44px] text-sm font-semibold transition-colors disabled:cursor-not-allowed";
+/*
+ * `active:scale` is the press itself: the button gives under the finger the
+ * instant it is touched, before any handler has run, so a tap never feels like
+ * it missed. A working button (`aria-busy`) shows the progress cursor rather
+ * than the refusal one, because it has not refused anything.
+ */
+export const buttonBase = "inline-flex items-center justify-center gap-2 rounded-[10px] px-4 min-h-[44px] text-sm font-semibold select-none transition-[color,background-color,border-color,opacity,scale] duration-150 active:scale-[0.97] disabled:cursor-not-allowed aria-busy:cursor-progress";

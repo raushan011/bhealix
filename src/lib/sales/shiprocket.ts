@@ -160,8 +160,32 @@ export async function fetchShipmentFor(token: string, channelOrderId: string): P
 
 const auth = (token: string) => ({ authorization: `Bearer ${token}` });
 
+/*
+ * Answers that do not change from one minute to the next, kept for a few
+ * minutes per server instance. The order form checks a pin code every time the
+ * phone, address or total settles, and the booking dialog asks for the
+ * warehouses and the rates as it opens — each one a round trip to Shiprocket
+ * that the executive waits on, for an answer identical to the last one. Only a
+ * success is kept; a failure is asked again next time.
+ */
+const remembered = new Map<string, { until: number; value: Promise<unknown> }>();
+function remember<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
+  const now = Date.now();
+  const hit = remembered.get(key);
+  if (hit && hit.until > now) return hit.value as Promise<T>;
+  if (remembered.size > 500) for (const [stale, entry] of remembered) if (entry.until <= now) remembered.delete(stale);
+  const value = load();
+  remembered.set(key, { until: now + ttlMs, value });
+  value.catch(() => { if (remembered.get(key)?.value === value) remembered.delete(key); });
+  return value;
+}
+
 /** The company's own addresses. The booking call names one of these, by nickname. */
-export async function pickupLocations(token: string): Promise<PickupLocation[]> {
+export function pickupLocations(token: string): Promise<PickupLocation[]> {
+  return remember(`pickup:${token.slice(-16)}`, 10 * 60_000, () => fetchPickupLocations(token));
+}
+
+async function fetchPickupLocations(token: string): Promise<PickupLocation[]> {
   const { data } = await httpJson<{ data?: { shipping_address?: {
     pickup_location?: string; address?: string; city?: string; state?: string; pin_code?: string | number; phone?: string | number;
   }[] } }>({
@@ -260,14 +284,17 @@ export async function serviceability(token: string, query: {
     declared_value: String(Math.max(1, Math.round(query.declaredValue)))
   });
 
-  const { data } = await httpJson<{ data?: {
-    available_courier_companies?: ServiceableCourier[];
-    recommended_courier_company_id?: number | string;
-  } }>({
-    service: "Shiprocket", url: `${BASE}/courier/serviceability/?${search}`, headers: auth(token)
+  // Five minutes: long enough to cover an order being typed, checked and
+  // booked, short enough that a courier dropping a pin code is noticed today.
+  return remember(`rates:${token.slice(-16)}:${search}`, 5 * 60_000, async () => {
+    const { data } = await httpJson<{ data?: {
+      available_courier_companies?: ServiceableCourier[];
+      recommended_courier_company_id?: number | string;
+    } }>({
+      service: "Shiprocket", url: `${BASE}/courier/serviceability/?${search}`, headers: auth(token)
+    });
+    return toCourierOptions(data.data);
   });
-
-  return toCourierOptions(data.data);
 }
 
 /**

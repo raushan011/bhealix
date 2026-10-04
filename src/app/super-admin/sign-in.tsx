@@ -81,7 +81,7 @@ export function SuperAdminSignIn() {
           <PasswordInput name="password" autoComplete="current-password" required placeholder="••••••••" />
         </Field>
         {error && <p role="alert" className="rounded-[10px] bg-[var(--danger-bg)] px-3 py-2.5 text-sm font-medium text-[var(--danger-ink)]">{error}</p>}
-        <Button type="submit" busy={busy} className="w-full">{busy ? "Signing in…" : "Sign in"}</Button>
+        <Button type="submit" busy={busy} className="w-full" busyLabel="Signing in…">Sign in</Button>
       </form>
 
       {/*

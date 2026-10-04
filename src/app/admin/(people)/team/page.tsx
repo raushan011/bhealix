@@ -189,7 +189,7 @@ function ResetPassword({ member, onClose, onDone }: { member: Member; onClose: (
         <input name="newPassword" type="text" minLength={8} required className="input" />
       </Field>
       {error && <Notice tone="error">{error}</Notice>}
-      <Button type="submit" busy={busy} className="w-full">{busy ? "Saving…" : "Reset password"}</Button>
+      <Button type="submit" busy={busy} className="w-full" busyLabel="Saving…">Reset password</Button>
     </form>
   </Modal>;
 }

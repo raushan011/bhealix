@@ -11,3 +11,6 @@ test-results/
 # Test harness: the seeded ids, and any local override of the test target.
 tests/.fixtures.json
 .env.test
+
+# Data written out by scripts before they delete anything — real customer data, never committed.
+/backups/

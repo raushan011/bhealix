@@ -124,4 +124,26 @@ describe("a button that is working", () => {
     await act(async () => { gate.resolve(); await gate.promise; });
     expect(button.isConnected).toBe(false);
   });
+
+  /**
+   * The sign-in screen's bug: `<form action>` runs as a transition, so the
+   * screen's own `setBusy(true)` did not show until signing in had finished.
+   * The button now reads the form's status itself.
+   */
+  it("says it is working while its form's action runs", async () => {
+    const gate = deferred();
+    const { button, container, unmount } = mount(
+      <form action={() => gate.promise}><Button type="submit" busyLabel="Signing in…">Sign in</Button></form>
+    );
+
+    expect(button.textContent).toBe("Sign in");
+    await act(async () => { container.querySelector("form")!.requestSubmit(); });
+    expect(button.disabled).toBe(true);
+    expect(button.textContent).toBe("Signing in…");
+
+    await act(async () => { gate.resolve(); await gate.promise; });
+    expect(button.disabled).toBe(false);
+    expect(button.textContent).toBe("Sign in");
+    unmount();
+  });
 });

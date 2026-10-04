@@ -227,7 +227,7 @@ function ManualAdd({ onSaved }: { onSaved: (id: string) => void }) {
       )}
 
       {error && <Notice tone="error">{error}</Notice>}
-      <Button type="submit" busy={busy} className="w-full">{busy ? "Saving…" : "Add doctor"}</Button>
+      <Button type="submit" busy={busy} className="w-full" busyLabel="Saving…">Add doctor</Button>
     </Card>
   </form>;
 }

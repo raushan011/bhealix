@@ -57,7 +57,7 @@ export default function ProfilePage() {
         <Field label="Current password"><PasswordInput name="currentPassword" required /></Field>
         <Field label="New password" hint="At least 8 characters"><PasswordInput name="newPassword" minLength={8} required /></Field>
         {result && <Notice tone={result.tone}>{result.text}</Notice>}
-        <Button type="submit" busy={busy} className="w-full">{busy ? "Saving…" : "Change password"}</Button>
+        <Button type="submit" busy={busy} className="w-full" busyLabel="Saving…">Change password</Button>
       </form>
     </Card>
   </div>;

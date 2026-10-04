@@ -4,6 +4,7 @@ import "./globals.css";
 import { ConnectionStatus } from "@/components/pwa/connection-status";
 import { ServiceWorker } from "@/components/pwa/service-worker";
 import { NavigationProgress } from "@/components/layout/navigation-progress";
+import { RequestProgress } from "@/components/layout/request-progress";
 import { THEME_SCRIPT } from "@/lib/theme";
 
 export const metadata: Metadata = {
@@ -72,6 +73,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         screens and the registration form — stay static.
       */}
       <Suspense fallback={null}><NavigationProgress /></Suspense>
+      <RequestProgress />
       <ConnectionStatus />
       <ServiceWorker />
       {children}

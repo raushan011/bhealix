@@ -66,7 +66,7 @@ export default function NewDoctor() {
           <Field label="Longitude" hint="Required for route planning"><input name="longitude" type="number" step="any" className="input" /></Field>
         </div>
         {error && <div className="mt-4"><Notice tone="error">{error}</Notice></div>}
-        <div className="mt-5 flex justify-end"><Button type="submit" busy={busy}>{busy ? "Saving…" : "Add doctor"}</Button></div>
+        <div className="mt-5 flex justify-end"><Button type="submit" busy={busy} busyLabel="Saving…">Add doctor</Button></div>
       </Card>
     </form>
   </div>;

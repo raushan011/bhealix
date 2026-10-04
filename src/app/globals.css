@@ -353,6 +353,28 @@
   button, a, input, select, textarea { font: inherit; color: inherit; }
   button, [role="button"], select, summary { cursor: pointer; }
   button:disabled { cursor: not-allowed; }
+  button[aria-busy="true"] { cursor: progress; }
+  /*
+   * Every tappable thing gives a little under the finger — including the plain
+   * `<button>`s and link-buttons that do not go through the kit's `Button`. The
+   * individual `scale` property rather than `transform`, so nothing that already
+   * positions itself with a transform is moved. `touch-action: manipulation`
+   * drops the browser's wait for a possible double-tap zoom, which on a phone is
+   * the pause that makes a tap feel ignored.
+   */
+  button, [role="button"], a, summary, label:has(> input[type="radio"]), label:has(> input[type="checkbox"]) {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:not(:disabled), [role="button"], summary, a.tap, a[class*="rounded"] {
+    transition-property: color, background-color, border-color, opacity, scale, box-shadow;
+    transition-duration: 150ms;
+  }
+  button:not(:disabled):active, [role="button"]:active, summary:active, a.tap:active {
+    scale: 0.97;
+  }
+  /* A whole row or card is wide, so it gives less — the same feel, not a lurch. */
+  a[class*="rounded"]:not(.tap):active { scale: 0.985; }
   h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.011em; }
   p { margin: 0; }
   :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 8px; }

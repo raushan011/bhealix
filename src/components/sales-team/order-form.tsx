@@ -10,6 +10,7 @@ import {
 } from "@/lib/sales-team/orders";
 import { DEFAULT_RULES, FREE_BAG_ID, quote, type CatalogueItem, type PricingRules } from "@/lib/sales-team/pricing";
 import { call, INDIAN_STATES, messageOf, type TeamOrderRow } from "./shared";
+import { usePincodeLookup } from "@/components/ui/use-pincode";
 
 type Executive = { _id: string; name: string; employeeId?: string };
 type Known = { customer: Record<string, string> | null; lastOrder: { name: string; placedAt: string } | null; orders: number };
@@ -123,6 +124,9 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
   const [check, setCheck] = useState<CheckResult | null>(null);
   const [checking, setChecking] = useState(false);
   const pinReady = /^\d{6}$/.test(customer.pinCode);
+  // City and state from the pin code, as Shiprocket's own form does.
+  const pinLookup = usePincodeLookup(customer.pinCode, place =>
+    setCustomer(current => current.pinCode === place.pinCode ? { ...current, city: place.city, state: place.state } : current));
   useEffect(() => {
     if (!pinReady) { setCheck(null); return; }
     const timer = setTimeout(async () => {
@@ -321,7 +325,7 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
           <Field label="Name"><input className="input" required value={customer.name} onChange={event => setCustomer({ ...customer, name: event.target.value })} /></Field>
           <Field label="Phone" hint="10-digit mobile — the courier rings it."><input className="input" required inputMode="tel" value={customer.phone} onChange={event => setCustomer({ ...customer, phone: event.target.value })} onBlur={event => lookUp(event.target.value)} /></Field>
           <Field label="Email"><input className="input" type="email" value={customer.email} onChange={event => setCustomer({ ...customer, email: event.target.value })} placeholder="Optional" /></Field>
-          <Field label="Pin code"><input className="input" required inputMode="numeric" maxLength={6} value={customer.pinCode} onChange={event => setCustomer({ ...customer, pinCode: event.target.value.replace(/\D/g, "") })} /></Field>
+          <Field label="Pin code" hint={pinLookup.looking ? "Finding the city and state…" : pinLookup.missing ? "City and state not found — type them below." : "City and state fill in by themselves."}><input className="input" required inputMode="numeric" maxLength={6} value={customer.pinCode} onChange={event => setCustomer({ ...customer, pinCode: event.target.value.replace(/\D/g, "") })} /></Field>
         </div>
         {known?.customer && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-[var(--info-line)] bg-[var(--info-bg)] px-3 py-2 text-sm text-[var(--info-ink)]">

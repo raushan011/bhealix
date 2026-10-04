@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useFormStatus } from "react-dom";
 import { Loader2 } from "lucide-react";
 import { buttonBase, buttonTone, type ButtonTone } from "./button-style";
 
@@ -25,9 +26,25 @@ import { buttonBase, buttonTone, type ButtonTone } from "./button-style";
  * A synchronous handler is left completely alone. Opening a dialog or stepping
  * a page number returns undefined, takes no time, and must not flicker.
  */
-export function Button({ tone = "primary", busy, className = "", children, onClick, ...rest }:
-  React.ButtonHTMLAttributes<HTMLButtonElement> & { tone?: ButtonTone; busy?: boolean }) {
+export function Button({ tone = "primary", busy, busyLabel, className = "", children, onClick, ...rest }:
+  React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    tone?: ButtonTone;
+    busy?: boolean;
+    /** What the button says while it is working — "Signing in…", "Saving…". */
+    busyLabel?: React.ReactNode;
+  }) {
   const [working, setWorking] = useState(false);
+
+  /*
+   * A submit button inside `<form action={…}>` is working for as long as the
+   * form's action is. This is the only reliable way to know it: React runs a
+   * form action as a transition, so a `setBusy(true)` written at the top of the
+   * action is held back until the action has *finished* — the button never
+   * showed "Signing in…" while signing in, which is exactly when it should.
+   * `useFormStatus` reports pending from the moment the form is submitted.
+   */
+  const form = useFormStatus();
+  const submitting = rest.type === "submit" && form.pending;
 
   /*
    * A handler that finishes by closing the dialog it lives in unmounts this
@@ -50,11 +67,11 @@ export function Button({ tone = "primary", busy, className = "", children, onCli
     result.finally(() => { if (alive.current) setWorking(false); });
   }, [onClick]);
 
-  const showBusy = busy || working;
+  const showBusy = busy || working || submitting;
 
   return <button {...rest} onClick={press} disabled={rest.disabled || showBusy}
     aria-busy={showBusy || undefined}
     className={`${buttonBase} ${buttonTone[tone]} ${className}`}>
-    {showBusy && <Loader2 size={16} className="animate-spin" />}{children}
+    {showBusy && <Loader2 size={16} className="shrink-0 animate-spin" />}{showBusy && busyLabel ? busyLabel : children}
   </button>;
 }
