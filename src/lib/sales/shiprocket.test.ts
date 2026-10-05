@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { IntegrationError } from "./http";
 import {
-  assignAwb, createOrder, documentUrl, matchKeysFor, pickupLocations, schedulePickup, searchShiprocketOrders, serviceability,
+  assignAwb, createOrder, documentUrl, matchKeysFor, pickupLocations, schedulePickup, readableRange, searchShiprocketOrders, serviceability,
   toCourierOptions, trackByAwb
 } from "./shiprocket";
 import type { AdhocOrderPayload } from "./fulfilment";
@@ -262,5 +262,54 @@ describe("searchShiprocketOrders", () => {
       status: "DELIVERED", awb: "1234567890123", courier: "Delhivery"
     });
     expect(result.items[1].awb).toBeUndefined();
+  });
+
+  /**
+   * Shiprocket's `search` matches an order id or AWB and nothing else — a name
+   * or a phone comes back empty. The orders in the range are then read and
+   * matched here, which is what finds "Meenakshi" or her number.
+   */
+  it("falls back to matching names and phone numbers itself when Shiprocket's search finds nothing", async () => {
+    const orders = { data: [
+      { id: 1, channel_order_id: "5842446048", customer_name: "Meenakshi", customer_phone: "xxxxxxxxxx", customer_phone_unmasked: "7021508594",
+        shipments: [{ awb: "80170245201", courier: "Blue Dart Air" }], status: "DELIVERED" },
+      { id: 2, channel_order_id: "6104441783", customer_name: "Naseem", customer_phone: "9000000000", shipments: [{ awb: "80170245175" }] }
+    ], meta: { pagination: { total: 2, total_pages: 1 } } };
+
+    for (const search of ["meenakshi", "7021508594", "+91 70215 08594"]) {
+      // Shiprocket's own search answers nothing for a name or phone; the plain list holds the order.
+      vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(
+        new URL(url).searchParams.get("search") ? { data: [], meta: { pagination: { total: 0, total_pages: 0 } } } : orders
+      ))));
+      const result = await searchShiprocketOrders(`token-${search}`, { search, from: "2026-09-01", to: "2026-10-05" });
+      expect(result.total).toBe(1);
+      expect(result.items[0]).toMatchObject({ channelOrderId: "5842446048", customerPhone: "7021508594", awb: "80170245201" });
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("says so when a phone search found nothing because Shiprocket hid the numbers", async () => {
+    const listed = { data: [{ id: 1, channel_order_id: "5842446048", customer_name: "Meenakshi", customer_phone: "xxxxxxxxxx" }], meta: { pagination: { total: 1, total_pages: 1 } } };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(
+      new URL(url).searchParams.get("search") ? { data: [], meta: { pagination: { total: 0, total_pages: 0 } } } : listed
+    ))));
+    const result = await searchShiprocketOrders("token-hidden", { search: "7021508594", from: "2026-09-01", to: "2026-10-05" });
+    expect(result.total).toBe(0);
+    expect(result.note).toMatch(/hides the phone number on 1 of 1/);
+  });
+});
+
+describe("readableRange", () => {
+  it("keeps a range inside the last year as it is", () => {
+    expect(readableRange("2026-09-01", "2026-10-05", "2026-10-05", "2025-10-10")).toEqual({ from: "2026-09-01", to: "2026-10-05", narrowed: false });
+  });
+  it("starts an older range at the earliest day Shiprocket answers, and says so", () => {
+    expect(readableRange("2024-01-01", "2026-10-05", "2026-10-05", "2025-10-10")).toEqual({ from: "2025-10-10", to: "2026-10-05", narrowed: true });
+  });
+  it("gives up on a range wholly before that", () => {
+    expect(readableRange("2024-01-01", "2024-12-31", "2026-10-05", "2025-10-10")).toBeNull();
+  });
+  it("reads the last year when no dates are given", () => {
+    expect(readableRange(undefined, undefined, "2026-10-05", "2025-10-10")).toEqual({ from: "2025-10-10", to: "2026-10-05", narrowed: false });
   });
 });

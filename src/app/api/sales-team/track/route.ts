@@ -5,12 +5,14 @@ import { badRequest, fail, ok } from "@/lib/api";
 import { IntegrationError } from "@/lib/sales/http";
 import { like } from "@/lib/sales/leads";
 import { loadCredentials, shiprocketToken } from "@/lib/sales/settings";
-import { searchShiprocketOrders, type ShiprocketListedOrder } from "@/lib/sales/shiprocket";
+import { searchShiprocketOrders, type ShiprocketSearchResult } from "@/lib/sales/shiprocket";
 import { isExecutive, orderScope } from "@/lib/sales-team/access";
 import { dayRange } from "@/lib/time";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/** A name search reads up to a year of Shiprocket orders on its first run; after that it is remembered. */
+export const maxDuration = 60;
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const CRM_FIELDS = "name ref placedAt executiveName customer.name customer.phone customer.city customer.pinCode totals.paid paymentMode "
@@ -67,7 +69,7 @@ export async function GET(request: Request) {
 
     // ---------------------------------------------------------- Shiprocket
     const executive = isExecutive(auth.session);
-    let shiprocket: { items: ShiprocketListedOrder[]; total: number; pages: number } | null = null;
+    let shiprocket: ShiprocketSearchResult | null = null;
     let refusal: string | undefined;
 
     if (executive && q.length < 3) {
@@ -99,7 +101,7 @@ export async function GET(request: Request) {
 
     return ok({
       crm,
-      shiprocket: { items: shiprocketItems, total: shiprocket?.total ?? 0, pages: shiprocket?.pages ?? 0, page },
+      shiprocket: { items: shiprocketItems, total: shiprocket?.total ?? 0, pages: shiprocket?.pages ?? 0, page, note: shiprocket?.note },
       refusal,
       trackAwb: awbLike ? raw : undefined
     });

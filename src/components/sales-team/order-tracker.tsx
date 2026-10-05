@@ -17,7 +17,7 @@ type CrmRow = {
 type ShipRow = ShiprocketListedOrder & { crmId?: string };
 type Result = {
   crm: CrmRow[];
-  shiprocket: { items: ShipRow[]; total: number; pages: number; page: number };
+  shiprocket: { items: ShipRow[]; total: number; pages: number; page: number; note?: string };
   refusal?: string;
   trackAwb?: string;
 };
@@ -144,6 +144,7 @@ export function OrderTracker({ basePath }: { basePath: string }) {
       <h2 className="flex items-center gap-2 text-[15px] font-semibold"><PackageSearch size={16} />All Shiprocket orders {ship?.total ? <span className="text-xs font-normal text-[var(--muted)]">{ship.total.toLocaleString("en-IN")}</span> : null}</h2>
       <p className="text-xs text-[var(--muted)]">Every parcel on the Shiprocket account, including website orders from before this CRM.</p>
       {result.refusal && <Notice>{result.refusal}</Notice>}
+      {ship?.note && <Notice tone="warning">{ship.note}</Notice>}
       {ship?.items.length ? <div className="space-y-2">
         {ship.items.map(order => (
           <Card key={order.shiprocketOrderId || order.channelOrderId} className="p-3 sm:p-4">
@@ -170,7 +171,7 @@ export function OrderTracker({ basePath }: { basePath: string }) {
           <span className="text-xs text-[var(--muted)]">Page {page} of {ship.pages}</span>
           <Button tone="secondary" disabled={page >= ship.pages || loading} onClick={() => search(page + 1)}>Older</Button>
         </div>}
-      </div> : !result.refusal && <p className="text-sm text-[var(--muted)]">No Shiprocket order matches.</p>}
+      </div> : !result.refusal && !ship?.note && <p className="text-sm text-[var(--muted)]">No Shiprocket order matches.</p>}
     </section>}
   </div>;
 }

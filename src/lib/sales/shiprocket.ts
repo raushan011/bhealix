@@ -145,54 +145,152 @@ export type ShiprocketListedOrder = {
 };
 
 type ListedRow = ShiprocketOrder & {
-  customer_name?: string | null; customer_phone?: string | number | null; customer_city?: string | null;
-  customer_pincode?: string | number | null; created_at?: string | null; total?: string | number | null;
-  payment_method?: string | null;
+  customer_name?: string | null; customer_phone?: string | number | null; customer_phone_unmasked?: string | number | null;
+  customer_city?: string | null; customer_pincode?: string | number | null; created_at?: string | null;
+  total?: string | number | null; payment_method?: string | null;
 };
+type ListPage = { data?: ListedRow[]; meta?: { pagination?: { total?: number; total_pages?: number } } };
 
 const text = (value: unknown) => (value == null ? undefined : String(value).trim() || undefined);
+
+function toListed(row: ListedRow): ShiprocketListedOrder {
+  const shipment = shipmentsOf(row)[0];
+  const total = Number(row.total);
+  // The list masks a repeat customer's phone ("xxxxxxxxxx") and carries the real one beside it.
+  const phone = text(row.customer_phone_unmasked) ?? text(row.customer_phone);
+  return {
+    shiprocketOrderId: String(row.id ?? ""),
+    channelOrderId: String(row.channel_order_id ?? "").trim(),
+    customerName: text(row.customer_name),
+    customerPhone: phone && /\d/.test(phone) ? phone : undefined,
+    city: text(row.customer_city),
+    pinCode: text(row.customer_pincode),
+    createdAt: text(row.created_at),
+    total: Number.isFinite(total) ? total : undefined,
+    paymentMethod: text(row.payment_method),
+    status: text(row.status),
+    awb: text(shipment?.awb ?? row.awb_data?.awb),
+    courier: text(shipment?.courier_name ?? shipment?.courier ?? row.awb_data?.courier)
+  };
+}
+
+async function listPage(token: string, params: Record<string, string>): Promise<ListPage> {
+  const { data } = await httpJson<ListPage>({
+    service: "Shiprocket", url: `${BASE}/orders?${new URLSearchParams(params)}`, headers: { authorization: `Bearer ${token}` }
+  });
+  return data;
+}
+
+const DAY_MS = 86_400_000;
+/** `yyyy-mm-dd` in India, `days` before today. */
+const indianDay = (daysAgo = 0) =>
+  new Date(Date.now() - daysAgo * DAY_MS).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+
+/**
+ * How far back Shiprocket lets its order list be read by date. Checked against
+ * the live account: a `from` more than about a year ago is refused — with a
+ * misleading "failed to parse from date" — whatever the format. Older orders are
+ * still found by order id or AWB, which needs no dates.
+ */
+export const LOOKBACK_DAYS = 360;
+/** A ceiling on the scan: 40 pages of 100 is four thousand orders. */
+const SCAN_PAGES = 40;
+/** Shiprocket takes about eight seconds a page; five at once take no longer than one. */
+const PARALLEL_PAGES = 5;
+
+/** The range narrowed to what Shiprocket will answer, or null when it lies wholly before that. */
+export function readableRange(from: string | undefined, to: string | undefined, today = indianDay(0), earliest = indianDay(LOOKBACK_DAYS)) {
+  const end = to && to < today ? to : today;
+  const start = from && from > earliest ? from : earliest;
+  return start <= end ? { from: start, to: end, narrowed: Boolean(from && from < earliest) } : null;
+}
+
+const digitsOf = (value: string) => value.replace(/\D/g, "");
+/** A search made only of a phone number's characters, long enough to be one. */
+export const isPhoneSearch = (search: string) => /^[+\d\s()-]+$/.test(search) && digitsOf(search).length >= 6;
+
+/** Whether an order is the one being asked about, by name, phone, order number or AWB. */
+export function matchesOrder(order: ShiprocketListedOrder, search: string): boolean {
+  const phone = digitsOf(String(order.customerPhone ?? ""));
+  if (isPhoneSearch(search) && phone && phone.includes(digitsOf(search).slice(-10))) return true;
+  const words = search.toLowerCase().split(/\s+/).filter(Boolean);
+  const haystack = [order.customerName, order.channelOrderId, order.shiprocketOrderId, order.awb].filter(Boolean).join(" ").toLowerCase();
+  return words.length > 0 && words.every(word => haystack.includes(word));
+}
+
+export type ShiprocketSearchResult = {
+  items: ShiprocketListedOrder[];
+  total: number;
+  pages: number;
+  /** Something the person searching should know about what could not be searched. */
+  note?: string;
+};
+
+/** Every order in the range, read in parallel and remembered for ten minutes. */
+function scanOrders(token: string, from: string, to: string): Promise<ShiprocketListedOrder[]> {
+  return remember(`scan:${token.slice(-16)}:${from}:${to}`, 10 * 60_000, async () => {
+    const page = (at: number) => listPage(token, { from, to, per_page: "100", page: String(at) });
+    const first = await page(1);
+    const rows = (first.data ?? []).map(toListed);
+    const last = Math.min(SCAN_PAGES, Number(first.meta?.pagination?.total_pages ?? 1));
+    for (let at = 2; at <= last; at += PARALLEL_PAGES) {
+      const batch = await Promise.all(Array.from({ length: Math.min(PARALLEL_PAGES, last - at + 1) }, (_, index) => page(at + index)));
+      for (const data of batch) rows.push(...(data.data ?? []).map(toListed));
+    }
+    return rows;
+  });
+}
 
 /**
  * Every order the Shiprocket account holds, searched — including the ones from
  * before this CRM booked anything, which came across from the shop's channel and
  * exist nowhere else.
  *
- * `search` is Shiprocket's own free-text search over its order list (order id,
- * AWB, the customer's name and phone); `from`/`to` bound it by order date. One
- * page at a time, newest first, because the account holds years of orders.
+ * Shiprocket's own `search` parameter finds an order by its **order id or AWB
+ * only** — a customer's name or phone number quietly returns nothing (checked
+ * against the live account). So a search is put to Shiprocket first, and when
+ * that finds nothing every order in the range — the last year when no dates are
+ * given — is read and matched here on the name and phone as well.
+ *
+ * Shiprocket masks the phone number (`xxxxxxxxxx`) on many orders it returns
+ * through the API, though its own panel shows it. A phone search can only find
+ * what Shiprocket shares; when it found nothing and numbers were hidden, the
+ * result says so rather than implying there is no such order.
  */
 export async function searchShiprocketOrders(token: string, query: {
   search?: string; from?: string; to?: string; page?: number; perPage?: number;
-}): Promise<{ items: ShiprocketListedOrder[]; total: number; pages: number }> {
-  const params = new URLSearchParams({ per_page: String(query.perPage ?? 20), page: String(query.page ?? 1) });
-  if (query.search) params.set("search", query.search);
-  if (query.from) params.set("from", query.from);
-  if (query.to) params.set("to", query.to);
+}): Promise<ShiprocketSearchResult> {
+  const perPage = query.perPage ?? 20;
+  const page = query.page ?? 1;
+  const range = readableRange(query.from, query.to);
+  const tooOld = "Shiprocket only allows the last 12 months to be searched by date. Older orders can be found by their order number or AWB with the dates cleared.";
+  const dates: Record<string, string> = query.from || query.to ? (range ? { from: range.from, to: range.to } : {}) : {};
 
-  const { data } = await httpJson<{ data?: ListedRow[]; meta?: { pagination?: { total?: number; total_pages?: number } } }>({
-    service: "Shiprocket", url: `${BASE}/orders?${params}`, headers: { authorization: `Bearer ${token}` }
-  });
+  const paged = (data: ListPage): ShiprocketSearchResult => {
+    const items = (data.data ?? []).map(toListed);
+    const pagination = data.meta?.pagination;
+    return { items, total: Number(pagination?.total ?? items.length), pages: Number(pagination?.total_pages ?? (items.length ? 1 : 0)) };
+  };
 
-  const items = (data.data ?? []).map(row => {
-    const shipment = shipmentsOf(row)[0];
-    const total = Number(row.total);
-    return {
-      shiprocketOrderId: String(row.id ?? ""),
-      channelOrderId: String(row.channel_order_id ?? "").trim(),
-      customerName: text(row.customer_name),
-      customerPhone: text(row.customer_phone),
-      city: text(row.customer_city),
-      pinCode: text(row.customer_pincode),
-      createdAt: text(row.created_at),
-      total: Number.isFinite(total) ? total : undefined,
-      paymentMethod: text(row.payment_method),
-      status: text(row.status),
-      awb: text(shipment?.awb ?? row.awb_data?.awb),
-      courier: text(shipment?.courier_name ?? shipment?.courier ?? row.awb_data?.courier)
-    };
-  });
-  const pagination = data.meta?.pagination;
-  return { items, total: Number(pagination?.total ?? items.length), pages: Number(pagination?.total_pages ?? 1) };
+  const search = query.search?.trim();
+  if (!search) {
+    if ((query.from || query.to) && !range) return { items: [], total: 0, pages: 0, note: tooOld };
+    const listed = paged(await listPage(token, { ...dates, per_page: String(perPage), page: String(page) }));
+    return range?.narrowed ? { ...listed, note: tooOld } : listed;
+  }
+
+  // An order id or AWB is found by Shiprocket itself, at any age, in a fraction of a second.
+  const direct = paged(await listPage(token, { ...dates, search, per_page: String(perPage), page: String(page) }));
+  if (direct.items.length) return direct;
+  if (!range) return { items: [], total: 0, pages: 0, note: tooOld };
+
+  const all = await scanOrders(token, range.from, range.to);
+  const found = all.filter(order => matchesOrder(order, search));
+  const hidden = all.filter(order => !order.customerPhone).length;
+  const note = !found.length && isPhoneSearch(search) && hidden
+    ? `Shiprocket hides the phone number on ${hidden.toLocaleString("en-IN")} of ${all.length.toLocaleString("en-IN")} orders in this range, so those cannot be found by phone. Search by the customer's name, the order number or the AWB instead.`
+    : range.narrowed ? tooOld : undefined;
+  return { items: found.slice((page - 1) * perPage, page * perPage), total: found.length, pages: Math.ceil(found.length / perPage), note };
 }
 
 /** One order, for the refresh button beside it. */
