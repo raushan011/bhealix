@@ -128,6 +128,73 @@ export async function fetchShipments(token: string, from: string, to: string, ma
   return updates;
 }
 
+/** One order as Shiprocket lists it, for the order tracker. */
+export type ShiprocketListedOrder = {
+  shiprocketOrderId: string;
+  channelOrderId: string;
+  customerName?: string;
+  customerPhone?: string;
+  city?: string;
+  pinCode?: string;
+  createdAt?: string;
+  total?: number;
+  paymentMethod?: string;
+  status?: string;
+  awb?: string;
+  courier?: string;
+};
+
+type ListedRow = ShiprocketOrder & {
+  customer_name?: string | null; customer_phone?: string | number | null; customer_city?: string | null;
+  customer_pincode?: string | number | null; created_at?: string | null; total?: string | number | null;
+  payment_method?: string | null;
+};
+
+const text = (value: unknown) => (value == null ? undefined : String(value).trim() || undefined);
+
+/**
+ * Every order the Shiprocket account holds, searched — including the ones from
+ * before this CRM booked anything, which came across from the shop's channel and
+ * exist nowhere else.
+ *
+ * `search` is Shiprocket's own free-text search over its order list (order id,
+ * AWB, the customer's name and phone); `from`/`to` bound it by order date. One
+ * page at a time, newest first, because the account holds years of orders.
+ */
+export async function searchShiprocketOrders(token: string, query: {
+  search?: string; from?: string; to?: string; page?: number; perPage?: number;
+}): Promise<{ items: ShiprocketListedOrder[]; total: number; pages: number }> {
+  const params = new URLSearchParams({ per_page: String(query.perPage ?? 20), page: String(query.page ?? 1) });
+  if (query.search) params.set("search", query.search);
+  if (query.from) params.set("from", query.from);
+  if (query.to) params.set("to", query.to);
+
+  const { data } = await httpJson<{ data?: ListedRow[]; meta?: { pagination?: { total?: number; total_pages?: number } } }>({
+    service: "Shiprocket", url: `${BASE}/orders?${params}`, headers: { authorization: `Bearer ${token}` }
+  });
+
+  const items = (data.data ?? []).map(row => {
+    const shipment = shipmentsOf(row)[0];
+    const total = Number(row.total);
+    return {
+      shiprocketOrderId: String(row.id ?? ""),
+      channelOrderId: String(row.channel_order_id ?? "").trim(),
+      customerName: text(row.customer_name),
+      customerPhone: text(row.customer_phone),
+      city: text(row.customer_city),
+      pinCode: text(row.customer_pincode),
+      createdAt: text(row.created_at),
+      total: Number.isFinite(total) ? total : undefined,
+      paymentMethod: text(row.payment_method),
+      status: text(row.status),
+      awb: text(shipment?.awb ?? row.awb_data?.awb),
+      courier: text(shipment?.courier_name ?? shipment?.courier ?? row.awb_data?.courier)
+    };
+  });
+  const pagination = data.meta?.pagination;
+  return { items, total: Number(pagination?.total ?? items.length), pages: Number(pagination?.total_pages ?? 1) };
+}
+
 /** One order, for the refresh button beside it. */
 export async function fetchShipmentFor(token: string, channelOrderId: string): Promise<ShipmentUpdate | null> {
   const url = `${BASE}/orders?${new URLSearchParams({ filter_by: "channel_order_id", filter: channelOrderId, per_page: "10" })}`;

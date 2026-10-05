@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { IntegrationError } from "./http";
 import {
-  assignAwb, createOrder, documentUrl, matchKeysFor, pickupLocations, schedulePickup, serviceability, toCourierOptions,
-  trackByAwb
+  assignAwb, createOrder, documentUrl, matchKeysFor, pickupLocations, schedulePickup, searchShiprocketOrders, serviceability,
+  toCourierOptions, trackByAwb
 } from "./shiprocket";
 import type { AdhocOrderPayload } from "./fulfilment";
 
@@ -234,5 +234,33 @@ describe("matchKeysFor", () => {
   it("offers every form Shiprocket could have filed the order under", () => {
     expect(matchKeysFor({ name: "#1042", orderNumber: 1042, shopifyOrderId: "5001" }))
       .toEqual(["#1042", "1042", "5001"]);
+  });
+});
+
+describe("searchShiprocketOrders", () => {
+  it("sends the search and the dates, and reads each order into a row with its airway bill", async () => {
+    const calls = stubFetch({
+      data: [
+        { id: 77, channel_order_id: "#1042", customer_name: "Priya Sharma", customer_phone: 9876543210, customer_city: "Patna",
+          customer_pincode: 800001, created_at: "12 Mar 2026, 10:15 AM", total: "1499.00", payment_method: "cod", status: "DELIVERED",
+          shipments: [{ id: 5, awb: 1234567890123, courier: "Delhivery" }] },
+        { id: 78, channel_order_id: "1043", shipments: {}, status: "NEW" }
+      ],
+      meta: { pagination: { total: 41, total_pages: 3 } }
+    });
+
+    const result = await searchShiprocketOrders("token", { search: "priya", from: "2026-03-01", to: "2026-03-31", page: 2 });
+    const url = new URL(calls[0].url);
+    expect(url.pathname).toBe("/v1/external/orders");
+    expect(Object.fromEntries(url.searchParams)).toEqual({ per_page: "20", page: "2", search: "priya", from: "2026-03-01", to: "2026-03-31" });
+
+    expect(result.total).toBe(41);
+    expect(result.pages).toBe(3);
+    expect(result.items[0]).toEqual({
+      shiprocketOrderId: "77", channelOrderId: "#1042", customerName: "Priya Sharma", customerPhone: "9876543210",
+      city: "Patna", pinCode: "800001", createdAt: "12 Mar 2026, 10:15 AM", total: 1499, paymentMethod: "cod",
+      status: "DELIVERED", awb: "1234567890123", courier: "Delhivery"
+    });
+    expect(result.items[1].awb).toBeUndefined();
   });
 });

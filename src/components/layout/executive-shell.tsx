@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  BadgeIndianRupee, BarChart3, BellRing, CalendarOff, Home, LogOut, MoreHorizontal, PackagePlus, ShoppingBag,
+  BadgeIndianRupee, BarChart3, BellRing, CalendarOff, Home, LogOut, MoreHorizontal, PackagePlus, PackageSearch, ShoppingBag,
   UserRound, UserRoundSearch, Wallet, X
 } from "lucide-react";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
@@ -27,6 +27,7 @@ const NAV = [
   { href: "/executive/leads", label: "Leads", icon: UserRoundSearch, group: "Sell", tab: true },
   { href: "/executive/orders/new", label: "New order", icon: PackagePlus, group: "Sell", tab: true },
   { href: "/executive/orders", label: "Orders", icon: ShoppingBag, group: "Sell", tab: true },
+  { href: "/executive/track", label: "Track order", icon: PackageSearch, group: "Sell", tab: false },
   { href: "/executive/incentives", label: "Incentives", icon: BadgeIndianRupee, group: "Earnings", tab: false },
   { href: "/executive/performance", label: "My numbers", icon: BarChart3, group: "Earnings", tab: false },
   { href: "/executive/leave", label: "Leave", icon: CalendarOff, group: "Me", tab: false },
