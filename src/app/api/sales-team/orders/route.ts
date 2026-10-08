@@ -25,7 +25,7 @@ import type { ShopifyConfig } from "@/lib/sales/shopify";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const LIST_FIELDS = "name ref channel shopifyOrderId placedAt executive executiveName lead customer.name customer.phone customer.city customer.pinCode "
+const LIST_FIELDS = "name ref channel origin shopifyOrderId placedAt executive executiveName lead customer.name customer.phone customer.city customer.pinCode "
   + "totals paymentMode advancePaid collectAmount cancelledAt shipment.awb shipment.courier shipment.shiprocketOrderId "
   + "shipment.status shipment.lastError shipment.pickupScheduledAt delivery.state incentive.amount incentive.status "
   + "incentive.needsReversal items.title items.quantity rtoRisk.level shipment.expectedDelivery";
@@ -50,6 +50,11 @@ export async function GET(request: Request) {
 
     const executive = params.get("executive");
     if (executive && OBJECT_ID.test(executive) && !isExecutive(auth.session)) and.push({ executive: new Types.ObjectId(executive) });
+    if (executive === "none" && !isExecutive(auth.session)) and.push({ executive: null });
+    // Placed through this CRM, or brought in from the shop or the courier account.
+    const source = params.get("source");
+    if (source === "CRM") and.push({ origin: { $nin: ["Shopify", "Shiprocket"] } });
+    if (source === "Shopify" || source === "Shiprocket") and.push({ origin: source });
     const mode = params.get("mode");
     if (mode && (TEAM_PAYMENT_MODES as readonly string[]).includes(mode)) and.push({ paymentMode: mode });
     const delivery = params.get("delivery");

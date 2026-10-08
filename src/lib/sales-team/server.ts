@@ -89,6 +89,7 @@ export async function nextTeamOrderNo(): Promise<string> {
 // --------------------------------------------------------------- incentives
 
 type IncentiveDoc = {
+  origin?: string | null;
   totals?: { paid?: number };
   cancelledAt?: Date | null;
   delivery?: { reported?: string; override?: string | null; state?: string; at?: Date };
@@ -125,7 +126,8 @@ export function recalculateIncentive(order: IncentiveDoc) {
   // A paid incentive keeps the figure it was paid at, whatever the order says now.
   if (result.status !== "Paid") order.set("incentive.amount", result.amount);
   order.set("incentive.status", result.status);
-  order.set("incentive.reason", result.reason);
+  order.set("incentive.reason", order.origin && order.origin !== "CRM" && result.status === "Not eligible"
+    ? "Imported from the shop — not placed as an executive's sale." : result.reason);
   order.set("incentive.needsReversal", result.needsReversal);
   order.set("incentive.computedAt", new Date());
 }
@@ -262,8 +264,10 @@ export async function syncTeamOrder(
     if (own?.awb) {
       update = await withCourierScan(token, own);
     } else {
-      const rows = await (listing ? listing() : listingSince(token, new Date(order.placedAt))).catch(() => []);
-      const copy = await replacementFor(order, rows);
+      // Only an executive's order is ever re-made by the office; an imported shop order is its own parcel.
+      const crmOrder = !order.origin || order.origin === "CRM";
+      const rows = crmOrder ? await (listing ? listing() : listingSince(token, new Date(order.placedAt))).catch(() => []) : [];
+      const copy = crmOrder ? await replacementFor(order, rows) : null;
       if (copy) {
         order.set("shipment.channelOrderId", copy.channelOrderId);
         const full = await fetchShipmentsFor(token, copy.channelOrderId).catch(() => null);
@@ -431,7 +435,8 @@ export type ExecutiveSummary = {
  */
 export async function executiveSummaries(match: Record<string, unknown>, onlyExecutive?: string): Promise<ExecutiveSummary[]> {
   const rows = await SalesTeamOrder.aggregate([
-    { $match: match },
+    // An executive's figures are their own sales: an imported shop order counts for nobody, even once handed to them.
+    { $match: { $and: [match, { executive: { $ne: null }, origin: { $nin: ["Shopify", "Shiprocket"] } }] } },
     {
       $group: {
         _id: "$executive",

@@ -5,6 +5,7 @@ import { loadCredentials, rulesOf } from "@/lib/sales/settings";
 import { codesOn, type ShopifyOrder } from "@/lib/sales/shopify";
 import { couponIndex, saveShopifyOrder } from "@/lib/sales/sync";
 import { recordShopOrders } from "@/lib/sales/shop-orders";
+import { importShopifyBatch } from "@/lib/sales-team/shop-import-run";
 import { verifyWebhook } from "@/lib/sales/webhooks";
 
 /**
@@ -54,6 +55,9 @@ export async function POST(request: Request) {
     // Every order reaches the retargeting list, whoever brought it in — after
     // the attributed write, so the row can point at it.
     await recordShopOrders([order], byCode);
+    // And into the Sales CRM's order book, the moment it is placed or changed. Never allowed to fail the
+    // affiliate write above: the nightly import picks up anything this misses.
+    await importShopifyBatch([order]).catch(error => console.error("sales team import", error));
 
     return Response.json({ ok: true, attributed: Boolean(match), topic, outcome });
   } catch (error) {

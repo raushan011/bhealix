@@ -130,6 +130,9 @@ export type ShopifyOrder = {
    * delivery fact available for an order Shiprocket was never asked about.
    */
   fulfillments?: ShopifyFulfillment[];
+  /** Comma-separated, as Shopify sends them — the sales team's orders carry "Sales team" and `exec-<employee ID>`. */
+  tags?: string | null;
+  note_attributes?: { name?: string; value?: string }[] | null;
 };
 
 export type ShopifyFulfillment = {

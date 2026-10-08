@@ -49,13 +49,16 @@ const PROCESS_FILTERS = [
  * just the page on screen. With `autoRefresh` (the executive's own list), opening
  * it asks Shiprocket what has shipped or moved since, and shows it. With
  * `mayAssign` (an administrator), orders can be ticked and moved in a batch to
- * the executive whose sale they really were.
+ * the executive whose sale they really were. With `autoImport` (the desk), opening
+ * it brings in every new shop and courier order first.
  */
-export function OrderTable({ basePath, showExecutive, autoRefresh = false, mayAssign = false }: { basePath: string; showExecutive: boolean; autoRefresh?: boolean; mayAssign?: boolean }) {
+export function OrderTable({ basePath, showExecutive, autoRefresh = false, mayAssign = false, autoImport = false }: {
+  basePath: string; showExecutive: boolean; autoRefresh?: boolean; mayAssign?: boolean; autoImport?: boolean;
+}) {
   const params = useSearchParams();
   const [filters, setFilters] = useState({
     q: "", status: params.get("status") ?? "", mode: params.get("mode") ?? "", delivery: params.get("delivery") ?? "",
-    incentive: params.get("incentive") ?? "", executive: params.get("executive") ?? "", due: params.get("due") ?? "", from: "", to: ""
+    incentive: params.get("incentive") ?? "", executive: params.get("executive") ?? "", due: params.get("due") ?? "", source: params.get("source") ?? "", from: "", to: ""
   });
   const [page, setPage] = useState(1);
   const [data, setData] = useState<Page | null>(null);
@@ -94,6 +97,13 @@ export function OrderTable({ basePath, showExecutive, autoRefresh = false, mayAs
       .then(result => { if (result.updated) setSynced(count => count + 1); })
       .catch(() => undefined);
   }, [autoRefresh]);
+  // The desk's list: bring in shop and courier orders placed since the last pass, then show them.
+  useEffect(() => {
+    if (!autoImport) return;
+    call<{ added: number }>("/api/sales-team/import?auto=1", { method: "POST" })
+      .then(result => { if (result.added) setSynced(count => count + 1); })
+      .catch(() => undefined);
+  }, [autoImport]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (synced) load(); }, [synced]);
 
@@ -123,6 +133,7 @@ export function OrderTable({ basePath, showExecutive, autoRefresh = false, mayAs
       {showExecutive && (
         <select className="select" value={filters.executive} onChange={event => set("executive", event.target.value)} aria-label="Executive">
           <option value="">Every executive</option>
+          <option value="none">Unassigned</option>
           {executives.map(person => <option key={person._id} value={person._id}>{person.name}</option>)}
         </select>
       )}
@@ -137,6 +148,14 @@ export function OrderTable({ basePath, showExecutive, autoRefresh = false, mayAs
         <option value="">Any delivery state</option>
         {DELIVERY_STATES.map(state => <option key={state} value={state}>{state}</option>)}
       </select>
+      {showExecutive && (
+        <select className="select" value={filters.source} onChange={event => set("source", event.target.value)} aria-label="Source">
+          <option value="">Every source</option>
+          <option value="CRM">Placed in the CRM</option>
+          <option value="Shopify">From the shop (Shopify)</option>
+          <option value="Shiprocket">Shiprocket only</option>
+        </select>
+      )}
       <select className="select" value={filters.due} onChange={event => set("due", event.target.value)} aria-label="Delivery day">
         {DUE_FILTERS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
@@ -195,7 +214,8 @@ export function OrderTable({ basePath, showExecutive, autoRefresh = false, mayAs
                   {!order.cancelledAt && !order.shipment?.awb && <Badge tone={order.shipment?.lastError ? "danger" : "warn"}>{order.shipment?.lastError ? "Booking failed" : showExecutive ? "Not booked" : "Not shipped yet"}</Badge>}
                   {arrivalOf(order) && <Badge tone="info">{arrivalOf(order)}</Badge>}
                   <Badge>{PAYMENT_MODE_LABEL[order.paymentMode]}</Badge>
-                  {order.channel === "Shopify" && <Badge tone="info">Shopify</Badge>}
+                  {order.origin === "Shopify" ? <Badge>From shop</Badge> : order.origin === "Shiprocket" ? <Badge>Shiprocket</Badge> : order.channel === "Shopify" && <Badge tone="info">Shopify</Badge>}
+                  {showExecutive && !order.executive && <Badge tone="warn">Unassigned</Badge>}
                   {order.rtoRisk?.level && order.rtoRisk.level !== "Low" && !order.cancelledAt && <Badge tone={riskTone(order.rtoRisk.level)}>{order.rtoRisk.level} risk</Badge>}
                   {order.incentive.needsReversal && <Badge tone="danger">Needs recovery</Badge>}
                 </div>

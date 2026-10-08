@@ -20,6 +20,8 @@ export type TeamOrderRow = {
   name: string;
   ref?: string;
   channel?: "Shopify" | "Direct";
+  /** Placed through this CRM, or imported from the shop or the courier account. */
+  origin?: "CRM" | "Shopify" | "Shiprocket";
   shopifyOrderId?: string;
   placedAt: string;
   executive: string | { _id: string; name: string; employeeId?: string; phone?: string };
@@ -55,7 +57,7 @@ export type TeamOrderRow = {
 };
 
 export const executiveNameOf = (order: Pick<TeamOrderRow, "executive" | "executiveName">) =>
-  typeof order.executive === "object" && order.executive ? order.executive.name : order.executiveName ?? "—";
+  typeof order.executive === "object" && order.executive ? order.executive.name : order.executiveName ?? (order.executive ? "—" : "Unassigned");
 
 /** One call to a sales-team route: the `data` on success, a sentence thrown on failure. */
 export async function call<T>(url: string, init?: { method?: string; body?: unknown }): Promise<T> {

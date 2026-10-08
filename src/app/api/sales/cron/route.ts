@@ -5,6 +5,7 @@ import { badRequest, fail, ok } from "@/lib/api";
 import { IntegrationError } from "@/lib/sales/http";
 import { recalculateAll, recordedSync, syncAll } from "@/lib/sales/sync";
 import { syncTeamShipments, syncTeamShopify } from "@/lib/sales-team/server";
+import { importShopOrders } from "@/lib/sales-team/shop-import-run";
 
 /**
  * The nightly pass: pull what is new, then re-price everything not yet paid.
@@ -40,8 +41,10 @@ export async function GET(request: Request) {
      * delivery into an incentive owed by morning. Run on its own and never
      * allowed to fail the affiliate pass: they are separate businesses.
      */
+    // Every shop and courier order since 1 September into the Sales CRM first, so tonight's status pass covers them too.
+    const teamImport = await importShopOrders().catch(error => ({ errors: [error instanceof Error ? error.message : "Import failed"] }));
     const teamShop = await syncTeamShopify().catch(() => null);
-    const team = { ...(await syncTeamShipments().catch(error => ({ error: error instanceof Error ? error.message : "Team sync failed" }))), shopify: teamShop };
+    const team = { ...(await syncTeamShipments().catch(error => ({ error: error instanceof Error ? error.message : "Team sync failed" }))), shopify: teamShop, imported: teamImport };
 
     try {
       const report = await recordedSync(syncAll, { trigger: scheduled ? "Scheduled" : "Manual", target: "all" });

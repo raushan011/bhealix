@@ -39,12 +39,15 @@ export async function GET(_: Request, { params }: Params) {
       .populate("cancelledBy", "name")
       .populate("incentive.payment.paidBy", "name")
       .lean() as Record<string, unknown> & {
-        executive?: { _id: unknown } | null; cancelledAt?: Date; incentive?: { status?: string }; shopifyOrderId?: string; delivery?: { state?: string };
+        executive?: { _id: unknown } | null; origin?: string; cancelledAt?: Date; incentive?: { status?: string }; shopifyOrderId?: string; delivery?: { state?: string };
         shipment?: { shiprocketOrderId?: string; awb?: string; pickupScheduledAt?: Date };
       } | null;
     if (!order) return badRequest("That order could not be found", 404);
 
-    const acts = mayActOn(auth.session, order.executive?._id);
+    // An order imported from the shop is the customer's own order there: only the desk may change or cancel it.
+    const imported = order.origin === "Shopify" || order.origin === "Shiprocket";
+    const owns = mayActOn(auth.session, order.executive?._id);
+    const acts = owns && !(imported && isExecutive(auth.session));
     const live = !order.cancelledAt;
     const atCourier = Boolean(order.shipment?.shiprocketOrderId);
     const inShop = Boolean(order.shopifyOrderId);
@@ -68,7 +71,8 @@ export async function GET(_: Request, { params }: Params) {
         reassign: can.manageSalesTeam(auth.session.role) && order.incentive?.status !== "Paid",
         pay: can.paySalesIncentive(auth.session.role),
         // A delivery instruction (reattempt, reschedule, return) — for a parcel that is shipped and not yet settled.
-        ndr: acts && live && Boolean(order.shipment?.awb) && !["Delivered", "RTO", "Returned", "Lost", "Cancelled"].includes(String(order.delivery?.state ?? ""))
+        // The executive ringing the customer can still pass on a new delivery day, imported order or not.
+        ndr: owns && live && Boolean(order.shipment?.awb) && !["Delivered", "RTO", "Returned", "Lost", "Cancelled"].includes(String(order.delivery?.state ?? ""))
       }
     });
   } catch (error) {
@@ -105,6 +109,9 @@ export async function PATCH(request: Request, { params }: Params) {
 
     if (input.action === "edit" || input.action === "cancel") {
       if (!mayActOn(auth.session, order.executive)) return badRequest("You do not have access to this action", 403);
+      if ((order.origin === "Shopify" || order.origin === "Shiprocket") && isExecutive(auth.session)) {
+        return badRequest("This order came in from the shop. Only the office can change or cancel it.", 403);
+      }
       if (order.cancelledAt) return badRequest("This order has already been cancelled.");
       if (inShop && input.action === "edit") {
         return badRequest(`This order is in Shopify as ${order.name}. Cancel it and place it again, or change it in Shopify.`);

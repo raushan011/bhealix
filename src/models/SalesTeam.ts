@@ -63,8 +63,18 @@ const SalesTeamOrderSchema = new Schema({
   orderNumber: Number,
   placedAt: { type: Date, required: true, default: Date.now, index: true },
 
-  /** Whose sale this is. Their incentive, their statement. */
-  executive: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+  /**
+   * Whose sale this is. Their incentive, their statement. Empty only on an
+   * order imported from the shop that no executive has been given yet.
+   */
+  executive: { type: Schema.Types.ObjectId, ref: "User", index: true },
+  /**
+   * Where the record came from: placed through this CRM, or imported — every
+   * shop order (Shopify) and every order on the courier account alone
+   * (Shiprocket) is brought in so the desk sees the whole business here. An
+   * imported order earns no incentive: it was not placed as an executive's sale.
+   */
+  origin: { type: String, enum: ["CRM", "Shopify", "Shiprocket"], default: "CRM", index: true },
   /** Kept beside the reference so the order still says who sold it after an account is gone (§4.5). */
   executiveName: String,
   /** The lead it was converted from, when it was. */
@@ -316,7 +326,10 @@ const SalesTeamSettingsSchema = new Schema({
     courierName: String
   },
   lastShipmentSyncAt: Date,
-  lastShipmentSyncError: String
+  lastShipmentSyncError: String,
+  /** When shop and courier orders were last brought in (`lib/sales-team/shop-import.ts`). */
+  lastShopImportAt: Date,
+  lastShopImportError: String
 }, { timestamps: true });
 
 export const SalesTeamSettings = models.SalesTeamSettings ?? model("SalesTeamSettings", SalesTeamSettingsSchema);

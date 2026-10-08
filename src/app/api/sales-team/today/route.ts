@@ -49,7 +49,7 @@ export async function GET() {
         .select("name phone city type status followUpAt followUpNote lastContactedAt").sort({ followUpAt: 1 }).limit(100).lean(),
       SalesLead.countDocuments({ assignedTo: me, followUpAt: { $gt: today, $lte: shiftDay(today, 7) }, status: { $nin: ["Converted", "Not interested"] } }),
       SalesTeamOrder.aggregate([
-        { $match: { executive: me, placedAt: { $gte: monthStart } } },
+        { $match: { executive: me, placedAt: { $gte: monthStart }, origin: { $nin: ["Shopify", "Shiprocket"] } } },
         {
           $group: {
             _id: null,

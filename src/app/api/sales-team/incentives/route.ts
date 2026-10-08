@@ -32,7 +32,8 @@ export async function GET(request: Request) {
     await connectDb();
 
     const params = new URL(request.url).searchParams;
-    const and: Record<string, unknown>[] = [scope];
+    // Orders imported from the shop earn no incentive, so they have no place on the incentive board.
+    const and: Record<string, unknown>[] = [scope, { origin: { $nin: ["Shopify", "Shiprocket"] } }];
     const executive = params.get("executive");
     if (executive && OBJECT_ID.test(executive) && !isExecutive(auth.session)) and.push({ executive: new Types.ObjectId(executive) });
     const placed = dayRange(params.get("from"), params.get("to"));

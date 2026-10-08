@@ -9,8 +9,8 @@ import { OrderTable } from "@/components/sales-team/order-table";
 export default async function SalesTeamOrdersPage() {
   const session = await requireAdminPanel();
   return <div className="space-y-5">
-    <PageTitle title="Orders" subtitle="Placed by your sales executives and shipped through Shiprocket"
+    <PageTitle title="Orders" subtitle="Every order since 1 September — placed by your sales executives, from the shop, and on Shiprocket"
       actions={<><LinkButton tone="secondary" href="/admin/sales/track"><PackageSearch size={16} />Track order</LinkButton>{can.placeSalesOrder(session.role) && <LinkButton href="/admin/sales/orders/new"><PackagePlus size={16} />New order</LinkButton>}</>} />
-    <Suspense fallback={<Spinner />}><OrderTable basePath="/admin/sales/orders" showExecutive mayAssign={can.manageSalesTeam(session.role)} /></Suspense>
+    <Suspense fallback={<Spinner />}><OrderTable basePath="/admin/sales/orders" showExecutive mayAssign={can.manageSalesTeam(session.role)} autoImport /></Suspense>
   </div>;
 }
