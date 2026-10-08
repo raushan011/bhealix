@@ -6,7 +6,7 @@ import { IntegrationError } from "@/lib/sales/http";
 import { loadCredentials, shiprocketToken } from "@/lib/sales/settings";
 import { trackByAwb } from "@/lib/sales/shiprocket";
 import { orderScope } from "@/lib/sales-team/access";
-import { applyShipmentUpdate, findTeamShipment, recalculateIncentive } from "@/lib/sales-team/server";
+import { applyShipmentUpdate, recalculateIncentive, syncTeamOrder } from "@/lib/sales-team/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,7 +14,8 @@ export const dynamic = "force-dynamic";
 /**
  * Where one parcel is, scan by scan — asked because somebody is on the phone
  * about it. An order with no airway bill here is first looked up in Shiprocket
- * by its name, in case the office shipped it from Shiprocket's own panel.
+ * (`syncTeamOrder`) — under its own number, or as the copy the office re-made
+ * in the shop and shipped instead.
  *
  * What comes back is also written onto the order, through the same
  * `applyShipmentUpdate` and `recalculateIncentive` the nightly pass uses, so
@@ -38,23 +39,17 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
     let awb = String(order.shipment?.awb ?? "").trim();
     if (!awb) {
-      // Not booked from here — the office may have shipped it from Shiprocket's own panel.
-      let found;
+      // Not booked from here: found under its own number, or as the copy the office re-made and shipped.
+      let result;
       try {
-        found = order.cancelledAt ? null : await findTeamShipment(token, order);
+        result = await syncTeamOrder(token, order);
       } catch (error) {
         if (error instanceof IntegrationError) return badRequest(error.message, 502);
         throw error;
       }
-      if (found) {
-        applyShipmentUpdate(order, found);
-        recalculateIncentive(order);
-      } else {
-        order.set("shipment.checkedAt", new Date());
-      }
       await order.save();
-      awb = String(found?.awb ?? "").trim();
-      if (!awb) return ok({ tracking: null, found: Boolean(found), status: found?.status, delivery: order.delivery?.state, incentive: order.incentive?.status });
+      awb = String(order.shipment?.awb ?? "").trim();
+      if (!awb) return ok({ tracking: null, found: result.found, status: result.status, delivery: order.delivery?.state, incentive: order.incentive?.status });
     }
 
     let tracking;

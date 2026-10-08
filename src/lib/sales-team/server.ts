@@ -5,7 +5,11 @@ import { User } from "@/models/User";
 import { deliveryStateFrom } from "@/lib/sales/delivery";
 import type { DeliveryState } from "@/lib/sales/constants";
 import { loadCredentials, shiprocketToken, shopifyConfig } from "@/lib/sales/settings";
-import { fetchShipmentFor, fetchShipments, matchKey, matchKeysFor, type ShipmentUpdate } from "@/lib/sales/shiprocket";
+import {
+  fetchShipments, fetchShipmentsFor, LOOKBACK_DAYS, matchKey, matchKeysFor, scanOrders, trackByAwb,
+  type ShiprocketListedOrder, type ShipmentUpdate
+} from "@/lib/sales/shiprocket";
+import { findReplacement, type MatchableOrder } from "./shipment-match";
 import { IntegrationError } from "@/lib/sales/http";
 import { shiftDay, todayIso } from "@/lib/time";
 import { priceIncentive, rulesTable, teamOrderNo, type IncentiveRule, type TeamOrderChannel } from "./orders";
@@ -142,13 +146,22 @@ const isoOf = (date: Date) => date.toISOString().slice(0, 10);
 
 /** How far back an order never booked from here is still looked for in Shiprocket. */
 export const UNBOOKED_LOOKBACK_DAYS = 120;
+const DAY_MS = 86_400_000;
+
+type KeyedOrder = {
+  name?: string | null; ref?: string | null; orderNumber?: number | null; shopifyOrderId?: string | null;
+  shipment?: { channelOrderId?: string | null } | null;
+};
 
 /**
  * Every name a team order could be filed under in Shiprocket: the shop's order
  * name with and without its `#` (what Shiprocket's Shopify channel files it
- * under), the shop's id, and the CRM's own `BHX-SE-…` number.
+ * under), the shop's id, and the CRM's own `BHX-SE-…` number. An order already
+ * linked to a re-made copy (`shipment.channelOrderId`) is filed under that alone.
  */
-export function teamMatchKeys(order: { name?: string | null; ref?: string | null; orderNumber?: number | null; shopifyOrderId?: string | null }): string[] {
+export function teamMatchKeys(order: KeyedOrder): string[] {
+  const linked = String(order.shipment?.channelOrderId ?? "").trim();
+  if (linked) return [matchKey(linked)];
   const keys = matchKeysFor(order);
   const ref = String(order.ref ?? "").trim();
   if (ref && !keys.includes(matchKey(ref))) keys.push(matchKey(ref));
@@ -159,16 +172,118 @@ export function teamMatchKeys(order: { name?: string | null; ref?: string | null
 /**
  * Finds one team order in Shiprocket by the names it could be filed under —
  * for an order the office shipped from Shiprocket's own panel, which this CRM
- * never booked and so holds no Shiprocket id or airway bill for. Only an exact
- * match on one of those names is taken.
+ * never booked and so holds no airway bill for. A shipped match is preferred
+ * over one still sitting there as NEW.
  */
-export async function findTeamShipment(token: string, order: Parameters<typeof teamMatchKeys>[0]): Promise<ShipmentUpdate | null> {
-  const keys = teamMatchKeys(order);
-  for (const key of keys) {
-    const found = await fetchShipmentFor(token, key);
-    if (found && keys.includes(matchKey(found.channelOrderId))) return found;
+export async function findTeamShipment(token: string, order: KeyedOrder): Promise<ShipmentUpdate | null> {
+  let unshipped: ShipmentUpdate | null = null;
+  for (const key of teamMatchKeys(order)) {
+    const found = await fetchShipmentsFor(token, key);
+    if (found?.awb) return found;
+    unshipped ??= found;
+  }
+  return unshipped;
+}
+
+/** Shiprocket's order list from the day before `since` to today — what a re-made copy is looked for in. */
+export function listingSince(token: string, since: Date): Promise<ShiprocketListedOrder[]> {
+  const today = todayIso();
+  const from = isoOf(new Date(since.getTime() - DAY_MS));
+  return scanOrders(token, from < shiftDay(today, -LOOKBACK_DAYS) ? shiftDay(today, -LOOKBACK_DAYS) : from, today);
+}
+
+type SyncableOrder = KeyedOrder & MatchableOrder & {
+  _id: unknown;
+  cancelledAt?: Date | null;
+  shipment?: (ShipmentFields & { channelOrderId?: string | null }) | null;
+  delivery?: { reported?: string };
+  set: (path: string, value: unknown) => void;
+} & IncentiveDoc;
+
+/**
+ * The parcel the office shipped for an order whose own number shows nothing
+ * shipped — a copy re-made in the shop (#1806 for #1802), found by customer,
+ * amount and day (`findReplacement`). An airway bill already on another team
+ * order is never taken.
+ */
+async function replacementFor(order: SyncableOrder, listing: ShiprocketListedOrder[]): Promise<ShiprocketListedOrder | null> {
+  const claimed = new Set<string>();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const candidate = findReplacement(order, listing, claimed);
+    if (!candidate?.awb) return null;
+    const taken = await SalesTeamOrder.exists({ "shipment.awb": candidate.awb, _id: { $ne: order._id } });
+    if (!taken) return candidate;
+    claimed.add(candidate.awb);
   }
   return null;
+}
+
+/** The courier's own scan, for the status, the delivery day and — what the reminder needs — the expected day. */
+async function withCourierScan(token: string, update: ShipmentFields): Promise<ShipmentFields> {
+  if (!update.awb) return update;
+  const tracking = await trackByAwb(token, update.awb).catch(() => null);
+  if (!tracking) return update;
+  return {
+    ...update,
+    courier: tracking.courier || update.courier,
+    status: tracking.status || update.status,
+    statusCode: tracking.statusCode ?? update.statusCode,
+    deliveredAt: tracking.deliveredAt ?? update.deliveredAt,
+    expectedDelivery: tracking.expectedDelivery
+  };
+}
+
+export type OrderSyncResult = { found: boolean; shipped: boolean; changed: boolean; status?: string };
+
+/**
+ * Brings one team order up to date with Shiprocket, whichever way it was shipped:
+ *
+ * 1. with an airway bill — the courier's scan;
+ * 2. without one — Shiprocket's order under this order's own number, if shipped;
+ * 3. failing that — the copy the office re-made and shipped instead, which is
+ *    then linked to this order for good (`shipment.channelOrderId`).
+ *
+ * Writes onto the order and re-prices its incentive; the caller saves. Pass a
+ * `listing` to share one read of Shiprocket's order list across many orders.
+ */
+export async function syncTeamOrder(
+  token: string, order: SyncableOrder, listing?: () => Promise<ShiprocketListedOrder[]>
+): Promise<OrderSyncResult> {
+  const hadAwb = Boolean(order.shipment?.awb);
+  let update: ShipmentFields | null = null;
+  let found = false;
+
+  if (hadAwb) {
+    update = await withCourierScan(token, { awb: String(order.shipment!.awb) });
+    found = true;
+  } else if (!order.cancelledAt) {
+    const own = await findTeamShipment(token, order);
+    found = Boolean(own);
+    if (own?.awb) {
+      update = await withCourierScan(token, own);
+    } else {
+      const rows = await (listing ? listing() : listingSince(token, new Date(order.placedAt))).catch(() => []);
+      const copy = await replacementFor(order, rows);
+      if (copy) {
+        order.set("shipment.channelOrderId", copy.channelOrderId);
+        const full = await fetchShipmentsFor(token, copy.channelOrderId).catch(() => null);
+        update = await withCourierScan(token, full && full.awb === copy.awb ? full : {
+          shiprocketOrderId: copy.shiprocketOrderId, awb: copy.awb, courier: copy.courier, status: copy.status
+        });
+        found = true;
+      } else {
+        update = own;
+      }
+    }
+  }
+
+  if (!update) {
+    order.set("shipment.checkedAt", new Date());
+    return { found, shipped: false, changed: false };
+  }
+  const changed = applyShipmentUpdate(order, update);
+  recalculateIncentive(order);
+  return { found, shipped: !hadAwb && Boolean(update.awb), changed, status: update.status };
 }
 
 /**
@@ -182,20 +297,24 @@ export async function findTeamShipment(token: string, order: Parameters<typeof t
  *
  * Orders not booked from here are read too: the office ships executives'
  * orders from Shiprocket's own panel (or Shiprocket picks them up from the
- * shop), and the executive's screen must show the parcel all the same.
+ * shop), and the executive's screen must show the parcel all the same. Then,
+ * inside a time budget: copies re-made and shipped in place of an order, and a
+ * courier scan for each moving parcel, so the morning's "delivering today" and
+ * "tomorrow" lists are built on the courier's latest expected day.
  */
-export async function syncTeamShipments(): Promise<TeamSyncReport> {
+export async function syncTeamShipments(budgetMs = 25_000): Promise<TeamSyncReport> {
   const settings = await loadCredentials();
   const token = await shiprocketToken(settings);
   if (!token) {
     throw new IntegrationError("Shiprocket", "Shiprocket is not connected. Add the API user's email and password under Affiliate CRM → Settings.");
   }
 
+  const started = Date.now();
   const today = todayIso();
   const orders = await SalesTeamOrder.find({
     $or: [
       { "shipment.shiprocketOrderId": { $exists: true }, $or: [{ "delivery.state": { $in: OPEN_STATES } }, { "incentive.status": "Pending" }] },
-      { cancelledAt: null, "shipment.awb": { $in: [null, ""] }, placedAt: { $gte: new Date(Date.now() - UNBOOKED_LOOKBACK_DAYS * 86_400_000) } }
+      { cancelledAt: null, "shipment.awb": { $in: [null, ""] }, placedAt: { $gte: new Date(Date.now() - UNBOOKED_LOOKBACK_DAYS * DAY_MS) } }
     ]
   });
   const oldest = orders.reduce<Date | null>((min, order) => (order.placedAt && (!min || order.placedAt < min) ? order.placedAt : min), null);
@@ -213,15 +332,38 @@ export async function syncTeamShipments(): Promise<TeamSyncReport> {
     await SalesTeamSettings.updateOne({ key: "sales-team" }, { $set: { lastShipmentSyncError: error instanceof Error ? error.message : "Shiprocket did not answer" } });
     throw error;
   }
-  const byKey = new Map(updates.map(update => [matchKey(update.channelOrderId), update]));
+  // Under one name there may be a NEW order and a shipped one; the shipped one is the parcel.
+  const byKey = new Map<string, ShipmentUpdate>();
+  for (const update of updates) {
+    const key = matchKey(update.channelOrderId);
+    if (!byKey.get(key)?.awb || (update.awb && !/cancel/i.test(update.status ?? ""))) byKey.set(key, update);
+  }
 
   for (const order of orders) {
     const update = teamMatchKeys(order).map(key => byKey.get(key)).find(Boolean);
-    if (!update) { report.unmatched++; continue; }
+    // A parcel already booked is only ever updated by its own airway bill.
+    if (!update || (order.shipment?.awb && update.awb !== order.shipment.awb)) { report.unmatched++; continue; }
     report.matched++;
     if (applyShipmentUpdate(order, update)) report.updated++;
     recalculateIncentive(order);
     await order.save();
+  }
+
+  // Inside the budget, oldest-checked first: re-made copies, then courier scans for the expected day.
+  const inBudget = () => Date.now() - started < budgetMs;
+  const waiting = orders.filter(order => !order.cancelledAt && !order.shipment?.awb);
+  const moving = orders.filter(order => order.shipment?.awb && OPEN_STATES.includes(String(order.delivery?.state)));
+  const since = waiting.reduce<Date | null>((min, order) => (!min || order.placedAt < min ? order.placedAt : min), null);
+  let shared: Promise<ShiprocketListedOrder[]> | null = null;
+  const listing = () => (shared ??= since ? listingSince(token, since) : Promise.resolve([]));
+  for (const order of [...waiting, ...moving]) {
+    if (!inBudget()) break;
+    try {
+      if ((await syncTeamOrder(token, order, listing)).changed) report.updated++;
+      await order.save();
+    } catch {
+      // One order Shiprocket would not answer for is tried again on the next pass.
+    }
   }
 
   await SalesTeamSettings.updateOne({ key: "sales-team" }, { $set: { lastShipmentSyncAt: new Date() }, $unset: { lastShipmentSyncError: "" } });

@@ -8,7 +8,7 @@ import { badRequest, fail, ok, OBJECT_ID, pageParams } from "@/lib/api";
 import { record } from "@/lib/audit";
 import { like } from "@/lib/sales/leads";
 import { DELIVERY_STATES } from "@/lib/sales/constants";
-import { dayRange } from "@/lib/time";
+import { dayRange, shiftDay, todayIso } from "@/lib/time";
 import { isExecutive, orderScope } from "@/lib/sales-team/access";
 import {
   collectAmountOf, formatRupees, INCENTIVE_STATUSES, PAYMENT_MODE_LABEL, paymentProblem, ruleFor,
@@ -64,6 +64,16 @@ export async function GET(request: Request) {
       case "booked": and.push({ cancelledAt: null, "shipment.awb": { $nin: [null, ""] } }); break;
       case "failed": and.push({ cancelledAt: null, "shipment.lastError": { $nin: [null, ""] } }); break;
       case "cancelled": and.push({ cancelledAt: { $ne: null } }); break;
+    }
+
+    // Parcels to ring the customer about: arriving today (or out for delivery), or tomorrow.
+    const due = params.get("due");
+    if (due === "today" || due === "tomorrow") {
+      const day = due === "today" ? todayIso() : shiftDay(todayIso(), 1);
+      const open = { cancelledAt: null, "delivery.state": { $in: ["Awaiting", "In transit", "Undelivered"] } };
+      and.push(due === "today"
+        ? { ...open, $or: [{ "shipment.expectedDelivery": day }, { "shipment.status": /out[\s_-]*for[\s_-]*delivery/i }] }
+        : { ...open, "shipment.expectedDelivery": day });
     }
 
     const placed = dayRange(params.get("from"), params.get("to"));

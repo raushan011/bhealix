@@ -227,7 +227,7 @@ export type ShiprocketSearchResult = {
 };
 
 /** Every order in the range, read in parallel and remembered for ten minutes. */
-function scanOrders(token: string, from: string, to: string): Promise<ShiprocketListedOrder[]> {
+export function scanOrders(token: string, from: string, to: string): Promise<ShiprocketListedOrder[]> {
   return remember(`scan:${token.slice(-16)}:${from}:${to}`, 10 * 60_000, async () => {
     const page = (at: number) => listPage(token, { from, to, per_page: "100", page: String(at) });
     const first = await page(1);
@@ -304,6 +304,22 @@ export async function fetchShipmentFor(token: string, channelOrderId: string): P
     if (update) return update;
   }
   return null;
+}
+
+/**
+ * The same, preferring a shipped copy: one channel order id can be on several
+ * Shiprocket orders (one cancelled and one re-made, say), and the one with an
+ * airway bill is the parcel. Only exact matches on the id are kept.
+ */
+export async function fetchShipmentsFor(token: string, channelOrderId: string): Promise<ShipmentUpdate | null> {
+  const url = `${BASE}/orders?${new URLSearchParams({ filter_by: "channel_order_id", filter: channelOrderId, per_page: "20" })}`;
+  const { data } = await httpJson<{ data?: ShiprocketOrder[] }>({
+    service: "Shiprocket", url, headers: { authorization: `Bearer ${token}` }
+  });
+  const wanted = matchKey(channelOrderId).replace(/^#/, "");
+  const updates = (data.data ?? []).map(toUpdate)
+    .filter((update): update is ShipmentUpdate => Boolean(update) && matchKey(update!.channelOrderId).replace(/^#/, "") === wanted);
+  return updates.find(update => update.awb && !/cancel/i.test(update.status ?? "")) ?? updates.find(update => update.awb) ?? updates[0] ?? null;
 }
 
 // ------------------------------------------------------------------- booking

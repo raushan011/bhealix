@@ -9,13 +9,31 @@ import { DELIVERY_STATES } from "@/lib/sales/constants";
 import { deliveryTone } from "@/lib/sales/delivery";
 import { formatRupees, INCENTIVE_STATUSES, incentiveTone, PAYMENT_MODE_LABEL, TEAM_PAYMENT_MODES } from "@/lib/sales-team/orders";
 import { formatDate } from "@/lib/time";
-import { riskTone } from "@/lib/sales-team/risk";
+import { isOutForDelivery, riskTone } from "@/lib/sales-team/risk";
 import { call, executiveNameOf, messageOf, type TeamOrderRow } from "./shared";
 
 type Page = {
   items: TeamOrderRow[]; total: number; page: number; pages: number;
   summary: { orders: number; value: number; delivered: number; pending: number; payable: number; paid: number };
 };
+
+const DUE_FILTERS = [
+  { value: "", label: "Any delivery day" },
+  { value: "today", label: "Arriving today" },
+  { value: "tomorrow", label: "Arriving tomorrow" }
+];
+
+const indianDay = (offset = 0) => new Date(Date.now() + offset * 86_400_000).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+
+/** "Arriving today" / "tomorrow" on a moving parcel — the call to make before the courier knocks. */
+function arrivalOf(order: TeamOrderRow): string | null {
+  if (order.cancelledAt || !order.shipment?.awb || !["Awaiting", "In transit", "Undelivered"].includes(order.delivery.state)) return null;
+  if (isOutForDelivery(order.shipment.status)) return "Out for delivery";
+  const expected = String(order.shipment.expectedDelivery ?? "").slice(0, 10);
+  if (expected === indianDay(0)) return "Arriving today";
+  if (expected === indianDay(1)) return "Arriving tomorrow";
+  return null;
+}
 
 const PROCESS_FILTERS = [
   { value: "", label: "Any stage" },
@@ -35,7 +53,7 @@ export function OrderTable({ basePath, showExecutive, autoRefresh = false }: { b
   const params = useSearchParams();
   const [filters, setFilters] = useState({
     q: "", status: params.get("status") ?? "", mode: params.get("mode") ?? "", delivery: params.get("delivery") ?? "",
-    incentive: params.get("incentive") ?? "", executive: params.get("executive") ?? "", from: "", to: ""
+    incentive: params.get("incentive") ?? "", executive: params.get("executive") ?? "", due: params.get("due") ?? "", from: "", to: ""
   });
   const [page, setPage] = useState(1);
   const [data, setData] = useState<Page | null>(null);
@@ -96,6 +114,9 @@ export function OrderTable({ basePath, showExecutive, autoRefresh = false }: { b
         <option value="">Any delivery state</option>
         {DELIVERY_STATES.map(state => <option key={state} value={state}>{state}</option>)}
       </select>
+      <select className="select" value={filters.due} onChange={event => set("due", event.target.value)} aria-label="Delivery day">
+        {DUE_FILTERS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
       <select className="select" value={filters.incentive} onChange={event => set("incentive", event.target.value)} aria-label="Incentive">
         <option value="">Any incentive</option>
         {INCENTIVE_STATUSES.map(status => <option key={status} value={status}>{status}</option>)}
@@ -127,6 +148,7 @@ export function OrderTable({ basePath, showExecutive, autoRefresh = false }: { b
                   <span className="text-sm font-semibold">{order.name}</span>
                   {order.cancelledAt ? <Badge tone="danger">Cancelled</Badge> : <Badge tone={deliveryTone(order.delivery.state)}>{order.delivery.state}</Badge>}
                   {!order.cancelledAt && !order.shipment?.awb && <Badge tone={order.shipment?.lastError ? "danger" : "warn"}>{order.shipment?.lastError ? "Booking failed" : showExecutive ? "Not booked" : "Not shipped yet"}</Badge>}
+                  {arrivalOf(order) && <Badge tone="info">{arrivalOf(order)}</Badge>}
                   <Badge>{PAYMENT_MODE_LABEL[order.paymentMode]}</Badge>
                   {order.channel === "Shopify" && <Badge tone="info">Shopify</Badge>}
                   {order.rtoRisk?.level && order.rtoRisk.level !== "Low" && !order.cancelledAt && <Badge tone={riskTone(order.rtoRisk.level)}>{order.rtoRisk.level} risk</Badge>}

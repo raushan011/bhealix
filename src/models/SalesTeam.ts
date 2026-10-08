@@ -111,6 +111,12 @@ const SalesTeamOrderSchema = new Schema({
   /** Read back from Shiprocket, and written when the parcel is booked — as on `SalesOrder`. */
   shipment: {
     shiprocketOrderId: String,
+    /**
+     * The order id Shiprocket files the parcel under, when it is not this order's
+     * own name — the office re-made the order in the shop (#1806 for #1802) and
+     * shipped that one. Once set, the order is matched under this alone.
+     */
+    channelOrderId: String,
     shipmentId: String,
     awb: String,
     courier: String,

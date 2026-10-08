@@ -3,14 +3,15 @@ import { PATH_HEADER } from "@/lib/auth/path-header";
 import { encodeSecret, PARTNER_COOKIE, sessionCookieOptions, STAFF_COOKIE, verifySession, type SessionKind } from "@/lib/auth/token";
 
 /**
- * The two webhooks are public because Shopify and Meta have no session with
- * us. They are not unauthenticated: each route verifies an HMAC over the raw
- * body against its app secret and refuses anything that does not match.
+ * The webhooks are public because Shopify, Meta and Shiprocket have no session
+ * with us. They are not unauthenticated: Shopify's and Meta's routes verify an
+ * HMAC over the raw body against the app secret, and the courier route checks
+ * the token Shiprocket sends, refusing anything that does not match.
  * Leaving them behind the session gate would have every delivery answered
  * with a 401 until the sender gave up and removed the subscription — which is
  * exactly what both Shopify and Meta do.
  */
-const PUBLIC_API = ["/api/auth/login", "/api/auth/logout", "/api/sales/shopify/webhook", "/api/sales/whatsapp/webhook"];
+const PUBLIC_API = ["/api/auth/login", "/api/auth/logout", "/api/sales/shopify/webhook", "/api/sales/whatsapp/webhook", "/api/courier/updates"];
 
 /**
  * The affiliate portal's own front door, which by definition has to be
