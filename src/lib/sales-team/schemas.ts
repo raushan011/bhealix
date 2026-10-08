@@ -163,6 +163,12 @@ export const assignSchema = z.object({
   executive: z.string().regex(OBJECT_ID).nullable()
 });
 
+/** Orders moved, in a batch, to the executive whose sale they really were. */
+export const orderAssignSchema = z.object({
+  orderIds: z.array(z.string().regex(OBJECT_ID)).min(1, "Choose at least one order").max(500),
+  executive: z.string().regex(OBJECT_ID)
+});
+
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** The order form's live check: can a courier reach this, and how risky is it. */

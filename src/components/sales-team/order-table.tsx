@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ChevronLeft, ChevronRight, PackageSearch } from "lucide-react";
-import { Badge, Card, EmptyState, Notice, Spinner, Stat } from "@/components/ui/kit";
+import { ChevronLeft, ChevronRight, PackageSearch, UserRoundCog } from "lucide-react";
+import { Badge, Button, Card, EmptyState, Notice, Spinner, Stat } from "@/components/ui/kit";
 import { DELIVERY_STATES } from "@/lib/sales/constants";
 import { deliveryTone } from "@/lib/sales/delivery";
 import { formatRupees, INCENTIVE_STATUSES, incentiveTone, PAYMENT_MODE_LABEL, TEAM_PAYMENT_MODES } from "@/lib/sales-team/orders";
@@ -47,9 +47,11 @@ const PROCESS_FILTERS = [
  * The sales team's orders as a list — an executive's own, or everybody's with a
  * filter for whose. The figures above it cover everything the filter found, not
  * just the page on screen. With `autoRefresh` (the executive's own list), opening
- * it asks Shiprocket what has shipped or moved since, and shows it.
+ * it asks Shiprocket what has shipped or moved since, and shows it. With
+ * `mayAssign` (an administrator), orders can be ticked and moved in a batch to
+ * the executive whose sale they really were.
  */
-export function OrderTable({ basePath, showExecutive, autoRefresh = false }: { basePath: string; showExecutive: boolean; autoRefresh?: boolean }) {
+export function OrderTable({ basePath, showExecutive, autoRefresh = false, mayAssign = false }: { basePath: string; showExecutive: boolean; autoRefresh?: boolean; mayAssign?: boolean }) {
   const params = useSearchParams();
   const [filters, setFilters] = useState({
     q: "", status: params.get("status") ?? "", mode: params.get("mode") ?? "", delivery: params.get("delivery") ?? "",
@@ -60,10 +62,18 @@ export function OrderTable({ basePath, showExecutive, autoRefresh = false }: { b
   const [executives, setExecutives] = useState<Array<{ _id: string; name: string }>>([]);
   const [error, setError] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [target, setTarget] = useState("");
+  const [active, setActive] = useState<Array<{ _id: string; name: string }>>([]);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     if (showExecutive) call<{ items: Array<{ _id: string; name: string }> }>("/api/sales-team/executives?active=all").then(result => setExecutives(result.items)).catch(() => undefined);
   }, [showExecutive]);
+  useEffect(() => {
+    if (mayAssign) call<{ items: Array<{ _id: string; name: string }> }>("/api/sales-team/executives").then(result => setActive(result.items)).catch(() => undefined);
+  }, [mayAssign]);
 
   const load = useCallback(async () => {
     const query = new URLSearchParams({ page: String(page), limit: "25" });
@@ -87,7 +97,20 @@ export function OrderTable({ basePath, showExecutive, autoRefresh = false }: { b
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (synced) load(); }, [synced]);
 
-  const set = (key: keyof typeof filters, value: string) => { setPage(1); setFilters(current => ({ ...current, [key]: value })); };
+  const set = (key: keyof typeof filters, value: string) => { setPage(1); setSelected(new Set()); setFilters(current => ({ ...current, [key]: value })); };
+  const toggle = (id: string) => setSelected(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  // An order whose incentive is paid stays with whoever was paid for it.
+  const movable = (data?.items ?? []).filter(order => order.incentive.status !== "Paid");
+
+  async function assign() {
+    setBusy(true); setNotice(null);
+    try {
+      const result = await call<{ message: string }>("/api/sales-team/orders/assign", { body: { orderIds: [...selected], executive: target } });
+      setNotice({ tone: "success", text: result.message });
+      setSelected(new Set());
+      await load();
+    } catch (problem) { setNotice({ tone: "error", text: messageOf(problem) }); } finally { setBusy(false); }
+  }
 
   return <div className="space-y-4">
     {/* On a phone the search stays and the rest of the filters fold away behind one button. */}
@@ -126,6 +149,22 @@ export function OrderTable({ basePath, showExecutive, autoRefresh = false }: { b
     </Card>
 
     {error && <Notice tone="error">{error}</Notice>}
+    {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
+
+    {mayAssign && data && data.items.length > 0 && (
+      <Card className="flex flex-wrap items-center gap-3 p-4">
+        <span className="text-sm font-semibold">{selected.size} selected</span>
+        <button className="text-xs font-semibold text-[var(--brand)]" onClick={() => setSelected(new Set(selected.size && selected.size === movable.length ? [] : movable.map(order => order._id)))}>
+          {selected.size && selected.size === movable.length ? "Clear" : "Select this page"}
+        </button>
+        <select className="select !w-auto min-w-[200px]" value={target} onChange={event => setTarget(event.target.value)} aria-label="Move to">
+          <option value="">Move to…</option>
+          {active.map(person => <option key={person._id} value={person._id}>{person.name}</option>)}
+        </select>
+        <Button busy={busy} disabled={!selected.size || !target} onClick={assign}><UserRoundCog size={16} />Move orders</Button>
+        <span className="text-xs text-[var(--muted)]">The incentive moves with the order. Orders with a paid incentive cannot be moved.</span>
+      </Card>
+    )}
     {!data && !error && <Spinner label="Loading orders…" />}
 
     {data && <>
@@ -142,7 +181,13 @@ export function OrderTable({ basePath, showExecutive, autoRefresh = false }: { b
       ) : (
         <Card className="divide-y divide-[var(--line)]">
           {data.items.map(order => (
-            <Link key={order._id} href={`${basePath}/${order._id}`} className="flex flex-wrap items-start gap-3 px-4 py-3.5 hover:bg-[var(--surface-2)] sm:px-5">
+            <div key={order._id} className="flex items-start hover:bg-[var(--surface-2)]">
+            {mayAssign && (
+              <label className="flex cursor-pointer self-stretch py-3.5 pl-4 sm:pl-5" title={order.incentive.status === "Paid" ? "Incentive already paid — undo the payment to move it" : undefined}>
+                <input type="checkbox" className="mt-1" disabled={order.incentive.status === "Paid"} checked={selected.has(order._id)} onChange={() => toggle(order._id)} aria-label={`Select ${order.name}`} />
+              </label>
+            )}
+            <Link href={`${basePath}/${order._id}`} className="flex min-w-0 flex-1 flex-wrap items-start gap-3 px-4 py-3.5 sm:px-5">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-semibold">{order.name}</span>
@@ -168,6 +213,7 @@ export function OrderTable({ basePath, showExecutive, autoRefresh = false }: { b
                 </p>
               </div>
             </Link>
+            </div>
           ))}
         </Card>
       )}
