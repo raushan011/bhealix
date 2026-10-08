@@ -25,7 +25,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: Request) {
   try {
-    const auth = await apiSession(can.placeSalesOrder);
+    const auth = await apiSession(can.bookSalesOrder);
     if ("response" in auth) return auth.response;
     await connectDb();
 
@@ -64,7 +64,7 @@ export async function GET(request: Request) {
  */
 export async function POST(request: Request) {
   try {
-    const auth = await apiSession(can.placeSalesOrder);
+    const auth = await apiSession(can.bookSalesOrder);
     if ("response" in auth) return auth.response;
     await connectDb();
 

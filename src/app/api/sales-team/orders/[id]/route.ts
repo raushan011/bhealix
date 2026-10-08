@@ -59,8 +59,10 @@ export async function GET(_: Request, { params }: Params) {
         // A Shopify order is changed in Shopify; here it can only be cancelled and placed again.
         edit: acts && live && !atCourier && !inShop,
         cancel: acts && live && (inShop ? !order.shipment?.awb : !atCourier),
-        book: acts && live && !order.shipment?.awb,
-        track: Boolean(order.shipment?.awb),
+        // The office books the parcel; an executive's order waits for it and updates on its own once shipped.
+        book: acts && can.bookSalesOrder(auth.session.role) && live && !order.shipment?.awb,
+        // With no airway bill yet, "track" asks Shiprocket whether the office has shipped it.
+        track: Boolean(order.shipment?.awb) || live,
         documents: atCourier,
         override: can.manageSalesTeam(auth.session.role),
         reassign: can.manageSalesTeam(auth.session.role) && order.incentive?.status !== "Paid",

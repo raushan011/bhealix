@@ -28,15 +28,18 @@ type Payload = {
  * One sales order, from placed to paid.
  *
  * Everything an executive does after closing the sale happens here: check it,
- * book it with the courier, print the invoice and label, follow the parcel. The
- * administrator sees the same screen with three more controls — correct the
- * delivery, move the order to another executive, and pay the incentive.
+ * follow the parcel, ring the customer when a delivery fails. The office books
+ * it with the courier — from here or from Shiprocket's own panel — and the
+ * order picks up its airway bill and status on its own as the screen opens. The
+ * administrator sees the same screen with the booking and three more controls —
+ * correct the delivery, move the order to another executive, and pay the
+ * incentive.
  */
 export function OrderDetail({ id, basePath }: { id: string; basePath: string }) {
   const placed = useSearchParams().get("placed") === "1";
   const [data, setData] = useState<Payload | null>(null);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState<{ tone: "success" | "error"; text: string } | null>(placed ? { tone: "success", text: "Order placed. Check the details, then book it with the courier." } : null);
+  const [notice, setNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [dialog, setDialog] = useState<"book" | "cancel" | "override" | "reassign" | "pay" | "undo" | "ndr" | null>(null);
   const [tracking, setTracking] = useState<Tracking | null>(null);
   const [trackingBusy, setTrackingBusy] = useState(false);
@@ -50,18 +53,34 @@ export function OrderDetail({ id, basePath }: { id: string; basePath: string }) 
   }, [id]);
   useEffect(() => { load(); }, [load]);
 
-  async function track() {
+  async function track(quiet = false) {
     setTrackingBusy(true);
     try {
-      const result = await call<{ tracking: Tracking }>(`/api/sales-team/orders/${id}/track`);
+      const result = await call<{ tracking: Tracking | null; found?: boolean; status?: string }>(`/api/sales-team/orders/${id}/track`);
       setTracking(result.tracking);
+      if (!result.tracking && !quiet) {
+        setNotice({ tone: "success", text: result.found ? `Shiprocket has the order${result.status ? ` (${result.status})` : ""} but it has not been shipped yet.` : "Not shipped in Shiprocket yet. It shows here on its own once it is." });
+      }
       await load();
     } catch (problem) {
-      setNotice({ tone: "error", text: messageOf(problem) });
+      if (!quiet) setNotice({ tone: "error", text: messageOf(problem) });
     } finally {
       setTrackingBusy(false);
     }
   }
+
+  // As the order opens, ask Shiprocket about it once — unless it is settled or was asked
+  // about in the last ten minutes — so a parcel the office shipped shows without a press.
+  const [autoChecked, setAutoChecked] = useState(false);
+  useEffect(() => {
+    if (!data || autoChecked) return;
+    setAutoChecked(true);
+    const { order } = data;
+    const settled = ["Delivered", "RTO", "Returned", "Lost", "Cancelled"].includes(order.delivery.state);
+    const checkedAt = order.shipment?.checkedAt ? new Date(order.shipment.checkedAt).getTime() : 0;
+    if (!order.cancelledAt && !settled && Date.now() - checkedAt > 10 * 60_000) track(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, autoChecked]);
 
   const done = (text: string) => { setDialog(null); setNotice({ tone: "success", text }); load(); };
 
@@ -105,6 +124,7 @@ export function OrderDetail({ id, basePath }: { id: string; basePath: string }) 
       </div>
     </header>
 
+    {placed && !notice && <Notice tone="success">{may.book ? "Order placed. Check the details, then book it with the courier." : "Order placed. The office ships it through Shiprocket — the courier, AWB and status show here on their own once it is shipped."}</Notice>}
     {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
     {cancelled && <Notice tone="error">Cancelled {order.cancelledAt ? formatDate(order.cancelledAt) : ""}{order.cancelledBy ? ` by ${order.cancelledBy.name}` : ""}: {order.cancelReason}</Notice>}
     {shipment.lastError && !shipment.awb && <Notice tone="error">The last booking attempt failed: {shipment.lastError}</Notice>}
@@ -164,7 +184,7 @@ export function OrderDetail({ id, basePath }: { id: string; basePath: string }) 
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="flex items-center gap-2 text-[15px] font-semibold"><Truck size={16} />Shipment</h2>
             <div className="flex flex-wrap gap-2">
-              {may.track && <Button tone="secondary" className="!min-h-[36px] text-xs" busy={trackingBusy} onClick={track}><RefreshCw size={14} />Track</Button>}
+              {may.track && <Button tone="secondary" className="!min-h-[36px] text-xs" busy={trackingBusy} onClick={() => track()}><RefreshCw size={14} />{shipment.awb ? "Track" : "Check Shiprocket"}</Button>}
               {shareUrl && <a href={shareUrl} target="_blank" rel="noreferrer" className="tap inline-flex !min-h-[36px] items-center gap-1.5 rounded-[10px] border border-[var(--ok-line)] px-3 text-xs font-semibold text-[var(--ok-ink)] hover:bg-[var(--ok-bg)]"><MessageCircle size={14} />Send tracking</a>}
               {may.documents && <a href={`/api/sales-team/orders/${order._id}/documents?doc=invoice`} className="tap inline-flex !min-h-[36px] items-center gap-1.5 rounded-[10px] border border-[var(--line-2)] px-3 text-xs font-semibold hover:bg-[var(--surface-2)]"><FileText size={14} />Invoice</a>}
               {may.documents && shipment.awb && <a href={`/api/sales-team/orders/${order._id}/documents?doc=label`} className="tap inline-flex !min-h-[36px] items-center gap-1.5 rounded-[10px] border border-[var(--line-2)] px-3 text-xs font-semibold hover:bg-[var(--surface-2)]"><FileText size={14} />Label</a>}
@@ -183,7 +203,7 @@ export function OrderDetail({ id, basePath }: { id: string; basePath: string }) 
               {order.delivery.override && <Detail label="Corrected by hand" value={`${order.delivery.override}${order.delivery.overrideReason ? ` — ${order.delivery.overrideReason}` : ""}`} />}
             </dl>
           ) : (
-            <p className="mt-3 text-sm text-[var(--muted)]">{cancelled ? "This order was never sent to the courier." : "Not booked with the courier yet."}</p>
+            <p className="mt-3 text-sm text-[var(--muted)]">{cancelled ? "This order was never sent to the courier." : may.book ? "Not booked with the courier yet." : "Waiting for the office to ship it. Once it is shipped in Shiprocket, the courier, AWB and status show here on their own."}</p>
           )}
           {tracking && (
             <div className="mt-4 rounded-[10px] bg-[var(--surface-2)] p-3">

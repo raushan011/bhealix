@@ -31,7 +31,8 @@ export const maxDuration = 60;
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await apiSession(can.placeSalesOrder);
+    // The office ships; an executive only places the order (`bookSalesOrder`).
+    const auth = await apiSession(can.bookSalesOrder);
     if ("response" in auth) return auth.response;
     const { id } = await params;
     if (!OBJECT_ID.test(id)) return badRequest("Unknown order");

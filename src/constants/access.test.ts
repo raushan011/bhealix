@@ -167,8 +167,10 @@ describe("the sales executive", () => {
     expect(landingFor("EXECUTIVE")).toBe("/executive");
   });
 
-  it("places and books their own orders but never pays themselves", () => {
+  it("places their own orders, but never books them or pays themselves", () => {
     expect(can.placeSalesOrder("EXECUTIVE")).toBe(true);
+    expect(can.bookSalesOrder("EXECUTIVE")).toBe(false);
+    expect(can.bookSalesOrder("ADMIN")).toBe(true);
     expect(can.paySalesIncentive("EXECUTIVE")).toBe(false);
     expect(can.manageSalesTeam("EXECUTIVE")).toBe(false);
     expect(can.viewSalesTeam("EXECUTIVE")).toBe(false);

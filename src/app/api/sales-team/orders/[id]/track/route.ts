@@ -6,14 +6,15 @@ import { IntegrationError } from "@/lib/sales/http";
 import { loadCredentials, shiprocketToken } from "@/lib/sales/settings";
 import { trackByAwb } from "@/lib/sales/shiprocket";
 import { orderScope } from "@/lib/sales-team/access";
-import { applyShipmentUpdate, recalculateIncentive } from "@/lib/sales-team/server";
+import { applyShipmentUpdate, findTeamShipment, recalculateIncentive } from "@/lib/sales-team/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
  * Where one parcel is, scan by scan — asked because somebody is on the phone
- * about it.
+ * about it. An order with no airway bill here is first looked up in Shiprocket
+ * by its name, in case the office shipped it from Shiprocket's own panel.
  *
  * What comes back is also written onto the order, through the same
  * `applyShipmentUpdate` and `recalculateIncentive` the nightly pass uses, so
@@ -32,11 +33,29 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
     const order = await SalesTeamOrder.findOne({ _id: id, ...scope });
     if (!order) return badRequest("That order could not be found", 404);
-    const awb = String(order.shipment?.awb ?? "").trim();
-    if (!awb) return badRequest("This order has no airway bill yet. Book it with the courier first.");
-
     const token = await shiprocketToken(await loadCredentials());
     if (!token) return badRequest("Shiprocket is not connected.", 502);
+
+    let awb = String(order.shipment?.awb ?? "").trim();
+    if (!awb) {
+      // Not booked from here — the office may have shipped it from Shiprocket's own panel.
+      let found;
+      try {
+        found = order.cancelledAt ? null : await findTeamShipment(token, order);
+      } catch (error) {
+        if (error instanceof IntegrationError) return badRequest(error.message, 502);
+        throw error;
+      }
+      if (found) {
+        applyShipmentUpdate(order, found);
+        recalculateIncentive(order);
+      } else {
+        order.set("shipment.checkedAt", new Date());
+      }
+      await order.save();
+      awb = String(found?.awb ?? "").trim();
+      if (!awb) return ok({ tracking: null, found: Boolean(found), status: found?.status, delivery: order.delivery?.state, incentive: order.incentive?.status });
+    }
 
     let tracking;
     try {

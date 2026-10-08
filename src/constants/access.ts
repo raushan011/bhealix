@@ -248,13 +248,19 @@ export const can = {
    */
   manageSalesTeam: (role: Role) => admin(role),
   /**
-   * Placing an order and booking it with Shiprocket.
+   * Placing an order.
    *
    * The executive does it for their own customers — that is the job. The
    * administrator may do it on an executive's behalf, for a sale closed over the
    * phone at the office that still belongs to the executive who found it.
    */
   placeSalesOrder: (role: Role) => admin(role) || role === "EXECUTIVE",
+  /**
+   * Booking a sales order with Shiprocket — the warehouse, the courier, the
+   * airway bill. The office ships; the executive only places the order, and
+   * sees it move once Shiprocket reports it shipped.
+   */
+  bookSalesOrder: (role: Role) => admin(role),
   /**
    * Marking an executive's incentive paid, and undoing a payment marked in error.
    * Money leaving the company, so the administrator's — the same line as

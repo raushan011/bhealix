@@ -7,6 +7,6 @@ export default function ExecutiveOrdersPage() {
   return <div className="space-y-5">
     <PageTitle title="My orders" subtitle="Every order you have placed, where it is, and what it earns you"
       actions={<><LinkButton tone="secondary" href="/executive/track"><PackageSearch size={16} />Track order</LinkButton><LinkButton href="/executive/orders/new"><PackagePlus size={16} />New order</LinkButton></>} />
-    <Suspense fallback={<Spinner />}><OrderTable basePath="/executive/orders" showExecutive={false} /></Suspense>
+    <Suspense fallback={<Spinner />}><OrderTable basePath="/executive/orders" showExecutive={false} autoRefresh /></Suspense>
   </div>;
 }

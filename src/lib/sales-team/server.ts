@@ -5,7 +5,7 @@ import { User } from "@/models/User";
 import { deliveryStateFrom } from "@/lib/sales/delivery";
 import type { DeliveryState } from "@/lib/sales/constants";
 import { loadCredentials, shiprocketToken, shopifyConfig } from "@/lib/sales/settings";
-import { fetchShipments, matchKey, matchKeysFor } from "@/lib/sales/shiprocket";
+import { fetchShipmentFor, fetchShipments, matchKey, matchKeysFor, type ShipmentUpdate } from "@/lib/sales/shiprocket";
 import { IntegrationError } from "@/lib/sales/http";
 import { shiftDay, todayIso } from "@/lib/time";
 import { priceIncentive, rulesTable, teamOrderNo, type IncentiveRule, type TeamOrderChannel } from "./orders";
@@ -140,6 +140,37 @@ export type TeamSyncReport = { matched: number; unmatched: number; updated: numb
 const OPEN_STATES = ["Awaiting", "In transit", "Undelivered"];
 const isoOf = (date: Date) => date.toISOString().slice(0, 10);
 
+/** How far back an order never booked from here is still looked for in Shiprocket. */
+export const UNBOOKED_LOOKBACK_DAYS = 120;
+
+/**
+ * Every name a team order could be filed under in Shiprocket: the shop's order
+ * name with and without its `#` (what Shiprocket's Shopify channel files it
+ * under), the shop's id, and the CRM's own `BHX-SE-…` number.
+ */
+export function teamMatchKeys(order: { name?: string | null; ref?: string | null; orderNumber?: number | null; shopifyOrderId?: string | null }): string[] {
+  const keys = matchKeysFor(order);
+  const ref = String(order.ref ?? "").trim();
+  if (ref && !keys.includes(matchKey(ref))) keys.push(matchKey(ref));
+  // The bare shop number first: it is the form Shiprocket's Shopify channel uses most.
+  return keys.sort((left, right) => Number(left.startsWith("#")) - Number(right.startsWith("#")));
+}
+
+/**
+ * Finds one team order in Shiprocket by the names it could be filed under —
+ * for an order the office shipped from Shiprocket's own panel, which this CRM
+ * never booked and so holds no Shiprocket id or airway bill for. Only an exact
+ * match on one of those names is taken.
+ */
+export async function findTeamShipment(token: string, order: Parameters<typeof teamMatchKeys>[0]): Promise<ShipmentUpdate | null> {
+  const keys = teamMatchKeys(order);
+  for (const key of keys) {
+    const found = await fetchShipmentFor(token, key);
+    if (found && keys.includes(matchKey(found.channelOrderId))) return found;
+  }
+  return null;
+}
+
 /**
  * Reads every open team order's status back from Shiprocket.
  *
@@ -148,6 +179,10 @@ const isoOf = (date: Date) => date.toISOString().slice(0, 10);
  * parcel still moving, joined on the name the order was booked under. Only the
  * read-back half of `shipment` is written, field by field, for the reason given
  * there — replacing it wholesale would erase what the booking recorded.
+ *
+ * Orders not booked from here are read too: the office ships executives'
+ * orders from Shiprocket's own panel (or Shiprocket picks them up from the
+ * shop), and the executive's screen must show the parcel all the same.
  */
 export async function syncTeamShipments(): Promise<TeamSyncReport> {
   const settings = await loadCredentials();
@@ -157,15 +192,15 @@ export async function syncTeamShipments(): Promise<TeamSyncReport> {
   }
 
   const today = todayIso();
-  const oldest = await SalesTeamOrder.findOne({ "delivery.state": { $in: OPEN_STATES }, cancelledAt: null, "shipment.shiprocketOrderId": { $exists: true } })
-    .sort({ placedAt: 1 }).select("placedAt").lean() as { placedAt?: Date } | null;
-  const from = oldest?.placedAt ? isoOf(oldest.placedAt) : shiftDay(today, -30);
-  const report: TeamSyncReport = { matched: 0, unmatched: 0, updated: 0, from: from < shiftDay(today, -365) ? shiftDay(today, -365) : from, to: today };
-
   const orders = await SalesTeamOrder.find({
-    "shipment.shiprocketOrderId": { $exists: true },
-    $or: [{ "delivery.state": { $in: OPEN_STATES } }, { "incentive.status": "Pending" }]
+    $or: [
+      { "shipment.shiprocketOrderId": { $exists: true }, $or: [{ "delivery.state": { $in: OPEN_STATES } }, { "incentive.status": "Pending" }] },
+      { cancelledAt: null, "shipment.awb": { $in: [null, ""] }, placedAt: { $gte: new Date(Date.now() - UNBOOKED_LOOKBACK_DAYS * 86_400_000) } }
+    ]
   });
+  const oldest = orders.reduce<Date | null>((min, order) => (order.placedAt && (!min || order.placedAt < min) ? order.placedAt : min), null);
+  const from = oldest ? isoOf(oldest) : shiftDay(today, -30);
+  const report: TeamSyncReport = { matched: 0, unmatched: 0, updated: 0, from: from < shiftDay(today, -365) ? shiftDay(today, -365) : from, to: today };
   if (!orders.length) {
     await SalesTeamSettings.updateOne({ key: "sales-team" }, { $set: { lastShipmentSyncAt: new Date() }, $unset: { lastShipmentSyncError: "" } });
     return report;
@@ -181,7 +216,7 @@ export async function syncTeamShipments(): Promise<TeamSyncReport> {
   const byKey = new Map(updates.map(update => [matchKey(update.channelOrderId), update]));
 
   for (const order of orders) {
-    const update = matchKeysFor(order).map(key => byKey.get(key)).find(Boolean);
+    const update = teamMatchKeys(order).map(key => byKey.get(key)).find(Boolean);
     if (!update) { report.unmatched++; continue; }
     report.matched++;
     if (applyShipmentUpdate(order, update)) report.updated++;

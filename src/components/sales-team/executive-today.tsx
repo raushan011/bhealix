@@ -42,7 +42,8 @@ const waLink = (phone: string | undefined, text: string) => {
  *
  * Ordered by what costs money if it waits — a failed delivery becomes a return by
  * default, a parcel arriving today to somebody who is out becomes a failed
- * delivery — then the orders not yet booked and the follow-ups whose day has come.
+ * delivery — then the orders waiting to be shipped and the follow-ups whose day has
+ * come. Opening it asks Shiprocket what has shipped or moved since.
  */
 export function ExecutiveToday({ name }: { name: string }) {
   const [data, setData] = useState<Payload | null>(null);
@@ -55,12 +56,18 @@ export function ExecutiveToday({ name }: { name: string }) {
     try { setData(await call<Payload>("/api/sales-team/today")); setError(""); } catch (problem) { setError(messageOf(problem)); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  // Then ask Shiprocket, quietly, what has shipped or moved since, and show it.
+  useEffect(() => {
+    call<{ updated: number }>("/api/sales-team/orders/refresh?auto=1", { method: "POST" })
+      .then(result => { if (result.updated) load(); })
+      .catch(() => undefined);
+  }, [load]);
 
   async function refresh() {
     setRefreshing(true); setNotice("");
     try {
-      const result = await call<{ checked: number; updated: number }>("/api/sales-team/orders/refresh", { method: "POST" });
-      setNotice(`Checked ${result.checked} parcel${result.checked === 1 ? "" : "s"} with the courier.`);
+      const result = await call<{ checked: number; updated: number; shipped?: number }>("/api/sales-team/orders/refresh", { method: "POST" });
+      setNotice(`Checked ${result.checked} order${result.checked === 1 ? "" : "s"} with Shiprocket.${result.shipped ? ` ${result.shipped} newly shipped.` : ""}`);
       await load();
     } catch (problem) { setNotice(messageOf(problem)); } finally { setRefreshing(false); }
   }
@@ -111,7 +118,7 @@ export function ExecutiveToday({ name }: { name: string }) {
     )}
 
     {data.unbooked.length > 0 && (
-      <Section icon={PackageCheck} tone="neutral" title="Not booked with the courier yet" count={data.unbooked.length} hint="Book them so they leave today.">
+      <Section icon={PackageCheck} tone="neutral" title="Waiting to be shipped" count={data.unbooked.length} hint="The office ships these through Shiprocket. They move on their own once shipped.">
         {data.unbooked.map(order => (
           <Link key={order._id} href={`/executive/orders/${order._id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-[var(--surface-2)]">
             <div className="min-w-0 flex-1">

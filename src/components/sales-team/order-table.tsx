@@ -28,9 +28,10 @@ const PROCESS_FILTERS = [
 /**
  * The sales team's orders as a list — an executive's own, or everybody's with a
  * filter for whose. The figures above it cover everything the filter found, not
- * just the page on screen.
+ * just the page on screen. With `autoRefresh` (the executive's own list), opening
+ * it asks Shiprocket what has shipped or moved since, and shows it.
  */
-export function OrderTable({ basePath, showExecutive }: { basePath: string; showExecutive: boolean }) {
+export function OrderTable({ basePath, showExecutive, autoRefresh = false }: { basePath: string; showExecutive: boolean; autoRefresh?: boolean }) {
   const params = useSearchParams();
   const [filters, setFilters] = useState({
     q: "", status: params.get("status") ?? "", mode: params.get("mode") ?? "", delivery: params.get("delivery") ?? "",
@@ -57,6 +58,16 @@ export function OrderTable({ basePath, showExecutive }: { basePath: string; show
     }
   }, [filters, page]);
   useEffect(() => { const timer = setTimeout(load, 250); return () => clearTimeout(timer); }, [load]);
+
+  const [synced, setSynced] = useState(0);
+  useEffect(() => {
+    if (!autoRefresh) return;
+    call<{ updated: number }>("/api/sales-team/orders/refresh?auto=1", { method: "POST" })
+      .then(result => { if (result.updated) setSynced(count => count + 1); })
+      .catch(() => undefined);
+  }, [autoRefresh]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (synced) load(); }, [synced]);
 
   const set = (key: keyof typeof filters, value: string) => { setPage(1); setFilters(current => ({ ...current, [key]: value })); };
 
@@ -115,7 +126,7 @@ export function OrderTable({ basePath, showExecutive }: { basePath: string; show
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-semibold">{order.name}</span>
                   {order.cancelledAt ? <Badge tone="danger">Cancelled</Badge> : <Badge tone={deliveryTone(order.delivery.state)}>{order.delivery.state}</Badge>}
-                  {!order.cancelledAt && !order.shipment?.awb && <Badge tone={order.shipment?.lastError ? "danger" : "warn"}>{order.shipment?.lastError ? "Booking failed" : "Not booked"}</Badge>}
+                  {!order.cancelledAt && !order.shipment?.awb && <Badge tone={order.shipment?.lastError ? "danger" : "warn"}>{order.shipment?.lastError ? "Booking failed" : showExecutive ? "Not booked" : "Not shipped yet"}</Badge>}
                   <Badge>{PAYMENT_MODE_LABEL[order.paymentMode]}</Badge>
                   {order.channel === "Shopify" && <Badge tone="info">Shopify</Badge>}
                   {order.rtoRisk?.level && order.rtoRisk.level !== "Low" && !order.cancelledAt && <Badge tone={riskTone(order.rtoRisk.level)}>{order.rtoRisk.level} risk</Badge>}
