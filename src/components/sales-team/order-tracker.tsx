@@ -199,8 +199,13 @@ function TrackRow({ title, subtitle, url }: { title: string; subtitle?: string; 
       <Button tone="secondary" className="!min-h-[36px] text-xs" busyLabel="Tracking…" onClick={track}><Truck size={14} />{tracking && open ? "Hide" : "Track"}</Button>
     </div>
     {error && <p className="mt-2 text-sm text-[var(--danger-ink)]">{error}</p>}
-    {tracking && open && (
-      <div className="mt-3 rounded-[10px] bg-[var(--surface-2)] p-3">
+    {tracking && open && <TrackingDetails tracking={tracking} />}
+  </div>;
+}
+
+/** The courier's answer for one parcel: where it is now, the expected day, and the scans that got it there. */
+export function TrackingDetails({ tracking }: { tracking: Tracking }) {
+  return <div className="mt-3 rounded-[10px] bg-[var(--surface-2)] p-3">
         <p className="text-sm font-semibold">{tracking.status ?? "No status yet"}</p>
         <p className="text-xs text-[var(--muted)]">
           {[tracking.courier, tracking.expectedDelivery ? `Expected ${day(tracking.expectedDelivery)}` : "", tracking.deliveredAt ? `Delivered ${day(String(tracking.deliveredAt))}` : ""].filter(Boolean).join(" · ")}
@@ -212,7 +217,5 @@ function TrackRow({ title, subtitle, url }: { title: string; subtitle?: string; 
             <li key={index} className="text-sm"><span className="font-medium">{scan.activity}</span><span className="block text-xs text-[var(--muted)]">{[scan.location, scan.at].filter(Boolean).join(" · ")}</span></li>
           ))}
         </ol>
-      </div>
-    )}
-  </div>;
+      </div>;
 }

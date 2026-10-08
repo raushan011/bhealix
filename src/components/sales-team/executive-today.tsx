@@ -10,6 +10,8 @@ import { riskTone } from "@/lib/sales-team/risk";
 import { formatDate } from "@/lib/time";
 import { AddCustomerModal, FollowUpRow, type FollowUpLead } from "./follow-ups";
 import { call, messageOf } from "./shared";
+import { TrackingDetails } from "./order-tracker";
+import type { Tracking } from "@/lib/sales/shiprocket";
 
 type OrderRow = {
   _id: string; name: string; customer?: { name?: string; phone?: string; city?: string };
@@ -168,6 +170,18 @@ function OrderCall({ order, message, action }: { order: OrderRow; message: strin
   const tel = telUrl(order.customer?.phone);
   const wa = waLink(order.customer?.phone, message);
   const lastAsk = order.ndr?.at(-1);
+  // The courier's scans, opened in place — no need to leave the day's list to see where a parcel is.
+  const [tracking, setTracking] = useState<Tracking | null>(null);
+  const [open, setOpen] = useState(false);
+  const [trackError, setTrackError] = useState("");
+  async function track() {
+    if (tracking) { setOpen(value => !value); return; }
+    setTrackError("");
+    try {
+      const result = await call<{ tracking: Tracking | null }>(`/api/sales-team/orders/${order._id}/track`);
+      if (result.tracking) { setTracking(result.tracking); setOpen(true); } else setTrackError("No courier scans for this order yet.");
+    } catch (problem) { setTrackError(messageOf(problem)); }
+  }
   return <div className="px-4 py-3">
     <Link href={`/executive/orders/${order._id}`} className="block">
       <div className="flex flex-wrap items-center gap-2">
@@ -181,11 +195,14 @@ function OrderCall({ order, message, action }: { order: OrderRow; message: strin
       </p>
       {lastAsk && <p className="mt-0.5 text-xs text-[var(--muted)]">Last asked: {lastAsk.action === "return" ? "return" : `reattempt${lastAsk.deferredDate ? ` on ${lastAsk.deferredDate}` : ""}`}{lastAsk.ok === false ? " (refused)" : ""}</p>}
     </Link>
-    <div className="mt-2 grid grid-cols-3 gap-2">
+    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
       {tel ? <a href={tel} className="tap inline-flex items-center justify-center gap-1.5 rounded-[10px] bg-[var(--brand)] text-xs font-semibold text-[var(--on-brand)]"><Phone size={14} />Call</a> : <span />}
       {wa ? <a href={wa} target="_blank" rel="noreferrer" className="tap inline-flex items-center justify-center gap-1.5 rounded-[10px] border border-[var(--ok-line)] text-xs font-semibold text-[var(--ok-ink)]"><MessageCircle size={14} />WhatsApp</a> : <span />}
       <Link href={`/executive/orders/${order._id}`} className="tap inline-flex items-center justify-center gap-1 rounded-[10px] border border-[var(--line-2)] text-xs font-semibold">{action ?? "Open"}<ChevronRight size={13} /></Link>
+      <Button tone="secondary" className="!min-h-[44px] text-xs" busyLabel="Tracking…" onClick={track}><Truck size={14} />{tracking && open ? "Hide" : "Track"}</Button>
     </div>
+    {trackError && <p className="mt-2 text-sm text-[var(--danger-ink)]">{trackError}</p>}
+    {tracking && open && <TrackingDetails tracking={tracking} />}
   </div>;
 }
 
