@@ -58,7 +58,7 @@ export function OrderTable({ basePath, showExecutive, autoRefresh = false, mayAs
   const params = useSearchParams();
   const [filters, setFilters] = useState({
     q: "", status: params.get("status") ?? "", mode: params.get("mode") ?? "", delivery: params.get("delivery") ?? "",
-    incentive: params.get("incentive") ?? "", executive: params.get("executive") ?? "", due: params.get("due") ?? "", source: params.get("source") ?? "", from: "", to: ""
+    incentive: params.get("incentive") ?? "", executive: params.get("executive") ?? "", due: params.get("due") ?? "", source: params.get("source") ?? "", from: params.get("from") ?? "", to: params.get("to") ?? ""
   });
   const [page, setPage] = useState(1);
   const [data, setData] = useState<Page | null>(null);
@@ -154,6 +154,7 @@ export function OrderTable({ basePath, showExecutive, autoRefresh = false, mayAs
           <option value="CRM">Placed in the CRM</option>
           <option value="Shopify">From the shop (Shopify)</option>
           <option value="Shiprocket">Shiprocket only</option>
+          <option value="imported">Shop or Shiprocket</option>
         </select>
       )}
       <select className="select" value={filters.due} onChange={event => set("due", event.target.value)} aria-label="Delivery day">

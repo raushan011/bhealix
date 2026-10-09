@@ -55,6 +55,7 @@ export async function GET(request: Request) {
     const source = params.get("source");
     if (source === "CRM") and.push({ origin: { $nin: ["Shopify", "Shiprocket"] } });
     if (source === "Shopify" || source === "Shiprocket") and.push({ origin: source });
+    if (source === "imported") and.push({ origin: { $in: ["Shopify", "Shiprocket"] } });
     const mode = params.get("mode");
     if (mode && (TEAM_PAYMENT_MODES as readonly string[]).includes(mode)) and.push({ paymentMode: mode });
     const delivery = params.get("delivery");

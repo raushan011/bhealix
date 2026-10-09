@@ -56,6 +56,7 @@ const NAV = [
   { href: "/admin/sales/executives", label: "Executives", icon: Users, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Team", workspace: "sales" },
   { href: "/admin/sales/leads", label: "Lead assignment", icon: UserPlus, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Team", workspace: "sales" },
   { href: "/admin/sales/orders", label: "Orders", icon: ShoppingBag, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Orders", workspace: "sales" },
+  { href: "/admin/sales/daily", label: "Daily orders", icon: CalendarDays, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Orders", workspace: "sales" },
   { href: "/admin/sales/track", label: "Track order", icon: PackageSearch, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Orders", workspace: "sales" },
   { href: "/admin/sales/orders/new", label: "New order", icon: PackagePlus, roles: ["SUPERADMIN", "ADMIN"], group: "Orders", workspace: "sales" },
   { href: "/admin/sales/incentives", label: "Incentives", icon: BadgeIndianRupee, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Orders", workspace: "sales" },
