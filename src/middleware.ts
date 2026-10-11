@@ -9,9 +9,10 @@ import { encodeSecret, PARTNER_COOKIE, sessionCookieOptions, STAFF_COOKIE, verif
  * the token Shiprocket sends, refusing anything that does not match.
  * Leaving them behind the session gate would have every delivery answered
  * with a 401 until the sender gave up and removed the subscription — which is
- * exactly what both Shopify and Meta do.
+ * exactly what both Shopify and Meta do. Website leads come from the leads
+ * sheet's script, which presents `WEBSITE_LEADS_TOKEN` the same way.
  */
-const PUBLIC_API = ["/api/auth/login", "/api/auth/logout", "/api/sales/shopify/webhook", "/api/sales/whatsapp/webhook", "/api/courier/updates"];
+const PUBLIC_API = ["/api/auth/login", "/api/auth/logout", "/api/sales/shopify/webhook", "/api/sales/whatsapp/webhook", "/api/courier/updates", "/api/website/leads"];
 
 /**
  * The affiliate portal's own front door, which by definition has to be

@@ -30,11 +30,12 @@ export const LEAD_STATUSES = ["New", "Contacted", "Interested", "Not interested"
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
 
 /**
- * How a lead got into the list. Only the search puts one there today, but a
- * name written down at a trade fair is a real lead, and a source field is what
- * keeps a later sweep of the same area from treating it as a stray.
+ * How a lead got into the list. A name written down at a trade fair is a real
+ * lead, and a source field is what keeps a later sweep of the same area from
+ * treating it as a stray. `Website` is a shopper who left their number at Add to
+ * cart on bhealix.com (`lib/sales-team/website-leads.ts`).
  */
-export const LEAD_SOURCES = ["Google", "Manual"] as const;
+export const LEAD_SOURCES = ["Google", "Manual", "Website"] as const;
 export type LeadSource = (typeof LEAD_SOURCES)[number];
 
 /**

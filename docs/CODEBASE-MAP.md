@@ -126,6 +126,7 @@ npm test                   # vitest run
 | `GOOGLE_MAPS_SERVER_API_KEY` | for discovery | Places API (New) + Geocoding API |
 | `SEED_DEMO_STAFF` | no | `1` creates throwaway MR/HR/SALES accounts when seeding |
 | `CRON_SECRET` | for the nightly pass | Bearer token accepted by `GET /api/sales/cron`; `vercel.json` schedules it at 01:30 |
+| `WEBSITE_LEADS_TOKEN` | for website carts | Shared with the "Bhealix Leads" Google Sheet's script (Script property `CRM_TOKEN`), presented as `x-api-key` on `POST /api/website/leads`. Blank refuses every post |
 
 The Shopify and Shiprocket credentials are **not** environment variables — they are entered under
 Sales settings and stored encrypted (§6.15), so they change without a redeploy. Note `AUTH_SECRET`
@@ -946,6 +947,15 @@ reason, needsReversal, computedAt, payment{paidAt, paidBy, paymentDate, mode, re
 `incentiveRules[{mode, enabled, type: Percentage|Flat, value}]`, `fulfilment` (last parcel),
 `lastShipmentSyncAt/Error`.
 
+**Website carts (Oct 2026).** bhealix.com asks for name + mobile before the first Add to cart and posts
+them to the "Bhealix Leads" Google Sheet, whose Apps Script appends a row, emails the owner and forwards
+the lead to `POST /api/website/leads`. `SalesLead` gained `cart{lastAt, lastProduct, lastSource, count,
+events[≤20]}` (index `{source, cart.lastAt:-1}`) and `LEAD_SOURCES` gained `Website`. Pure parts in
+`lib/sales-team/website-leads.ts` (tested). `GET /api/sales-team/leads?source=Website` sorts newest cart
+first and, for the desk, adds `byExecutive` (per-executive status counts, unassigned first). Screens:
+`/admin/sales/website` (`components/sales-team/website-carts.tsx`: tracking table, assign, `LeadDialog`)
+and the executive's My leads, which shows the cart line and history.
+
 **`SalesLead`** gained `assignedTo` → User, `assignedAt`, `assignedBy`, `convertedAt`; `LEAD_STATUSES`
 gained `Converted` (set only by placing an order from the lead). **`User`** gained `workspacesVersion`.
 
@@ -1253,6 +1263,7 @@ somebody typed by hand.
 | `/customers` | GET | scope | `?phone=` → a repeat customer's last address |
 | `/executives` | GET | `viewSalesTeam` | |
 | `/sync` | POST | `viewSalesTeam` | `syncTeamShopify` (cancellations) then `syncTeamShipments`; also run by `/api/sales/cron` |
+| `/api/website/leads` | POST | `WEBSITE_LEADS_TOKEN` in `x-api-key` (public in the middleware) | A shopper's Add-to-cart lead, forwarded by the leads sheet's script. One `SalesLead` per phone (matched on the last ten digits across every lead): new → `source: Website`, `type: "Website cart"`, `New`, unassigned; known → cart event + remark, status and holder untouched |
 
 `/api/team` POST now takes the whole employee record and an optional first `salary`
 (`lib/hr/employee-schema.ts`, shared with `/api/team/[id]` and `/api/hr/salary/[id]`).

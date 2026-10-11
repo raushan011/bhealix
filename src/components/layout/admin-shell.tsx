@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BadgeIndianRupee, BadgePercent, BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, FileArchive, HeartHandshake, Inbox, KeyRound, LayoutDashboard, LogOut, Menu, Package, PackagePlus, PackageSearch, PhoneCall, Plug, Receipt, Repeat, Search, Settings, ShoppingBag, Stethoscope, Tag, Truck, UserPlus, Users, Wallet, Warehouse, X, Zap } from "lucide-react";
+import { BadgeIndianRupee, BadgePercent, BarChart3, Boxes, Building2, CalendarCheck, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, FileArchive, HeartHandshake, Inbox, KeyRound, LayoutDashboard, LogOut, Menu, Package, PackagePlus, PackageSearch, PhoneCall, Plug, Receipt, Repeat, Search, Settings, ShoppingBag, ShoppingCart, Stethoscope, Tag, Truck, UserPlus, Users, Wallet, Warehouse, X, Zap } from "lucide-react";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { NavIcon } from "@/components/layout/nav-icon";
 import { Brand, BrandMark } from "@/components/ui/brand";
@@ -55,6 +55,7 @@ const NAV = [
   { href: "/admin/sales", label: "Overview", icon: LayoutDashboard, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "", workspace: "sales" },
   { href: "/admin/sales/executives", label: "Executives", icon: Users, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Team", workspace: "sales" },
   { href: "/admin/sales/leads", label: "Lead assignment", icon: UserPlus, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Team", workspace: "sales" },
+  { href: "/admin/sales/website", label: "Website carts", icon: ShoppingCart, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Team", workspace: "sales" },
   { href: "/admin/sales/orders", label: "Orders", icon: ShoppingBag, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Orders", workspace: "sales" },
   { href: "/admin/sales/daily", label: "Daily orders", icon: CalendarDays, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Orders", workspace: "sales" },
   { href: "/admin/sales/track", label: "Track order", icon: PackageSearch, roles: ["SUPERADMIN", "ADMIN", "HR"], group: "Orders", workspace: "sales" },

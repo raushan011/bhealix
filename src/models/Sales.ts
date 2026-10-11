@@ -721,6 +721,32 @@ const SalesLeadSchema = new Schema({
   followUpAt: { type: String, index: true },
   followUpNote: { type: String, trim: true },
 
+  /**
+   * What a website shopper put in their cart (source `Website` only).
+   *
+   * `last*` and `count` mirror the newest of `events`, so the Website carts list
+   * sorts and reads a row without unpacking an array. `events` is capped at
+   * `CART_EVENTS_KEPT` with `$slice`: a shopper who carts fifty times is still one
+   * call, and the remarks already tell the story in order.
+   */
+  cart: {
+    lastAt: Date,
+    lastProduct: String,
+    lastSource: String,
+    count: { type: Number, default: undefined },
+    events: {
+      type: [new Schema({
+        at: { type: Date, required: true },
+        product: String,
+        variant: String,
+        qty: Number,
+        page: String,
+        source: String
+      }, { _id: false })],
+      default: undefined
+    }
+  },
+
   createdBy: { type: Schema.Types.ObjectId, ref: "User" },
   updatedBy: { type: Schema.Types.ObjectId, ref: "User" }
 }, { timestamps: true });
@@ -736,6 +762,8 @@ SalesLeadSchema.index({ type: 1, name: 1 });
 SalesLeadSchema.index({ status: 1, createdAt: -1 });
 // The log screen's own question: what was said lately, across every lead.
 SalesLeadSchema.index({ "remarks.at": -1 });
+// Website carts: newest Add to cart first.
+SalesLeadSchema.index({ source: 1, "cart.lastAt": -1 });
 
 export const SalesLead = models.SalesLead ?? model("SalesLead", SalesLeadSchema);
 

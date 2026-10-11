@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, MessageCircle, Phone, ShoppingBag, UserRoundSearch } from "lucide-react";
+import { ChevronLeft, ChevronRight, MessageCircle, Phone, ShoppingBag, ShoppingCart, UserRoundSearch } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Field, Notice, Spinner } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import {
@@ -11,13 +11,15 @@ import {
 } from "@/lib/sales/leads";
 import { formatRupees, PAYMENT_MODE_LABEL, type TeamPaymentMode } from "@/lib/sales-team/orders";
 import { formatDate, formatDateTime } from "@/lib/time";
+import { cartSummary, type CartEvent } from "@/lib/sales-team/website-leads";
 import { call, messageOf } from "./shared";
 import { AddCustomerModal, FollowUpPicker } from "./follow-ups";
 
 type Lead = {
   _id: string; name: string; type: string; status: LeadStatus; phone?: string; address?: string; area?: string; city?: string;
   notes?: string; googleMapsUrl?: string; lastContactedAt?: string; contactCount?: number; assignedAt?: string;
-  followUpAt?: string; followUpNote?: string;
+  followUpAt?: string; followUpNote?: string; source?: string;
+  cart?: { lastAt?: string; lastProduct?: string; lastSource?: string; count?: number; events?: CartEvent[] };
 };
 type Page = { items: Lead[]; total: number; page: number; pages: number; counts: Partial<Record<LeadStatus, number>> };
 type Remark = { _id: string; text: string; channel: RemarkChannel; status?: LeadStatus; at: string; byName?: string };
@@ -91,6 +93,7 @@ export function LeadDesk({ orderPath }: { orderPath: string }) {
                 {lead.contactCount ? ` · ${lead.contactCount}×` : ""}
                 {lead.followUpAt ? ` · follow up ${formatDate(lead.followUpAt)}` : ""}
               </p>
+              {lead.cart?.lastAt && <CartLine cart={lead.cart} />}
             </button>
             <div className="flex items-center gap-1">
               {telUrl(lead.phone) && <a href={telUrl(lead.phone)!} aria-label={`Call ${lead.name}`} className="tap grid place-items-center rounded-[10px] text-[var(--brand)] hover:bg-[var(--surface-2)]"><Phone size={17} /></a>}
@@ -115,7 +118,15 @@ export function LeadDesk({ orderPath }: { orderPath: string }) {
   </div>;
 }
 
-function LeadDialog({ id, orderPath, onClose, onChanged }: { id: string; orderPath: string; onClose: () => void; onChanged: () => void }) {
+/** What a website shopper put in their cart, and when — shown wherever a website lead is listed. */
+export function CartLine({ cart }: { cart: NonNullable<Lead["cart"]> }) {
+  return <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-[var(--ink-2)]">
+    <ShoppingCart size={12} className="shrink-0 text-[var(--brand)]" />
+    <span className="truncate">{cartSummary(cart)}{cart.lastAt ? ` · ${formatDateTime(cart.lastAt)}` : ""}</span>
+  </p>;
+}
+
+export function LeadDialog({ id, orderPath, onClose, onChanged }: { id: string; orderPath: string; onClose: () => void; onChanged: () => void }) {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [text, setText] = useState("");
   const [channel, setChannel] = useState<RemarkChannel>("Call");
@@ -157,6 +168,21 @@ function LeadDialog({ id, orderPath, onClose, onChanged }: { id: string; orderPa
       </div>
       {detail.lead.address && <p className="text-sm text-[var(--ink-2)]">{detail.lead.address}</p>}
       {detail.lead.notes && <Notice>{detail.lead.notes}</Notice>}
+
+      {!!detail.lead.cart?.events?.length && (
+        <div className="space-y-1">
+          <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">Added to cart on the website</p>
+          {[...detail.lead.cart.events].reverse().map((event, index) => (
+            <div key={index} className="flex items-start justify-between gap-3 rounded-[10px] border border-[var(--line)] px-3 py-2 text-sm">
+              <span className="min-w-0">
+                <span className="font-medium">{event.product || "A product"}{event.qty && event.qty > 1 ? ` × ${event.qty}` : ""}</span>
+                {event.source && event.source !== "direct" && <span className="block truncate text-xs text-[var(--muted)]">via {event.source}</span>}
+              </span>
+              <span className="shrink-0 text-xs text-[var(--muted)]">{formatDateTime(event.at)}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {detail.orders.length > 0 && (
         <div className="space-y-1">

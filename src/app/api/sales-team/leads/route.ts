@@ -3,9 +3,10 @@ import { connectDb } from "@/lib/db/mongoose";
 import { SalesLead } from "@/models/Sales";
 import { apiSession } from "@/lib/auth/guard";
 import { badRequest, fail, ok, OBJECT_ID, pageParams } from "@/lib/api";
-import { LEAD_STATUSES, like } from "@/lib/sales/leads";
+import { LEAD_SOURCES, LEAD_STATUSES, like } from "@/lib/sales/leads";
 import { todayIso } from "@/lib/time";
 import { isExecutive, leadScope } from "@/lib/sales-team/access";
+import { executiveRows, type ExecutiveCount } from "@/lib/sales-team/website-leads";
 import { can } from "@/constants/access";
 import { record } from "@/lib/audit";
 import { tenDigitPhone } from "@/lib/sales/fulfilment";
@@ -15,7 +16,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const FIELDS = "name type status phone website address area city googleMapsUrl rating notes assignedTo assignedAt "
-  + "lastContactedAt contactCount convertedAt followUpAt followUpNote source updatedAt createdAt";
+  + "lastContactedAt contactCount convertedAt followUpAt followUpNote source updatedAt createdAt "
+  + "cart.lastAt cart.lastProduct cart.lastSource cart.count";
 
 /**
  * Leads as the sales team sees them.
@@ -52,6 +54,9 @@ export async function GET(request: Request) {
     }
     const type = params.get("type");
     if (type) and.push({ type });
+    const source = params.get("source");
+    if (source && (LEAD_SOURCES as readonly string[]).includes(source)) and.push({ source });
+    const website = source === "Website";
     const city = params.get("city");
     if (city) and.push({ city: like(city) });
     if (q) {
@@ -65,20 +70,30 @@ export async function GET(request: Request) {
       ? { $and: [...and, { status }] }
       : params.get("open") === "1" ? { $and: [...and, { status: { $nin: ["Converted", "Not interested"] } }] } : unfiltered;
 
-    const [items, total, counts, types] = await Promise.all([
+    const [items, total, counts, types, byExecutive] = await Promise.all([
       SalesLead.find(filter).select(FIELDS).populate("assignedTo", "name")
-        // Untouched first, then whoever has waited longest since the last word.
-        .sort(isExecutive(auth.session) ? { lastContactedAt: 1, assignedAt: -1, _id: 1 } : { createdAt: -1, _id: 1 })
+        // Website carts: the newest cart first, while the shopper still remembers it.
+        // Otherwise, for an executive: untouched first, then whoever has waited longest since the last word.
+        .sort(website ? { "cart.lastAt": -1, _id: 1 } : isExecutive(auth.session) ? { lastContactedAt: 1, assignedAt: -1, _id: 1 } : { createdAt: -1, _id: 1 })
         .skip(skip).limit(limit).lean(),
       SalesLead.countDocuments(filter),
       SalesLead.aggregate([{ $match: unfiltered }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
-      SalesLead.distinct("type", scope)
+      SalesLead.distinct("type", scope),
+      // The desk's tracking table for website carts: each executive's leads by status, and the ones nobody holds.
+      website && !isExecutive(auth.session)
+        ? SalesLead.aggregate([
+          { $match: { $and: [scope, { source: "Website" }] } },
+          { $group: { _id: { executive: "$assignedTo", status: "$status" }, count: { $sum: 1 } } },
+          { $lookup: { from: "users", localField: "_id.executive", foreignField: "_id", as: "user", pipeline: [{ $project: { name: 1 } }] } }
+        ])
+        : Promise.resolve(null)
     ]);
 
     return ok({
       items, total, page, pages: Math.max(1, Math.ceil(total / limit)),
       counts: Object.fromEntries((counts as Array<{ _id: string; count: number }>).map(row => [row._id, row.count])),
-      types: (types as string[]).filter(Boolean).sort()
+      types: (types as string[]).filter(Boolean).sort(),
+      ...(byExecutive ? { byExecutive: executiveRows(byExecutive as ExecutiveCount[]) } : {})
     });
   } catch (error) {
     return fail(error);
