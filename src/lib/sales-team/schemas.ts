@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { DELIVERY_STATES, COURIER_RULES } from "@/lib/sales/constants";
 import { INCENTIVE_PAY_MODES, INCENTIVE_TYPES, TEAM_ORDER_CHANNELS, TEAM_PAYMENT_MODES } from "./orders";
-import { CATALOGUE_KINDS } from "./pricing";
+import { CATALOGUE_KINDS, CUSTOM_DISCOUNT_TYPES, MAX_FREE_QUANTITY } from "./pricing";
 import { WEIGHT_BASES } from "./packaging";
 
 /**
@@ -48,6 +48,17 @@ export const orderInputSchema = z.object({
   extraDiscount: z.boolean().default(false),
   /** Add the free bag. */
   freeBag: z.boolean().default(false),
+  /** Products or Testing Kits given away free — a single or a double of each. */
+  freeItems: z.array(z.object({
+    catalogueId: z.string().trim().min(1).max(60),
+    quantity: z.number().int().min(1).max(MAX_FREE_QUANTITY, `Give away at most ${MAX_FREE_QUANTITY} of a product`)
+  })).max(20).default([]),
+  /** An extra discount the executive typed, in % or rupees, on top of the handbook's. */
+  customDiscount: z.object({
+    type: z.enum(CUSTOM_DISCOUNT_TYPES),
+    value: z.number().min(0).max(100_000)
+  }).refine(discount => discount.type !== "Percent" || discount.value <= 100, { message: "A percentage cannot be more than 100", path: ["value"] })
+    .nullable().optional(),
   paymentMode: z.enum(TEAM_PAYMENT_MODES),
   advancePaid: z.number().min(0).max(1_000_000).default(0),
   paymentReference: text(120),

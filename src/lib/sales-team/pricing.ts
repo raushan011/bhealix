@@ -64,6 +64,14 @@ export const DEFAULT_CATALOGUE: CatalogueItem[] = [
 
 export const FREE_BAG_ID = "free-bag";
 
+/** How many of one item an executive may give away free on an order — a single or a double. */
+export const MAX_FREE_QUANTITY = 2;
+
+export const CUSTOM_DISCOUNT_TYPES = ["Percent", "Amount"] as const;
+export type CustomDiscountType = (typeof CUSTOM_DISCOUNT_TYPES)[number];
+/** A discount the executive types on top of the handbook's: a % of the running price, or rupees off. */
+export type CustomDiscount = { type: CustomDiscountType; value: number };
+
 const rupee = (value: number) => Math.round(value);
 
 export type QuoteInput = {
@@ -74,9 +82,14 @@ export type QuoteInput = {
   /** The executive has released the extra discount. Ignored where it is not allowed. */
   extra?: boolean;
   freeBag?: boolean;
+  /** Products or Testing Kits given away — one or two of each, at no charge. */
+  freeItems?: readonly { catalogueId: string; quantity: number }[];
+  /** An extra discount the executive typed, taken last, on whatever the handbook left. */
+  customDiscount?: CustomDiscount | null;
 };
 
-export type QuoteLine = { catalogueId: string; title: string; sku?: string; kind: CatalogueKind; quantity: number; mrp: number };
+/** A line of the order. `free` lines are given away: their MRP is kept for the record but they cost nothing. */
+export type QuoteLine = { catalogueId: string; title: string; sku?: string; kind: CatalogueKind; quantity: number; mrp: number; free?: boolean };
 
 export type Quote = {
   lines: QuoteLine[];
@@ -90,6 +103,10 @@ export type Quote = {
   extraAllowed: boolean;
   extraReason?: string;
   extraOff: number;
+  /** The executive's own discount, in rupees. */
+  customOff: number;
+  /** The MRP of everything given away free — not counted in `mrpTotal` or `discount`. */
+  freeValue: number;
   total: number;
   /** MRP total less total — the discount written onto the order. */
   discount: number;
@@ -107,7 +124,9 @@ export type Quote = {
  * and rounded to the rupee as the price sheets are. Kits are their fixed offer
  * price, the Testing Kit its MRP. Then ₹50 off the order on Prepaid, then — only
  * if released, and only on the combo and Kit part — the extra 10% on the running
- * price, held above each Kit's floor.
+ * price, held above each Kit's floor. Last, any discount the executive typed —
+ * a % of what is left, or rupees off it — never taking the order below zero.
+ * Free items are listed at no charge and change none of the figures.
  */
 export function quote(input: QuoteInput): Quote {
   const byId = new Map(input.catalogue.map(item => [item.id, item]));
@@ -162,20 +181,45 @@ export function quote(input: QuoteInput): Quote {
     warnings.push(extraReason);
   }
 
-  if (input.freeBag) {
-    const bag = byId.get(FREE_BAG_ID);
-    if (bag?.active) lines.push({ catalogueId: bag.id, title: bag.name, sku: bag.sku, kind: "Gift", quantity: 1, mrp: 0 });
+  const running = Math.max(0, offerTotal - prepaidOff - extraOff);
+  let customOff = 0;
+  const custom = input.customDiscount;
+  if (custom && Number(custom.value) > 0 && running > 0) {
+    customOff = custom.type === "Percent"
+      ? rupee((running * Math.min(100, Number(custom.value))) / 100)
+      : Math.min(running, rupee(Number(custom.value)));
   }
 
-  const total = Math.max(0, offerTotal - prepaidOff - extraOff);
+  // Free products and Testing Kits: one or two of each, never a Kit or a gift.
+  const freeMerged = new Map<string, number>();
+  for (const row of input.freeItems ?? []) {
+    const item = byId.get(row.catalogueId);
+    const quantity = Math.max(0, Math.round(Number(row.quantity) || 0));
+    if (!item || !item.active || (item.kind !== "Product" && item.kind !== "Testing kit") || !quantity) continue;
+    freeMerged.set(item.id, Math.min(MAX_FREE_QUANTITY, (freeMerged.get(item.id) ?? 0) + quantity));
+  }
+  let freeValue = 0;
+  for (const [id, quantity] of freeMerged) {
+    const item = byId.get(id)!;
+    freeValue += item.mrp * quantity;
+    lines.push({ catalogueId: id, title: item.name, sku: item.sku, kind: item.kind, quantity, mrp: item.mrp, free: true });
+  }
+
+  if (input.freeBag) {
+    const bag = byId.get(FREE_BAG_ID);
+    if (bag?.active) lines.push({ catalogueId: bag.id, title: bag.name, sku: bag.sku, kind: "Gift", quantity: 1, mrp: 0, free: true });
+  }
+
+  const total = Math.max(0, running - customOff);
+  const paid = products.length + kits.length + testing.length;
   const label = kits.length && !products.length && !testing.length ? "Kit"
     : combo ? `Combo (${products.length} products)`
     : products.length && !kits.length && !testing.length ? "Single product"
     : testing.length && !products.length && !kits.length ? "Testing kit"
-    : lines.length ? "Mixed order" : "Empty";
+    : paid ? "Mixed order" : "Empty";
 
   return {
-    lines, label, mrpTotal, offerTotal, prepaidOff, extraAllowed, extraReason, extraOff, total,
+    lines, label, mrpTotal, offerTotal, prepaidOff, extraAllowed, extraReason, extraOff, customOff, freeValue, total,
     discount: Math.max(0, mrpTotal - total), partialAdvance: input.rules.partialAdvance, warnings
   };
 }

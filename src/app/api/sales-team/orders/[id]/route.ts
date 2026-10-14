@@ -128,7 +128,7 @@ export async function PATCH(request: Request, { params }: Params) {
     if (input.action === "edit") {
       const mode = input.order.paymentMode as TeamPaymentMode;
       const { quote: handbook, priced, lines: pricedLines } = priceTeamOrder(await loadTeamSettings(), { ...input.order, paymentMode: mode });
-      if (!pricedLines.some(line => line.mrp > 0)) return badRequest("Add at least one product from the catalogue.");
+      if (!pricedLines.some(line => !line.free && line.mrp > 0)) return badRequest("Add at least one product from the catalogue.");
       const advance = mode === "Prepaid" ? priced.total : mode === "COD" ? 0 : input.order.advancePaid;
       const problem = paymentProblem(mode, priced.total, advance);
       if (problem) return badRequest(problem);
@@ -142,7 +142,9 @@ export async function PATCH(request: Request, { params }: Params) {
         items: pricedLines,
         pricing: {
           label: handbook.label, mrpTotal: handbook.mrpTotal, offerTotal: handbook.offerTotal, prepaidOff: handbook.prepaidOff,
-          extraOff: handbook.extraOff, extra: handbook.extraOff > 0, freeBag: Boolean(input.order.freeBag)
+          extraOff: handbook.extraOff, extra: handbook.extraOff > 0, freeBag: Boolean(input.order.freeBag),
+          customType: handbook.customOff ? input.order.customDiscount?.type : undefined, customValue: handbook.customOff ? input.order.customDiscount?.value : undefined,
+          customOff: handbook.customOff, freeValue: handbook.freeValue
         },
         totals: { gross: priced.gross, discount: priced.discount, paid: priced.total },
         paymentMode: mode,

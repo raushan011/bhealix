@@ -28,7 +28,7 @@ export type TeamOrderRow = {
   executiveName?: string;
   lead?: string | { _id: string; name: string; phone?: string; type?: string; city?: string } | null;
   customer: { name?: string; phone?: string; email?: string; address1?: string; address2?: string; city?: string; state?: string; pinCode?: string; country?: string };
-  items: Array<{ product?: string; variantId?: string; catalogueId?: string; mrp?: number; sku?: string; title: string; quantity: number; price?: number; gross?: number; otherDiscount?: number }>;
+  items: Array<{ product?: string; variantId?: string; catalogueId?: string; mrp?: number; sku?: string; title: string; quantity: number; price?: number; gross?: number; otherDiscount?: number; free?: boolean }>;
   totals: { gross: number; discount: number; paid: number };
   paymentMode: TeamPaymentMode;
   advancePaid?: number;
@@ -39,7 +39,8 @@ export type TeamOrderRow = {
   cancelledBy?: { name: string } | null;
   createdBy?: { name: string } | null;
   notes?: string;
-  pricing?: { label?: string; mrpTotal?: number; offerTotal?: number; prepaidOff?: number; extraOff?: number; extra?: boolean; freeBag?: boolean };
+  pricing?: { label?: string; mrpTotal?: number; offerTotal?: number; prepaidOff?: number; extraOff?: number; extra?: boolean; freeBag?: boolean;
+    customType?: "Percent" | "Amount"; customValue?: number; customOff?: number; freeValue?: number };
   rtoRisk?: { level?: "Low" | "Medium" | "High"; score?: number; reasons?: string[]; advice?: string };
   ndr?: Array<{ _id: string; action: "re-attempt" | "return"; deferredDate?: string; phone?: string; comments?: string; ok?: boolean; response?: string; at: string; byName?: string }>;
   shipment?: {

@@ -15,7 +15,7 @@ import { shiftDay, todayIso } from "@/lib/time";
 import { priceIncentive, rulesTable, teamOrderNo, type IncentiveRule, type TeamOrderChannel } from "./orders";
 import { canWriteOrders } from "./shopify-order";
 import { packagingOf, parcelFor, unitsIn, type PackagingRules } from "./packaging";
-import { catalogueOf, quote, rulesOf as pricingRulesOf, type CatalogueItem, type PricingRules, type Quote } from "./pricing";
+import { catalogueOf, quote, rulesOf as pricingRulesOf, type CatalogueItem, type CustomDiscount, type PricingRules, type Quote } from "./pricing";
 import { priceOrder, type PricedOrder, type TeamPaymentMode } from "./orders";
 import { fetchOrder, grantedScopes, type ShopifyConfig } from "@/lib/sales/shopify";
 import { SalesSettings } from "@/models/Sales";
@@ -592,16 +592,21 @@ export async function syncTeamShopify(limit = 150): Promise<{ checked: number; c
  */
 export function priceTeamOrder(
   settings: Pick<TeamSettings, "catalogue" | "pricing">,
-  input: { items: { catalogueId: string; quantity: number }[]; paymentMode: TeamPaymentMode; extraDiscount?: boolean; freeBag?: boolean }
-): { quote: Quote; priced: PricedOrder; lines: Array<PricedOrder["lines"][number] & { catalogueId: string; mrp: number }> } {
+  input: {
+    items: { catalogueId: string; quantity: number }[]; paymentMode: TeamPaymentMode; extraDiscount?: boolean; freeBag?: boolean;
+    freeItems?: { catalogueId: string; quantity: number }[]; customDiscount?: CustomDiscount | null;
+  }
+): { quote: Quote; priced: PricedOrder; lines: Array<PricedOrder["lines"][number] & { catalogueId: string; mrp: number; free: boolean }> } {
   const result = quote({
     catalogue: settings.catalogue, rules: settings.pricing, items: input.items,
-    paymentMode: input.paymentMode, extra: input.extraDiscount, freeBag: input.freeBag
+    paymentMode: input.paymentMode, extra: input.extraDiscount, freeBag: input.freeBag,
+    freeItems: input.freeItems, customDiscount: input.customDiscount
   });
-  const priced = priceOrder(result.lines.map(line => ({ title: line.title, sku: line.sku, quantity: line.quantity, price: line.mrp })), result.discount);
+  // A free line goes out at ₹0 — in the shop as on the invoice — so the discount is only ever on what is paid for.
+  const priced = priceOrder(result.lines.map(line => ({ title: line.title, sku: line.sku, quantity: line.quantity, price: line.free ? 0 : line.mrp })), result.discount);
   return {
     quote: result,
     priced,
-    lines: priced.lines.map((line, index) => ({ ...line, catalogueId: result.lines[index].catalogueId, mrp: result.lines[index].mrp }))
+    lines: priced.lines.map((line, index) => ({ ...line, catalogueId: result.lines[index].catalogueId, mrp: result.lines[index].mrp, free: Boolean(result.lines[index].free) }))
   };
 }

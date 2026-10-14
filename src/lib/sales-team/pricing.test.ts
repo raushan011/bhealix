@@ -97,3 +97,32 @@ describe("the free bag and the order as a whole", () => {
     expect([all.COD.total, all.Prepaid.total, all.Partial.total]).toEqual([1499, 1449, 1499]);
   });
 });
+
+describe("the executive's own discount", () => {
+  it("takes a percentage off what the handbook left", () => {
+    // Serum + sunscreen prepaid: ₹859, then 10% → ₹86 off.
+    const result = quote({ catalogue: DEFAULT_CATALOGUE, rules: DEFAULT_RULES, items: [one("serum"), one("sunscreen")], paymentMode: "Prepaid", customDiscount: { type: "Percent", value: 10 } });
+    expect(result).toMatchObject({ customOff: 86, total: 773 });
+  });
+
+  it("takes rupees off, on any payment mode, never below zero", () => {
+    const base = { catalogue: DEFAULT_CATALOGUE, rules: DEFAULT_RULES, items: [one("face-wash")], paymentMode: "COD" as const };
+    expect(quote({ ...base, customDiscount: { type: "Amount", value: 50 } })).toMatchObject({ customOff: 50, total: 269, discount: 130 });
+    expect(quote({ ...base, customDiscount: { type: "Amount", value: 5000 } }).total).toBe(0);
+  });
+});
+
+describe("free products", () => {
+  const base = { catalogue: DEFAULT_CATALOGUE, rules: DEFAULT_RULES, items: [one("serum")], paymentMode: "COD" as const };
+
+  it("adds a product or the Testing Kit at no charge, without changing the price", () => {
+    const result = quote({ ...base, freeItems: [one("sunscreen"), one("testing-kit", 2)] });
+    expect(result).toMatchObject({ total: 639, mrpTotal: 799, discount: 160, freeValue: 499 + 798, label: "Single product" });
+    expect(result.lines.filter(line => line.free).map(line => [line.catalogueId, line.quantity])).toEqual([["sunscreen", 1], ["testing-kit", 2]]);
+  });
+
+  it("gives at most two of an item, and never a Kit", () => {
+    const result = quote({ ...base, freeItems: [one("face-wash", 5), one("pigmentation-kit")] });
+    expect(result.lines.filter(line => line.free).map(line => [line.catalogueId, line.quantity])).toEqual([["face-wash", 2]]);
+  });
+});

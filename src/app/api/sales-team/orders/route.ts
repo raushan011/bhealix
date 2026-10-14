@@ -146,7 +146,7 @@ export async function POST(request: Request) {
     const mode = input.paymentMode as TeamPaymentMode;
     const settingsForPrice = await loadTeamSettings();
     const { quote: handbook, priced, lines: pricedLines } = priceTeamOrder(settingsForPrice, { ...input, paymentMode: mode });
-    if (!pricedLines.some(line => line.mrp > 0)) return badRequest("Add at least one product from the catalogue.");
+    if (!pricedLines.some(line => !line.free && line.mrp > 0)) return badRequest("Add at least one product from the catalogue.");
     const advance = mode === "Prepaid" ? priced.total : mode === "COD" ? 0 : input.advancePaid;
     const problem = paymentProblem(mode, priced.total, advance);
     if (problem) return badRequest(problem);
@@ -224,7 +224,9 @@ export async function POST(request: Request) {
       items: pricedLines,
       pricing: {
         label: handbook.label, mrpTotal: handbook.mrpTotal, offerTotal: handbook.offerTotal, prepaidOff: handbook.prepaidOff,
-        extraOff: handbook.extraOff, extra: handbook.extraOff > 0, freeBag: Boolean(input.freeBag)
+        extraOff: handbook.extraOff, extra: handbook.extraOff > 0, freeBag: Boolean(input.freeBag),
+        customType: handbook.customOff ? input.customDiscount?.type : undefined, customValue: handbook.customOff ? input.customDiscount?.value : undefined,
+        customOff: handbook.customOff, freeValue: handbook.freeValue
       },
       totals: { gross: priced.gross, discount: priced.discount, paid: priced.total },
       paymentMode: mode,

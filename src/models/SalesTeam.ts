@@ -43,7 +43,9 @@ const LineSchema = new Schema({
   /** Always zero; present so the booking code reads both kinds of order alike. */
   couponDiscount: { type: Number, default: 0 },
   /** This line's share of the order discount. */
-  otherDiscount: { type: Number, default: 0 }
+  otherDiscount: { type: Number, default: 0 },
+  /** Given away at no charge — the price is ₹0 and `mrp` says what it was worth. */
+  free: Boolean
 }, { _id: false });
 
 const SalesTeamOrderSchema = new Schema({
@@ -236,7 +238,13 @@ const SalesTeamOrderSchema = new Schema({
     prepaidOff: Number,
     extraOff: Number,
     extra: Boolean,
-    freeBag: Boolean
+    freeBag: Boolean,
+    /** The executive's own discount: how it was typed, and what it came to in rupees. */
+    customType: String,
+    customValue: Number,
+    customOff: Number,
+    /** The MRP of everything given away free. */
+    freeValue: Number
   },
 
   notes: String

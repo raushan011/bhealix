@@ -8,7 +8,9 @@ import {
   collectAmountOf, describeRule, formatRupees, incentiveAmountOf, PAYMENT_MODE_LABEL, paymentProblem,
   ruleFor, TEAM_PAYMENT_MODES, type IncentiveRule, type TeamPaymentMode
 } from "@/lib/sales-team/orders";
-import { DEFAULT_RULES, FREE_BAG_ID, quote, type CatalogueItem, type PricingRules } from "@/lib/sales-team/pricing";
+import {
+  DEFAULT_RULES, FREE_BAG_ID, MAX_FREE_QUANTITY, quote, type CatalogueItem, type CustomDiscountType, type PricingRules
+} from "@/lib/sales-team/pricing";
 import { call, INDIAN_STATES, messageOf, type TeamOrderRow } from "./shared";
 import { usePincodeLookup } from "@/components/ui/use-pincode";
 
@@ -23,7 +25,8 @@ const blankCustomer = { name: "", phone: "", email: "", address1: "", address2: 
  * Products come from the Sales Team Handbook's catalogue and are priced by its
  * rules (`lib/sales-team/pricing.ts`): the executive chooses what and how many,
  * the payment mode, and whether to release the extra discount where it is
- * allowed. They never type a price. The same function prices the order on the
+ * allowed. On top of that they may type a discount of their own, in % or rupees,
+ * and give away a product or Testing Kit — one or two — free. They never type a price. The same function prices the order on the
  * server before it is saved (§4.1, §4.2), so the figure read out to the customer
  * is the figure stored.
  *
@@ -51,6 +54,9 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [extra, setExtra] = useState(false);
   const [freeBag, setFreeBag] = useState(false);
+  const [freeQuantities, setFreeQuantities] = useState<Record<string, number>>({});
+  const [customType, setCustomType] = useState<CustomDiscountType>("Percent");
+  const [customValue, setCustomValue] = useState("");
   const [mode, setMode] = useState<TeamPaymentMode>("COD");
   const [advance, setAdvance] = useState(DEFAULT_RULES.partialAdvance);
   const [reference, setReference] = useState("");
@@ -80,10 +86,18 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
         if (existing) {
           setCustomer({ ...blankCustomer, ...Object.fromEntries(Object.entries(existing.customer).map(([key, value]) => [key, value ?? ""])) });
           const picked: Record<string, number> = {};
+          const given: Record<string, number> = {};
           for (const item of existing.items) {
-            if (item.catalogueId && item.catalogueId !== FREE_BAG_ID) picked[item.catalogueId] = (picked[item.catalogueId] ?? 0) + item.quantity;
+            if (!item.catalogueId || item.catalogueId === FREE_BAG_ID) continue;
+            const into = item.free ? given : picked;
+            into[item.catalogueId] = (into[item.catalogueId] ?? 0) + item.quantity;
           }
           setQuantities(picked);
+          setFreeQuantities(given);
+          if (existing.pricing?.customOff && existing.pricing.customType) {
+            setCustomType(existing.pricing.customType);
+            setCustomValue(String(existing.pricing.customValue ?? ""));
+          }
           setFreeBag(existing.items.some(item => item.catalogueId === FREE_BAG_ID));
           setExtra(Boolean(existing.pricing?.extra));
           setMode(existing.paymentMode);
@@ -100,11 +114,15 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
   }, [admin, leadId, existing]);
 
   const items = useMemo(() => Object.entries(quantities).filter(([, quantity]) => quantity > 0).map(([catalogueId, quantity]) => ({ catalogueId, quantity })), [quantities]);
-  const priced = useMemo(() => quote({ catalogue, rules: pricing, items, paymentMode: mode, extra, freeBag }), [catalogue, pricing, items, mode, extra, freeBag]);
+  const freeItems = useMemo(() => Object.entries(freeQuantities).filter(([, quantity]) => quantity > 0).map(([catalogueId, quantity]) => ({ catalogueId, quantity })), [freeQuantities]);
+  const customDiscount = useMemo(() => Number(customValue) > 0 ? { type: customType, value: Number(customValue) } : null, [customType, customValue]);
+  const priced = useMemo(() => quote({ catalogue, rules: pricing, items, paymentMode: mode, extra, freeBag, freeItems, customDiscount }),
+    [catalogue, pricing, items, mode, extra, freeBag, freeItems, customDiscount]);
   // What the same basket costs in each mode, for the executive to read out.
   const byMode = useMemo(() => Object.fromEntries(TEAM_PAYMENT_MODES.map(value =>
-    [value, quote({ catalogue, rules: pricing, items, paymentMode: value, extra: value === "COD" ? false : extra, freeBag }).total])) as Record<TeamPaymentMode, number>,
-  [catalogue, pricing, items, extra, freeBag]);
+    [value, quote({ catalogue, rules: pricing, items, paymentMode: value, extra: value === "COD" ? false : extra, freeBag, freeItems, customDiscount }).total])) as Record<TeamPaymentMode, number>,
+  [catalogue, pricing, items, extra, freeBag, freeItems, customDiscount]);
+  const customProblem = customType === "Percent" && Number(customValue) > 100 ? "A percentage cannot be more than 100." : "";
 
   const effectiveAdvance = mode === "Prepaid" ? priced.total : mode === "COD" ? 0 : advance;
   const collect = collectAmountOf(mode, priced.total, effectiveAdvance);
@@ -183,10 +201,11 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
     setError("");
     if (admin && !existing && !executive) { setError("Choose the sales executive this order belongs to."); return; }
     if (!items.length) { setError("Add at least one product."); return; }
+    if (customProblem) { setError(customProblem); return; }
     if (problem) { setError(problem); return; }
 
     const order = {
-      customer, items, extraDiscount: extra && priced.extraAllowed, freeBag,
+      customer, items, extraDiscount: extra && priced.extraAllowed, freeBag, freeItems, customDiscount,
       paymentMode: mode, advancePaid: Number(effectiveAdvance) || 0, paymentReference: reference, notes
     };
 
@@ -211,8 +230,9 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
   if (loading) return <Spinner label="Loading the price list…" />;
 
   const sellable = catalogue.filter(item => item.kind !== "Gift");
+  const givable = catalogue.filter(item => item.active && (item.kind === "Product" || item.kind === "Testing kit"));
   const bag = catalogue.find(item => item.id === FREE_BAG_ID);
-  const blocked = (Boolean(problem) && priced.total > 0) || (Boolean(refusal) && !existing) || !items.length;
+  const blocked = (Boolean(problem) && priced.total > 0) || (Boolean(refusal) && !existing) || !items.length || Boolean(customProblem);
 
   return <form onSubmit={submit} className="grid gap-5 pb-20 lg:grid-cols-[1fr_340px] lg:items-start lg:pb-0">
     <div className="space-y-5">
@@ -287,7 +307,52 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
           </label>
         )}
         {priced.warnings.map(warning => <Notice key={warning} tone="warning">{warning}</Notice>)}
+
+        {items.length > 0 && (
+          <div className={`space-y-2 rounded-[12px] border px-3 py-3 ${priced.customOff ? "border-[var(--warn-line)] bg-[var(--warn-bg)]" : "border-[var(--line-2)]"}`}>
+            <p className="text-sm font-semibold">Extra discount{priced.customOff ? ` (−${formatRupees(priced.customOff)})` : ""}</p>
+            <div className="flex items-center gap-2">
+              <div className="inline-flex shrink-0 overflow-hidden rounded-[10px] border border-[var(--line-2)]" role="group" aria-label="Discount in">
+                {(["Percent", "Amount"] as const).map(type => (
+                  <button key={type} type="button" onClick={() => setCustomType(type)} aria-pressed={customType === type}
+                    className={`tap px-3 text-sm font-semibold ${customType === type ? "bg-[var(--brand)] text-[var(--on-brand)]" : ""}`}>{type === "Percent" ? "%" : "₹"}</button>
+                ))}
+              </div>
+              <input className="input min-w-0 flex-1 sm:max-w-[160px]" type="number" inputMode="decimal" min={0} max={customType === "Percent" ? 100 : undefined} step="1"
+                aria-label={customType === "Percent" ? "Discount in per cent" : "Discount in rupees"} placeholder="0"
+                value={customValue} onChange={event => setCustomValue(event.target.value.replace(/^-/, ""))} />
+              {customValue && <button type="button" className="text-xs font-semibold text-[var(--brand)]" onClick={() => setCustomValue("")}>Clear</button>}
+            </div>
+            <p className={`text-xs ${customProblem ? "text-[var(--danger-ink)]" : "text-[var(--muted)]"}`}>{customProblem || "Taken off after the handbook's offer, prepaid and extra discounts."}</p>
+          </div>
+        )}
       </Card>
+
+      {items.length > 0 && givable.length > 0 && (
+        <Card className="space-y-3 p-4 sm:p-5">
+          <div className="flex items-baseline justify-between">
+            <h2 className="flex items-center gap-2 text-[15px] font-semibold"><Gift size={16} className="text-[var(--brand)]" />Free products</h2>
+            <span className="text-xs text-[var(--muted)]">Up to {MAX_FREE_QUANTITY} of each, ₹0</span>
+          </div>
+          <div className="divide-y divide-[var(--line)] rounded-[12px] border border-[var(--line)]">
+            {givable.map(item => {
+              const given = freeQuantities[item.id] ?? 0;
+              return <div key={item.id} className={`flex items-center gap-3 px-3 py-2.5 ${given ? "bg-[var(--ok-bg)]" : ""}`}>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">{item.name}</p>
+                  <p className="text-xs text-[var(--muted)]">MRP {formatRupees(item.mrp)}{given ? ` · ${formatRupees(item.mrp * given)} free` : ""}</p>
+                </div>
+                <div className="inline-flex shrink-0 overflow-hidden rounded-[10px] border border-[var(--line-2)]" role="group" aria-label={`Free ${item.name}`}>
+                  {Array.from({ length: MAX_FREE_QUANTITY + 1 }, (_, count) => (
+                    <button key={count} type="button" aria-pressed={given === count} onClick={() => setFreeQuantities(current => ({ ...current, [item.id]: count }))}
+                      className={`tap w-10 text-sm font-semibold tabular-nums ${given === count ? "bg-[var(--brand)] text-[var(--on-brand)]" : ""}`}>{count}</button>
+                  ))}
+                </div>
+              </div>;
+            })}
+          </div>
+        </Card>
+      )}
 
       <Card className="space-y-4 p-4 sm:p-5">
         <h2 className="text-[15px] font-semibold">Payment</h2>
@@ -354,6 +419,8 @@ export function OrderForm({ admin, basePath, leadId, existing }: {
       {priced.mrpTotal > priced.offerTotal && <Row label={`${priced.label} offer`} value={`− ${formatRupees(priced.mrpTotal - priced.offerTotal)}`} />}
       {priced.prepaidOff > 0 && <Row label="Prepaid" value={`− ${formatRupees(priced.prepaidOff)}`} />}
       {priced.extraOff > 0 && <Row label={`Extra ${pricing.extraPct}%`} value={`− ${formatRupees(priced.extraOff)}`} />}
+      {priced.customOff > 0 && <Row label={`Extra discount${customType === "Percent" ? ` ${Number(customValue)}%` : ""}`} value={`− ${formatRupees(priced.customOff)}`} />}
+      {priced.lines.filter(line => line.free && line.kind !== "Gift").map(line => <Row key={line.catalogueId} label={`Free: ${line.title} × ${line.quantity}`} value="₹0" />)}
       {freeBag && <Row label="Free bag" value="₹0" />}
       <Row label="Customer pays" value={formatRupees(priced.total)} strong />
       <div className="border-t border-[var(--line)] pt-3" />
