@@ -126,6 +126,13 @@ export type ProcessState = (typeof PROCESS_STATES)[number];
 export const DEFAULT_PARCEL = { weight: 0.5, length: 20, breadth: 15, height: 8 } as const;
 
 /**
+ * GST, in percent, on everything the shop sells — and already inside every
+ * price, because an MRP is tax-inclusive. Sent with each line so Shiprocket's
+ * invoice splits the tax out instead of printing none.
+ */
+export const GST_RATE = 18;
+
+/**
  * How many orders one press may push at Shiprocket.
  *
  * Deliberately small, because of the arithmetic behind each one. An order that

@@ -167,7 +167,7 @@ describe("buildAdhocOrder", () => {
 
   it("prices each line at what was actually paid for it, per unit", () => {
     expect(built().order_items).toEqual([
-      { name: "Skin pigmentation kit", sku: "KIT-PIG-01", units: 1, selling_price: 1499 }
+      { name: "Skin pigmentation kit", sku: "KIT-PIG-01", units: 1, selling_price: 1499, tax: 18 }
     ]);
     expect(built().sub_total).toBe(1499);
   });
@@ -177,7 +177,7 @@ describe("buildAdhocOrder", () => {
       order: order({ items: [{ title: "Kit", quantity: 2, gross: 4598, couponDiscount: 1600, otherDiscount: 0 }] }),
       address: addressOf(order()), parcel: normaliseParcel(null), pickupLocation: "Warehouse"
     });
-    expect(payload.order_items[0]).toEqual({ name: "Kit", sku: "LINE-1", units: 2, selling_price: 1499 });
+    expect(payload.order_items[0]).toEqual({ name: "Kit", sku: "LINE-1", units: 2, selling_price: 1499, tax: 18 });
   });
 
   it("carries the parcel and the payment mode", () => {

@@ -1,4 +1,4 @@
-import { DEFAULT_PARCEL, type CourierRule, type ProcessState } from "./constants";
+import { DEFAULT_PARCEL, GST_RATE, type CourierRule, type ProcessState } from "./constants";
 
 /**
  * Booking a parcel: everything that can be decided without talking to anybody.
@@ -259,7 +259,8 @@ export type AdhocOrderPayload = {
   billing_email?: string;
   billing_phone: string;
   shipping_is_billing: true;
-  order_items: { name: string; sku: string; units: number; selling_price: number }[];
+  /** `selling_price` includes the tax; `tax` is its rate in percent, which the invoice splits out. */
+  order_items: { name: string; sku: string; units: number; selling_price: number; tax: number }[];
   payment_method: "COD" | "Prepaid";
   sub_total: number;
   /**
@@ -317,7 +318,8 @@ export function buildAdhocOrder(
       name: text(item.title) || "Item",
       sku: text(item.sku) || `LINE-${index + 1}`,
       units,
-      selling_price: Math.round((net / units) * 100) / 100
+      selling_price: Math.round((net / units) * 100) / 100,
+      tax: GST_RATE
     };
   });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildShopifyOrder, canWriteOrders, executiveTag, shopifyAdminOrderUrl, TEAM_DISCOUNT_CODE, type ShopifyOrderInput } from "./shopify-order";
+import { buildShopifyOrder, canWriteOrders, executiveTag, lineTaxes, shopifyAdminOrderUrl, TEAM_DISCOUNT_CODE, type ShopifyOrderInput } from "./shopify-order";
 
 const input = (over: Partial<ShopifyOrderInput> = {}): ShopifyOrderInput => ({
   ref: "BHX-SE-00042",
@@ -25,11 +25,25 @@ describe("buildShopifyOrder", () => {
   });
 
   it("names a variant where there is one, so stock comes off the shop, and types the rest", () => {
-    expect(order().line_items).toEqual([
+    expect(order().line_items).toMatchObject([
       { variant_id: 4455, quantity: 1, price: "1500.00" },
       { title: "Custom serum", sku: undefined, quantity: 2, price: "250.00", requires_shipping: true, taxable: true }
     ]);
     expect(order().inventory_behaviour).toBe("decrement_obeying_policy");
+  });
+
+  it("carries 18% GST inside the price, on what was charged after the discount", () => {
+    // ₹2,000 of lines, ₹100 off: ₹75 off the kit and ₹25 off the serums.
+    // Without these Shiprocket's invoice shows no tax at all.
+    expect(order().taxes_included).toBe(true);
+    expect(order().line_items.map(line => line.tax_lines)).toEqual([
+      [{ title: "GST", rate: 0.18, price: "217.37" }],
+      [{ title: "GST", rate: 0.18, price: "72.46" }]
+    ]);
+  });
+
+  it("puts no tax on a free line", () => {
+    expect(lineTaxes([{ quantity: 1, price: 1180 }, { quantity: 1, price: 0 }], 0)).toEqual([180, 0]);
   });
 
   it("files the discount under the team's own code, which attribution never claims", () => {

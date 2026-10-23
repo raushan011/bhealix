@@ -1,3 +1,4 @@
+import { GST_RATE } from "@/lib/sales/constants";
 import { collectAmountOf, money, PAYMENT_MODE_LABEL, type TeamPaymentMode } from "./orders";
 
 /**
@@ -45,6 +46,31 @@ const split = (name: string) => {
 
 const amount = (value: number) => money(value).toFixed(2);
 
+/** GST on everything the team sells, already inside the price — an MRP is tax-inclusive. */
+export const TEAM_GST_RATE = GST_RATE;
+
+/**
+ * The GST inside each line, after its share of the order's discount.
+ *
+ * Shopify does not work tax out for an order written through the API, so
+ * without this every team order reaches Shiprocket — and its invoice — with no
+ * GST on it at all. The discount is shared across the lines by value (the last
+ * line takes the rounding), because tax is owed on what was charged, not on the
+ * list price.
+ */
+export function lineTaxes(lines: { quantity: number; price: number }[], discount: number, rate = TEAM_GST_RATE): number[] {
+  const values = lines.map(line => money(line.quantity * line.price));
+  const gross = values.reduce((sum, value) => sum + value, 0);
+  const off = Math.min(Math.max(0, discount), gross);
+  let shared = 0;
+  return values.map((value, index) => {
+    const share = index === values.length - 1 ? money(off - shared) : gross > 0 ? money((off * value) / gross) : 0;
+    shared = money(shared + share);
+    const net = Math.max(0, value - share);
+    return money(net - net / (1 + rate / 100));
+  });
+}
+
 /**
  * The `orders.json` body.
  *
@@ -82,11 +108,15 @@ export function buildShopifyOrder(input: ShopifyOrderInput) {
     ...(atDoor > 0 ? [{ kind: "sale", status: "pending", amount: amount(atDoor), gateway: "Cash on Delivery (COD)" }] : [])
   ];
 
+  const taxes = lineTaxes(input.lines, input.discount);
+  const taxLines = (index: number) => [{ title: "GST", rate: TEAM_GST_RATE / 100, price: amount(taxes[index]) }];
+
   return {
     order: {
-      line_items: input.lines.map(line => line.variantId
-        ? { variant_id: Number(line.variantId), quantity: line.quantity, price: amount(line.price) }
-        : { title: line.title, sku: line.sku || undefined, quantity: line.quantity, price: amount(line.price), requires_shipping: true, taxable: true }),
+      line_items: input.lines.map((line, index) => line.variantId
+        ? { variant_id: Number(line.variantId), quantity: line.quantity, price: amount(line.price), taxable: true, tax_lines: taxLines(index) }
+        : { title: line.title, sku: line.sku || undefined, quantity: line.quantity, price: amount(line.price), requires_shipping: true, taxable: true, tax_lines: taxLines(index) }),
+      taxes_included: true,
       email: input.customer.email || undefined,
       shipping_address: address,
       billing_address: address,
