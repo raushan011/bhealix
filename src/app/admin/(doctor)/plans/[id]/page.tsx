@@ -9,6 +9,7 @@ import { User } from "@/models/User";
 import { Badge, Card, LinkButton, PageTitle, Stat, statusTone } from "@/components/ui/kit";
 import { PlanAssignment } from "@/components/plans/plan-assignment";
 import { DeletePlanButton } from "@/components/plans/delete-plan-button";
+import { DuplicatePlanButton } from "@/components/plans/duplicate-plan-button";
 import { OBJECT_ID } from "@/lib/api";
 import { formatDate, formatDuration, toDisplayTime, WEEKDAYS } from "@/lib/time";
 import { directionsUrl, routeUrl } from "@/lib/maps";
@@ -69,6 +70,7 @@ export default async function PlanDetail({ params }: { params: Promise<{ id: str
         <LinkButton tone="secondary" href={`/admin/plans/new?from=${plan._id}`}>
           <Pencil size={15} />{isDraft ? "Edit draft" : "Edit plan"}
         </LinkButton>
+        <DuplicatePlanButton planId={String(plan._id)} planName={plan.name} />
         <DeletePlanButton planId={String(plan._id)} planName={plan.name} redirectTo="/admin/plans" />
       </>} />
 
