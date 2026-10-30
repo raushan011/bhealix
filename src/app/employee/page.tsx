@@ -18,7 +18,7 @@ import { loadRounds } from "@/lib/rounds-load";
 export const dynamic = "force-dynamic";
 
 type VisitDoc = {
-  _id: unknown; plannedStart?: string; status: string; routePlan?: unknown;
+  _id: unknown; plannedStart?: string; status: string; routePlan?: unknown; plannedDate?: Date;
   doctor?: {
     _id: unknown; name?: string; clinicName?: string; area?: string; city?: string;
     phones?: string[]; fullAddress?: string; location?: { coordinates?: number[] }; callSchedule?: EditableWindow[];
@@ -56,10 +56,19 @@ export default async function TodayPage() {
   const horizon = endOfDay(shiftDay(todayIso(), 3));
   const lookback = startOfDay(shiftDay(todayIso(), -7));
 
-  const [visits, plan, upcoming, followUps, dueBills, rounds] = await Promise.all([
+  const [todaysVisits, carriedVisits, plan, upcoming, followUps, dueBills, rounds] = await Promise.all([
     Visit.find({ employee: session.userId, plannedDate: today })
       .populate("doctor", "name clinicName area city phones fullAddress location callSchedule")
       .sort({ plannedStart: 1 }).lean() as unknown as Promise<VisitDoc[]>,
+    // A plan too long for one day (20 doctors, say) is not lost at midnight: the
+    // stops still waiting from earlier days carry over until they are done.
+    Visit.find({
+      employee: session.userId, routePlan: { $ne: null },
+      status: { $in: ["Planned", "In progress"] },
+      plannedDate: { $gte: startOfDay(shiftDay(todayIso(), -30)), $lt: today.$gte }
+    })
+      .populate("doctor", "name clinicName area city phones fullAddress location callSchedule")
+      .sort({ plannedDate: 1, plannedStart: 1 }).lean() as unknown as Promise<VisitDoc[]>,
     RoutePlan.findOne({ assignedTo: session.userId, date: today })
       .select("name totalDistanceKm stops").lean() as Promise<PlanDoc | null>,
     // Plans for later days are shown here too, so a route assigned today for
@@ -82,6 +91,9 @@ export default async function TodayPage() {
     loadRounds({ day: todayIso(), employeeId: session.userId })
   ]);
   const round = rounds[0];
+  // Carried-over stops lead the list: they are the oldest work.
+  const visits = [...carriedVisits, ...todaysVisits];
+  const carriedIds = new Set(carriedVisits.map(visit => String(visit._id)));
 
   /*
    * One reminder per doctor, the earliest. Three visits that each promised a
@@ -253,6 +265,7 @@ export default async function TodayPage() {
                       nothing else creates one, so there is no second field to
                       keep in step with this. */}
                   {!visit.routePlan && <span className="text-[var(--muted)]"> · unplanned</span>}
+                  {carriedIds.has(String(visit._id)) && <span className="text-[var(--warn-ink)]"> · carried over</span>}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
