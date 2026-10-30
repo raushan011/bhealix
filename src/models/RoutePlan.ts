@@ -7,7 +7,9 @@ const StopSchema = new Schema({
   plannedStart: String,           // "14:00" — when the meeting should begin
   plannedEnd: String,
   withinCallTime: { type: Boolean, default: true },
-  timingUnknown: { type: Boolean, default: false }
+  timingUnknown: { type: Boolean, default: false },
+  // Note on this clinic for this route ("call first", "ask for Dr. Rao").
+  remarks: { type: String, maxlength: 500 }
 }, { _id: false });
 
 /**

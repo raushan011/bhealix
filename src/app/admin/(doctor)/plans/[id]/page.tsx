@@ -9,6 +9,7 @@ import { User } from "@/models/User";
 import { Badge, Card, LinkButton, PageTitle, Stat, statusTone } from "@/components/ui/kit";
 import { PlanAssignment } from "@/components/plans/plan-assignment";
 import { DeletePlanButton } from "@/components/plans/delete-plan-button";
+import { StopRemarks } from "@/components/plans/stop-remarks";
 import { DuplicatePlanButton } from "@/components/plans/duplicate-plan-button";
 import { OBJECT_ID } from "@/lib/api";
 import { formatDate, formatDuration, toDisplayTime, WEEKDAYS } from "@/lib/time";
@@ -18,7 +19,7 @@ export const dynamic = "force-dynamic";
 
 type Stop = {
   sequence: number; distanceFromPreviousKm: number; plannedStart: string; plannedEnd: string;
-  withinCallTime: boolean; timingUnknown: boolean;
+  withinCallTime: boolean; timingUnknown: boolean; remarks?: string;
   doctor?: {
     _id: unknown; name?: string; clinicName?: string; area?: string; city?: string;
     phones?: string[]; location?: { coordinates?: number[] };
@@ -107,9 +108,17 @@ export default async function PlanDetail({ params }: { params: Promise<{ id: str
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold">{stop.doctor?.name ?? "Doctor removed"}</p>
               <p className="truncate text-xs text-[var(--muted)]">{[stop.doctor?.clinicName, stop.doctor?.area, stop.doctor?.city].filter(Boolean).join(" · ") || "—"}</p>
-              {stop.doctor?.phones?.[0] && (
-                <p className="mt-0.5 flex items-center gap-1 text-xs text-[var(--ink-2)]"><Phone size={11} />{stop.doctor.phones[0]}</p>
+              {!!stop.doctor?.phones?.length && (
+                <div className="mt-1.5 flex flex-wrap gap-2">
+                  {stop.doctor.phones.map(phone => (
+                    <a key={phone} href={`tel:${phone}`} aria-label={`Call ${stop.doctor?.name ?? "clinic"} on ${phone}`}
+                      className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-[var(--line-2)] px-3 text-xs font-semibold text-[var(--brand)] hover:bg-[var(--brand-soft)]">
+                      <Phone size={12} />Call {phone}
+                    </a>
+                  ))}
+                </div>
               )}
+              {stop.doctor && <StopRemarks planId={String(plan._id)} doctorId={String(stop.doctor._id)} initial={stop.remarks} />}
               {!stop.withinCallTime && <p className="mt-0.5 text-xs font-medium text-[var(--warn-ink)]">Outside the doctor&apos;s call window</p>}
               {stop.timingUnknown && <p className="mt-0.5 text-xs text-[var(--muted)]">No call time recorded</p>}
             </div>

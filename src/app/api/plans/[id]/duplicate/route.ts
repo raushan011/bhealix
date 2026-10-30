@@ -15,7 +15,7 @@ const duplicateSchema = z.object({
 type StoredPlan = {
   name: string; startTime?: string; visitMinutes?: number; assignedTo?: unknown;
   origin?: { kind: "location" | "home" | "custom"; label: string; location: { coordinates: number[] } };
-  stops: Array<{ doctor: unknown; sequence: number }>;
+  stops: Array<{ doctor: unknown; sequence: number; remarks?: string }>;
 };
 
 /**
@@ -44,6 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       ? { kind: source.origin.kind, label: source.origin.label,
         longitude: source.origin.location.coordinates[0], latitude: source.origin.location.coordinates[1] }
       : { kind: "doctor", doctorId: doctorIds[0] };
+    const remarksByDoctor = new Map(ordered.filter(stop => stop.remarks).map(stop => [String(stop.doctor), stop.remarks!]));
     const assignedTo = source.assignedTo ? String(source.assignedTo) : undefined;
 
     const created: string[] = [];
@@ -69,7 +70,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           plannedStart: toClock(stop.startMinutes),
           plannedEnd: toClock(stop.endMinutes),
           withinCallTime: stop.withinCallTime,
-          timingUnknown: stop.timingUnknown
+          timingUnknown: stop.timingUnknown,
+          remarks: remarksByDoctor.get(stop.id)
         })),
         totalDistanceKm: result.totalDistanceKm,
         totalTravelMinutes: result.totalTravelMinutes,

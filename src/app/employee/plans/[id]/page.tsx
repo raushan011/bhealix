@@ -6,6 +6,7 @@ import { connectDb } from "@/lib/db/mongoose";
 import { RoutePlan } from "@/models/RoutePlan";
 import { Visit } from "@/models/Visit";
 import { Badge, Card, PageTitle, Stat, statusTone } from "@/components/ui/kit";
+import { StopRemarks } from "@/components/plans/stop-remarks";
 import { OBJECT_ID } from "@/lib/api";
 import { directionsUrl, routeUrl } from "@/lib/maps";
 import { formatDate, formatDuration, toDisplayTime, WEEKDAYS } from "@/lib/time";
@@ -13,7 +14,7 @@ import { formatDate, formatDuration, toDisplayTime, WEEKDAYS } from "@/lib/time"
 export const dynamic = "force-dynamic";
 
 type Stop = {
-  sequence: number; distanceFromPreviousKm: number; plannedStart: string;
+  sequence: number; distanceFromPreviousKm: number; plannedStart: string; remarks?: string;
   withinCallTime: boolean; timingUnknown: boolean;
   doctor?: {
     _id: unknown; name?: string; clinicName?: string; area?: string; city?: string;
@@ -92,6 +93,7 @@ export default async function MyPlanDetail({ params }: { params: Promise<{ id: s
                   <span className="text-[var(--muted)]">· {stop.sequence === 1 ? "start" : `${stop.distanceFromPreviousKm} km`}</span>
                 </p>
                 {stop.timingUnknown && <p className="mt-0.5 text-xs text-[var(--muted)]">Call time not recorded — confirm on the visit</p>}
+                {stop.doctor && <StopRemarks planId={String(plan._id)} doctorId={String(stop.doctor._id)} initial={stop.remarks} />}
               </div>
               {visit && <Badge tone={statusTone(visit.status)}>{visit.status}</Badge>}
             </div>
@@ -109,7 +111,7 @@ export default async function MyPlanDetail({ params }: { params: Promise<{ id: s
               )}
               {stop.doctor?.phones?.[0] && (
                 <a href={`tel:${stop.doctor.phones[0]}`} aria-label={`Call ${stop.doctor.name ?? "doctor"}`}
-                  className="tap grid w-12 place-items-center rounded-[10px] border border-[var(--line-2)]"><Phone size={16} /></a>
+                  className="tap flex items-center justify-center gap-1.5 rounded-[10px] border border-[var(--line-2)] px-3 text-sm font-semibold text-[var(--brand)]"><Phone size={16} />Call</a>
               )}
               {maps && (
                 <a href={maps} target="_blank" rel="noreferrer" aria-label={`Navigate to ${stop.doctor?.name ?? "this stop"}`}

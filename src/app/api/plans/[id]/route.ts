@@ -51,6 +51,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       location: { type: "Point", coordinates: [input.origin.longitude, input.origin.latitude] }
     } : undefined;
 
+    // Remarks belong to the clinic, so they survive a rework of the route.
+    const remarksByDoctor = new Map<string, string>(
+      (plan.stops as Array<{ doctor: unknown; remarks?: string }>)
+        .filter(stop => stop.remarks).map(stop => [String(stop.doctor), stop.remarks!])
+    );
+
     plan.set({
       name: input.name,
       date,
@@ -64,7 +70,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         plannedStart: toClock(stop.startMinutes),
         plannedEnd: toClock(stop.endMinutes),
         withinCallTime: stop.withinCallTime,
-        timingUnknown: stop.timingUnknown
+        timingUnknown: stop.timingUnknown,
+        remarks: remarksByDoctor.get(stop.id)
       })),
       totalDistanceKm: result.totalDistanceKm,
       totalTravelMinutes: result.totalTravelMinutes,
